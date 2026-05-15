@@ -123,7 +123,7 @@ async fn handle_chat_start(
         Message,
     >,
 ) -> Result<(), String> {
-    let _ = ensure_ollama_running().await;
+    let _ = ensure_ollama_running(None).await;
 
     let payload = &envelope.payload;
     let model = payload

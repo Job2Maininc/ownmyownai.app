@@ -21,13 +21,13 @@ fn check_ollama_cmd() -> Result<OllamaStatus, String> {
 }
 
 #[tauri::command(rename = "ensure_ollama_running")]
-async fn ensure_ollama_running_cmd() -> Result<(), String> {
-    ensure_ollama_running().await
+async fn ensure_ollama_running_cmd(app: tauri::AppHandle) -> Result<(), String> {
+    ensure_ollama_running(Some(&app)).await
 }
 
 #[tauri::command(rename = "pull_model")]
-async fn pull_model_cmd(model: String) -> Result<(), String> {
-    pull_model(&model).await
+async fn pull_model_cmd(app: tauri::AppHandle, model: String) -> Result<(), String> {
+    pull_model(&model, Some(&app)).await
 }
 
 #[tauri::command(rename = "get_credentials")]

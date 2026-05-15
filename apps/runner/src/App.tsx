@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
 
 type Step = "welcome" | "ollama" | "pairing" | "online";
@@ -14,6 +15,8 @@ interface StoredCredentials {
   host_id: string;
   device_secret: string;
 }
+
+const DEFAULT_MODEL = "llama3.2:3b";
 
 export default function App() {
   const [step, setStep] = useState<Step>("welcome");
@@ -55,31 +58,44 @@ export default function App() {
     loadCredentials();
   }, [loadCredentials]);
 
+  useEffect(() => {
+    const unlisten = listen<string>("ollama-setup-progress", (event) => {
+      setPullProgress(event.payload);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   async function handleWelcomeNext() {
     setStep("ollama");
     setError(null);
-    const status = await checkOllama();
-    if (!status?.running) {
-      try {
-        await invoke("ensure_ollama_running");
-        await checkOllama();
-      } catch (e) {
-        setError(String(e));
+    setPullProgress("Préparation de l'IA locale…");
+
+    try {
+      await invoke("ensure_ollama_running");
+      let status = await checkOllama();
+
+      const hasModel =
+        status?.models?.some(
+          (m) => m === DEFAULT_MODEL || m.startsWith(`${DEFAULT_MODEL}:`),
+        ) ?? false;
+
+      if (!hasModel) {
+        await invoke("pull_model", { model: DEFAULT_MODEL });
+        status = await checkOllama();
+      }
+
+      if (!status?.running) {
+        setError("Ollama n'est pas démarré. Réessayez.");
         return;
       }
+
+      setPullProgress("Prêt !");
+      setStep("pairing");
+    } catch (e) {
+      setError(String(e));
     }
-    if (!status?.models?.includes("llama3.2:3b")) {
-      setPullProgress("Téléchargement du modèle llama3.2:3b…");
-      try {
-        await invoke("pull_model", { model: "llama3.2:3b" });
-        setPullProgress("Modèle prêt !");
-        await checkOllama();
-      } catch (e) {
-        setError(String(e));
-        return;
-      }
-    }
-    setStep("pairing");
   }
 
   async function handlePairing() {
@@ -103,6 +119,11 @@ export default function App() {
   }
 
   const stepIndex = { welcome: 0, ollama: 1, pairing: 2, online: 3 }[step];
+  const progressWidth = pullProgress.includes("Prêt")
+    ? "100%"
+    : pullProgress
+      ? "60%"
+      : "20%";
 
   return (
     <main style={{ padding: 32, minHeight: "100vh" }}>
@@ -117,7 +138,8 @@ export default function App() {
           <>
             <h1>OwnMyOwnAI Host</h1>
             <p style={{ color: "var(--muted)" }}>
-              Votre IA tournera sur ce PC. Assurez-vous d&apos;avoir au moins 8 Go de RAM.
+              Tout s&apos;installe automatiquement : Ollama, le modèle IA, puis la liaison avec votre compte.
+              Prévoyez ~8 Go de RAM et ~10 Go d&apos;espace disque.
             </p>
             <button className="btn-primary" style={{ width: "100%", marginTop: 16 }} onClick={handleWelcomeNext}>
               Commencer
@@ -127,16 +149,16 @@ export default function App() {
 
         {step === "ollama" && (
           <>
-            <h1>Préparation d&apos;Ollama</h1>
+            <h1>Préparation de l&apos;IA</h1>
             {pullProgress && <p>{pullProgress}</p>}
             {ollamaStatus && (
               <p style={{ color: "var(--muted)", fontSize: 14 }}>
-                {ollamaStatus.running ? "Ollama actif" : "Démarrage…"}
+                {ollamaStatus.running ? "Moteur IA actif" : "Installation ou démarrage…"}
                 {ollamaStatus.models.length > 0 && ` · ${ollamaStatus.models.length} modèle(s)`}
               </p>
             )}
             <div className="progress">
-              <div className="progress-bar" style={{ width: pullProgress ? "100%" : "30%" }} />
+              <div className="progress-bar" style={{ width: progressWidth }} />
             </div>
           </>
         )}
