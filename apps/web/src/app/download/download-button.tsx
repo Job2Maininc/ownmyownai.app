@@ -6,11 +6,6 @@ import { Button } from "@/components/ui/button";
 const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 const RELEASES_PAGE = `https://github.com/${GITHUB_REPO}/releases`;
 
-interface ReleaseAsset {
-  name: string;
-  browser_download_url: string;
-}
-
 export function DownloadButton() {
   const [msiUrl, setMsiUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,26 +22,16 @@ export function DownloadButton() {
 
     async function fetchRelease() {
       try {
-        const res = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
-          { headers: { Accept: "application/vnd.github+json" } },
-        );
+        const res = await fetch("/api/release-download");
 
         if (!res.ok) {
           setError("no_release");
           return;
         }
 
-        const data = (await res.json()) as { assets?: ReleaseAsset[] };
-        const installer = data.assets?.find(
-          (a) =>
-            a.name.endsWith(".msi") ||
-            a.name.endsWith(".exe") ||
-            a.name.endsWith(".nsis.zip"),
-        );
-
-        if (installer) {
-          setMsiUrl(installer.browser_download_url);
+        const data = (await res.json()) as { url?: string };
+        if (data.url) {
+          setMsiUrl(data.url);
         } else {
           setError("no_asset");
         }
