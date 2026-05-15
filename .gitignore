@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.turbo
+.wrangler
+.env
+.env.local
+*.local
+target
+apps/runner/src-tauri/target
+.DS_Store
+.vercel

@@ -1,0 +1,9 @@
+{
+  "name": "@ownmyownai/supabase-types",
+  "version": "0.1.0",
+  "private": true,
+  "types": "./src/database.ts",
+  "exports": {
+    ".": "./src/database.ts"
+  }
+}

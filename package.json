@@ -1,0 +1,23 @@
+{
+  "name": "ownmyownai",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@ownmyownai/web",
+    "dev:relay": "npm run dev --workspace=@ownmyownai/relay",
+    "dev:runner": "npm run dev:tauri --workspace=@ownmyownai/runner",
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "npm run build --workspace=@ownmyownai/web",
+    "build:relay": "npm run build --workspace=@ownmyownai/relay",
+    "build:protocol": "npm run build --workspace=@ownmyownai/protocol",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
