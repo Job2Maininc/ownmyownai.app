@@ -72,12 +72,13 @@ npm.cmd run tauri build`}
           </ol>
         </details>
 
-        <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-[var(--muted)]">
-          Si Windows affiche « l&apos;administrateur a interdit cette installation », utilisez le{" "}
-          <strong className="text-[var(--foreground)]">ZIP portable</strong> : extrayez-le, puis
-          lancez l&apos;exe (aucun installateur). N&apos;utilisez pas un ancien fichier{" "}
-          <code className="text-brand-500">.msi</code> dans Téléchargements.
-        </p>
+        <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-100">
+          <strong>Ne pas utiliser le fichier .msi</strong> — il est bloqué par Windows sur votre PC.
+          Supprimez{" "}
+          <code className="text-brand-500">OwnMyOwnAI.Host_0.1.0_x64_en-US.msi</code> dans
+          Téléchargements. Téléchargez uniquement le{" "}
+          <strong className="text-white">ZIP portable</strong> (extrait → double-clic sur l&apos;exe).
+        </div>
 
         <ol className="mt-8 list-decimal space-y-2 pl-5 text-sm text-[var(--muted)]">
           <li>Extrayez le ZIP et lancez OwnMyOwnAI Host.exe</li>
