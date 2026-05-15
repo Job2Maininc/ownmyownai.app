@@ -3,7 +3,7 @@ const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 export const PORTABLE_ZIP_FILENAME = "OwnMyOwnAI-Host-portable-x64.zip";
 
 /** Dernière release connue (secours si l’API GitHub est indisponible). */
-const PINNED_ZIP_URL = `https://github.com/${GITHUB_REPO}/releases/download/v0.1.6/${PORTABLE_ZIP_FILENAME}`;
+const PINNED_ZIP_URL = `https://github.com/${GITHUB_REPO}/releases/download/v0.1.7/${PORTABLE_ZIP_FILENAME}`;
 
 type Release = {
   tag_name?: string;
