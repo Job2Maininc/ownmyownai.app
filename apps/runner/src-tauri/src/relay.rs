@@ -32,6 +32,8 @@ pub async fn start_background_services() -> Result<(), String> {
         .or_else(|_| std::env::var("VITE_SUPABASE_URL"))
         .map_err(|_| "SUPABASE_URL non configuré")?;
 
+    let supabase_url_hb = supabase_url.clone();
+
     tauri::async_runtime::spawn(async move {
         loop {
             if let Err(e) = run_relay_loop(&creds, &supabase_url).await {
@@ -44,7 +46,7 @@ pub async fn start_background_services() -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
         loop {
             if let Some(creds) = get_credentials().ok().flatten() {
-                let _ = send_heartbeat(&creds, &supabase_url).await;
+                let _ = send_heartbeat(&creds, &supabase_url_hb).await;
             }
             sleep(Duration::from_secs(30)).await;
         }
