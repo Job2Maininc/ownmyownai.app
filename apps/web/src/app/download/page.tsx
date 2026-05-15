@@ -21,7 +21,7 @@ export default function DownloadPage() {
 
         <details className="mt-6 rounded-lg border border-[var(--border)] p-4 text-sm">
           <summary className="cursor-pointer font-medium text-brand-500">
-            Pas de fichier .msi ? Builder depuis le code source
+            Problème d&apos;installation ? Builder depuis le code source
           </summary>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-[var(--muted)]">
             <li>
@@ -54,8 +54,8 @@ npm.cmd run tauri build`}
               </pre>
             </li>
             <li>
-              L&apos;installeur se trouve dans{" "}
-              <code className="text-brand-500">apps/runner/src-tauri/target/release/bundle/</code>
+              L&apos;installeur .exe se trouve dans{" "}
+              <code className="text-brand-500">apps/runner/src-tauri/target/release/bundle/nsis/</code>
             </li>
             <li>
               Publiez-le sur{" "}

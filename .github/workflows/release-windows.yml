@@ -45,20 +45,27 @@ jobs:
           $bmp.Dispose()
           npm exec tauri icon $path
 
-      - name: Build Tauri MSI
+      - name: Build Tauri installer (.exe NSIS)
         working-directory: apps/runner
         env:
           VITE_SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
           VITE_APP_URL: https://ownmyownai-app-runner.vercel.app
         run: npm run tauri build
 
-      - name: Find MSI
-        id: msi
+      - name: Find installer
+        id: installer
         shell: bash
         run: |
-          MSI=$(find apps/runner/src-tauri/target/release/bundle/msi -name "*.msi" | head -1)
-          echo "path=$MSI" >> "$GITHUB_OUTPUT"
-          echo "Found: $MSI"
+          FILE=$(find apps/runner/src-tauri/target/release/bundle/nsis -name "*-setup.exe" 2>/dev/null | head -1)
+          if [ -z "$FILE" ]; then
+            FILE=$(find apps/runner/src-tauri/target/release/bundle/nsis -name "*.exe" | head -1)
+          fi
+          if [ -z "$FILE" ]; then
+            echo "No NSIS installer found"
+            exit 1
+          fi
+          echo "path=$FILE" >> "$GITHUB_OUTPUT"
+          echo "Found: $FILE"
 
       - name: Set release tag
         id: tag
@@ -78,6 +85,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: ${{ steps.msi.outputs.path }}
+          files: ${{ steps.installer.outputs.path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

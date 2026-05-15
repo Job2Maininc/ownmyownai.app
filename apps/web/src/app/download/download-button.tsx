@@ -14,7 +14,7 @@ export function DownloadButton() {
   const envUrl = process.env.NEXT_PUBLIC_RUNNER_RELEASE_URL;
 
   useEffect(() => {
-    if (envUrl && envUrl.includes(".msi")) {
+    if (envUrl && (envUrl.includes(".exe") || envUrl.includes(".msi"))) {
       setMsiUrl(envUrl);
       setLoading(false);
       return;
@@ -56,7 +56,7 @@ export function DownloadButton() {
   if (msiUrl) {
     return (
       <a href={msiUrl}>
-        <Button className="w-full">Télécharger pour Windows (.msi)</Button>
+        <Button className="w-full">Télécharger pour Windows (.exe)</Button>
       </a>
     );
   }

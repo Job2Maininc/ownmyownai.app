@@ -32,12 +32,12 @@ export async function GET() {
       assets?: { name: string; browser_download_url: string }[];
     };
 
-    const installer = data.assets?.find(
-      (a) =>
-        a.name.endsWith(".msi") ||
-        a.name.endsWith(".exe") ||
-        a.name.endsWith(".nsis.zip"),
-    );
+    const installer =
+      data.assets?.find(
+        (a) => a.name.endsWith("-setup.exe") || a.name.includes("setup.exe"),
+      ) ??
+      data.assets?.find((a) => a.name.endsWith(".exe")) ??
+      data.assets?.find((a) => a.name.endsWith(".msi"));
 
     if (!installer) {
       return NextResponse.json({ error: "no_asset" }, { status: 404 });
