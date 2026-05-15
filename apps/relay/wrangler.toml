@@ -7,9 +7,10 @@ bindings = [
   { name = "HOST_ROOM", class_name = "HostRoom" }
 ]
 
+# Plan Workers gratuit : Durable Objects SQLite obligatoires (new_sqlite_classes)
 [[migrations]]
 tag = "v1"
-new_classes = ["HostRoom"]
+new_sqlite_classes = ["HostRoom"]
 
 [vars]
 # Set RELAY_JWT_SECRET via wrangler secret put RELAY_JWT_SECRET

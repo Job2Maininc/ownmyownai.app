@@ -59,9 +59,11 @@ NEXT_PUBLIC_APP_URL=https://<votre-domaine-vercel>.vercel.app
 
 ```bash
 cd apps/relay
-npx wrangler secret put RELAY_JWT_SECRET
-npm run deploy
+npx.cmd wrangler secret put RELAY_JWT_SECRET
+npm.cmd run deploy
 ```
+
+Sur le **plan Workers gratuit**, `wrangler.toml` doit utiliser `new_sqlite_classes` (pas `new_classes`) pour les Durable Objects.
 
 Utilisez le **même** `RELAY_JWT_SECRET` que dans Supabase.
 
