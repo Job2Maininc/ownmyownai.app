@@ -15,27 +15,27 @@ struct CompletePairingArgs {
     supabase_url: String,
 }
 
-#[tauri::command]
+#[tauri::command(rename = "check_ollama")]
 fn check_ollama_cmd() -> Result<OllamaStatus, String> {
     check_ollama()
 }
 
-#[tauri::command]
+#[tauri::command(rename = "ensure_ollama_running")]
 async fn ensure_ollama_running_cmd() -> Result<(), String> {
     ensure_ollama_running().await
 }
 
-#[tauri::command]
+#[tauri::command(rename = "pull_model")]
 async fn pull_model_cmd(model: String) -> Result<(), String> {
     pull_model(&model).await
 }
 
-#[tauri::command]
+#[tauri::command(rename = "get_credentials")]
 fn get_credentials_cmd() -> Result<Option<StoredCredentials>, String> {
     get_credentials()
 }
 
-#[tauri::command]
+#[tauri::command(rename = "complete_pairing")]
 async fn complete_pairing_cmd(args: CompletePairingArgs) -> Result<StoredCredentials, String> {
     let client = reqwest::Client::new();
     let url = format!(
@@ -77,7 +77,7 @@ async fn complete_pairing_cmd(args: CompletePairingArgs) -> Result<StoredCredent
     Ok(creds)
 }
 
-#[tauri::command]
+#[tauri::command(rename = "start_background_services")]
 async fn start_background_services_cmd() -> Result<(), String> {
     start_background_services().await
 }
