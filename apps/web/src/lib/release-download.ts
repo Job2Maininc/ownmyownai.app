@@ -1,6 +1,12 @@
 const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 export const HOST_RELEASE_OBJECT_PATH = "latest/OwnMyOwnAI-Host-portable-x64.zip";
 
+/** Secours si l’API GitHub ou Supabase est indisponible (mis à jour par les releases). */
+const GITHUB_FALLBACKS = [
+  "https://github.com/Job2Maininc/ownmyownai.app/releases/download/v0.1.6/OwnMyOwnAI-Host-portable-x64.zip",
+  "https://github.com/Job2Maininc/ownmyownai.app/releases/download/v0.1.4/OwnMyOwnAI.Host_0.1.0_x64-setup.exe",
+] as const;
+
 export type ReleaseDownload = {
   url: string;
   name?: string;
@@ -94,5 +100,25 @@ export async function resolveReleaseDownload(): Promise<ReleaseDownload | null> 
     }
   }
 
-  return findGithubRelease();
+  const github = await findGithubRelease();
+  if (github) return github;
+
+  for (const url of GITHUB_FALLBACKS) {
+    if (url.includes(".msi")) continue;
+    try {
+      const head = await fetch(url, { method: "HEAD", next: { revalidate: 300 } });
+      if (head.ok) {
+        const name = url.split("/").pop() ?? "download";
+        return {
+          url,
+          name,
+          source: "github",
+        };
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  return null;
 }

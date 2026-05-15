@@ -7,7 +7,7 @@ param(
 )
 
 if (-not (Test-Path $ZipPath)) {
-  Write-Error "Fichier introuvable: $ZipPath. Buildez d'abord: cd apps\runner; npm run tauri build -- --bundles none"
+  Write-Error "Fichier introuvable: $ZipPath. Buildez d'abord: cd apps\runner; npm run tauri build -- --no-bundle"
   exit 1
 }
 
