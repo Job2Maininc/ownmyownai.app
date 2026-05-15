@@ -1,0 +1,3 @@
+{
+  "buildCommand": "echo \"Le runner est une app desktop Tauri — ne pas déployer sur Vercel. Utilisez apps/web.\" && exit 1"
+}

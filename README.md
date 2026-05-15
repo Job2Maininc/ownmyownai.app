@@ -17,11 +17,19 @@ Votre IA sur votre PC — host Windows + client web.
 - Compte Supabase
 - Compte Cloudflare (relay)
 
+## Déploiement Vercel (important)
+
+Déployez **`apps/web`** sur Vercel, **pas** `apps/runner` (application desktop Tauri).
+
+Dans les paramètres du projet Vercel : **Root Directory** = `apps/web`
+
+Voir [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) pour les variables d'environnement.
+
 ## Setup
 
 ```bash
-pnpm install
-pnpm build:protocol
+npm install
+npm run build:protocol
 ```
 
 ### Supabase

@@ -1,5 +1,5 @@
 {
   "framework": "nextjs",
-  "installCommand": "cd ../.. && pnpm install",
-  "buildCommand": "cd ../.. && pnpm build:protocol && pnpm --filter @ownmyownai/web build"
+  "installCommand": "cd ../.. && npm install",
+  "buildCommand": "cd ../.. && npm run build:protocol && npm run build --workspace=@ownmyownai/web"
 }
