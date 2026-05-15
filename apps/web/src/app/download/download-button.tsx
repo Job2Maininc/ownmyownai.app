@@ -14,7 +14,7 @@ export function DownloadButton() {
   const envUrl = process.env.NEXT_PUBLIC_RUNNER_RELEASE_URL;
 
   useEffect(() => {
-    if (envUrl && (envUrl.includes(".exe") || envUrl.includes(".msi"))) {
+    if (envUrl && (envUrl.includes(".zip") || envUrl.includes(".exe") || envUrl.includes(".msi"))) {
       setMsiUrl(envUrl);
       setLoading(false);
       return;
@@ -56,7 +56,7 @@ export function DownloadButton() {
   if (msiUrl) {
     return (
       <a href={msiUrl}>
-        <Button className="w-full">Télécharger pour Windows (.exe)</Button>
+        <Button className="w-full">Télécharger pour Windows (ZIP portable)</Button>
       </a>
     );
   }
@@ -73,8 +73,8 @@ export function DownloadButton() {
           <>Impossible de contacter GitHub. Réessayez plus tard.</>
         ) : (
           <>
-            Release trouvée mais sans fichier <code>.msi</code>. Attachez l&apos;installeur à la
-            release GitHub.
+            Release trouvée mais sans ZIP portable ni installateur. Publiez une nouvelle release
+            GitHub.
           </>
         )}
       </div>

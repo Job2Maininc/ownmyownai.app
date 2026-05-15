@@ -4,7 +4,7 @@ const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 
 export async function GET() {
   const envUrl = process.env.NEXT_PUBLIC_RUNNER_RELEASE_URL;
-  if (envUrl && (envUrl.includes(".msi") || envUrl.includes(".exe"))) {
+  if (envUrl && (envUrl.includes(".zip") || envUrl.includes(".msi") || envUrl.includes(".exe"))) {
     return NextResponse.json({ url: envUrl, source: "env" });
   }
 
@@ -33,10 +33,11 @@ export async function GET() {
     };
 
     const installer =
+      data.assets?.find((a) => a.name.includes("portable") && a.name.endsWith(".zip")) ??
       data.assets?.find(
         (a) => a.name.endsWith("-setup.exe") || a.name.includes("setup.exe"),
       ) ??
-      data.assets?.find((a) => a.name.endsWith(".exe")) ??
+      data.assets?.find((a) => a.name.endsWith(".exe") && !a.name.endsWith(".msi.exe")) ??
       data.assets?.find((a) => a.name.endsWith(".msi"));
 
     if (!installer) {
