@@ -28,6 +28,23 @@ jobs:
       - name: Build protocol
         run: npm run build:protocol
 
+      - name: Generate app icon (valid .ico for Windows)
+        shell: pwsh
+        working-directory: apps/runner
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $path = "app-icon.png"
+          $bmp = New-Object System.Drawing.Bitmap 512, 512
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.Clear([System.Drawing.Color]::FromArgb(16, 185, 129))
+          $font = New-Object System.Drawing.Font("Arial", 48, [System.Drawing.FontStyle]::Bold)
+          $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
+          $g.DrawString("AI", $font, $brush, 200, 220)
+          $g.Dispose()
+          $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+          $bmp.Dispose()
+          npm exec tauri icon $path
+
       - name: Build Tauri MSI
         working-directory: apps/runner
         env:
