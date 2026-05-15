@@ -22,6 +22,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/runner/src-tauri
+
       - name: Install dependencies
         run: npm install
 
@@ -45,14 +49,7 @@ jobs:
           $bmp.Dispose()
           npm exec tauri icon $path
 
-      - name: Build Tauri installer (.exe NSIS)
-        working-directory: apps/runner
-        env:
-          VITE_SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
-          VITE_APP_URL: https://ownmyownai-app-runner.vercel.app
-        run: npm run tauri build
-
-      - name: Build portable binary (no installer)
+      - name: Build portable app (no installer)
         working-directory: apps/runner
         env:
           VITE_SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
@@ -90,20 +87,24 @@ jobs:
           Write-Host "Portable zip: $zip ($((Get-Item $zip).Length) bytes)"
           echo "path=$zip" >> $env:GITHUB_OUTPUT
 
-      - name: Find installer
-        id: installer
-        shell: bash
+      - name: Upload to Supabase Storage (CDN du site)
+        if: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        shell: pwsh
+        env:
+          SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          FILE=$(find apps/runner/src-tauri/target/release/bundle/nsis -name "*-setup.exe" 2>/dev/null | head -1)
-          if [ -z "$FILE" ]; then
-            FILE=$(find apps/runner/src-tauri/target/release/bundle/nsis -name "*.exe" | head -1)
-          fi
-          if [ -z "$FILE" ]; then
-            echo "No NSIS installer found"
-            exit 1
-          fi
-          echo "path=$FILE" >> "$GITHUB_OUTPUT"
-          echo "Found: $FILE"
+          $zip = "${{ steps.portable.outputs.path }}"
+          $object = "latest/OwnMyOwnAI-Host-portable-x64.zip"
+          $uri = "$env:SUPABASE_URL/storage/v1/object/host-releases/$object"
+          $headers = @{
+            Authorization = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
+            "x-upsert" = "true"
+            "Content-Type" = "application/zip"
+          }
+          Invoke-RestMethod -Method Put -Uri $uri -Headers $headers -InFile $zip
+          $public = "$env:SUPABASE_URL/storage/v1/object/public/host-releases/$object"
+          Write-Host "Published: $public"
 
       - name: Set release tag
         id: tag
@@ -115,7 +116,7 @@ jobs:
             echo "name=v0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (backup)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
@@ -123,8 +124,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            ${{ steps.installer.outputs.path }}
-            ${{ steps.portable.outputs.path }}
+          files: ${{ steps.portable.outputs.path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

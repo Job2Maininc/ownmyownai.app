@@ -69,11 +69,39 @@ Utilisez le **même** `RELAY_JWT_SECRET` que dans Supabase.
 
 ---
 
-## Runner Windows
+## Runner Windows — téléchargement depuis le site (pas GitHub obligatoire)
+
+Le ZIP portable est hébergé sur **Supabase Storage** (bucket public `host-releases`) :
+
+```
+https://jcknolulyrsvcwvttaed.supabase.co/storage/v1/object/public/host-releases/latest/OwnMyOwnAI-Host-portable-x64.zip
+```
+
+Le bouton **Télécharger** sur `/download` passe par `/api/download` → cette URL. Même lien à chaque version (le fichier `latest/...` est écrasé à chaque release).
+
+### GitHub Actions — secret à ajouter
+
+Dans le dépôt GitHub → **Settings → Secrets → Actions** :
+
+| Secret | Valeur |
+|--------|--------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Clé *service_role* (Supabase → Settings → API) |
+
+Sans ce secret, la CI publie encore sur GitHub Releases en secours.
+
+### Build plus rapide (~5–8 min au lieu de ~15)
+
+- Cache Rust (`swatinem/rust-cache`)
+- Un seul build portable (plus d’installateur MSI/NSIS en CI)
+
+### Build local (instantané pour toi)
 
 ```bash
 cd apps/runner
 # .env : VITE_SUPABASE_URL=https://jcknolulyrsvcwvttaed.supabase.co
 #        VITE_APP_URL=https://votre-app.vercel.app
-npm run tauri build
+npm run tauri build -- --bundles none
+# ZIP manuel : voir apps/runner/portable-staging dans le workflow CI
 ```
+
+Pour tester sans attendre la CI : uploade le ZIP dans Supabase → **Storage** → `host-releases` → `latest/`.

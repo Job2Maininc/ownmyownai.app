@@ -78,11 +78,9 @@ export function DownloadButton() {
       )}
 
       {download ? (
-        <a href={download.url}>
+        <a href="/api/download">
           <Button className="w-full">
-            {download.isPortable
-              ? "Télécharger ZIP portable (recommandé)"
-              : "Télécharger installateur .exe"}
+            Télécharger ZIP portable (depuis le site)
           </Button>
         </a>
       ) : (
