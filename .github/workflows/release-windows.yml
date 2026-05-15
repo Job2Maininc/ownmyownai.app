@@ -1,0 +1,66 @@
+name: Release Windows Host
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build protocol
+        run: npm run build:protocol
+
+      - name: Build Tauri MSI
+        working-directory: apps/runner
+        env:
+          VITE_SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
+          VITE_APP_URL: https://ownmyownai-app-runner.vercel.app
+        run: npm run tauri build
+
+      - name: Find MSI
+        id: msi
+        shell: bash
+        run: |
+          MSI=$(find apps/runner/src-tauri/target/release/bundle/msi -name "*.msi" | head -1)
+          echo "path=$MSI" >> "$GITHUB_OUTPUT"
+          echo "Found: $MSI"
+
+      - name: Set release tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=v0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: OwnMyOwnAI Host ${{ steps.tag.outputs.name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ${{ steps.msi.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DownloadButton } from "./download-button";
 
-const RELEASE_URL =
-  process.env.NEXT_PUBLIC_RUNNER_RELEASE_URL ??
-  "https://github.com/ownmyownai/ownmyownai/releases/latest";
+const GITHUB_REPO = "https://github.com/Job2Maininc/ownmyownai.app";
 
 export default function DownloadPage() {
   return (
@@ -19,9 +17,60 @@ export default function DownloadPage() {
           Windows 10+, 8 Go RAM recommandés, ~10 Go d&apos;espace disque pour Ollama et un modèle.
         </p>
 
-        <a href={RELEASE_URL} target="_blank" rel="noopener noreferrer">
-          <Button className="w-full">Télécharger pour Windows (.msi)</Button>
-        </a>
+        <DownloadButton />
+
+        <details className="mt-6 rounded-lg border border-[var(--border)] p-4 text-sm">
+          <summary className="cursor-pointer font-medium text-brand-500">
+            Pas de fichier .msi ? Builder depuis le code source
+          </summary>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-[var(--muted)]">
+            <li>
+              Installez{" "}
+              <a
+                href="https://www.rust-lang.org/tools/install"
+                className="text-brand-500 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Rust
+              </a>{" "}
+              et{" "}
+              <a
+                href="https://ollama.com/download"
+                className="text-brand-500 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Ollama
+              </a>
+            </li>
+            <li>Clonez le dépôt : {GITHUB_REPO}</li>
+            <li>
+              Dans PowerShell :
+              <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-3 text-xs text-[var(--foreground)]">
+{`cd apps\\runner
+npm.cmd install
+npm.cmd run tauri build`}
+              </pre>
+            </li>
+            <li>
+              L&apos;installeur se trouve dans{" "}
+              <code className="text-brand-500">apps/runner/src-tauri/target/release/bundle/</code>
+            </li>
+            <li>
+              Publiez-le sur{" "}
+              <a
+                href={`${GITHUB_REPO}/releases/new`}
+                className="text-brand-500 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                GitHub Releases
+              </a>{" "}
+              pour activer le bouton de téléchargement automatique.
+            </li>
+          </ol>
+        </details>
 
         <ol className="mt-8 list-decimal space-y-2 pl-5 text-sm text-[var(--muted)]">
           <li>Installez le host et lancez-le</li>
