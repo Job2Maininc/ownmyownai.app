@@ -12,8 +12,6 @@ permissions:
 jobs:
   build-and-release:
     runs-on: windows-latest
-    env:
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -88,24 +86,6 @@ jobs:
           Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zip
           Write-Host "Portable zip: $zip ($((Get-Item $zip).Length) bytes)"
           echo "path=$zip" >> $env:GITHUB_OUTPUT
-
-      - name: Upload to Supabase Storage (CDN du site)
-        if: env.SUPABASE_SERVICE_ROLE_KEY != ''
-        shell: pwsh
-        env:
-          SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
-        run: |
-          $zip = "${{ steps.portable.outputs.path }}"
-          $object = "latest/OwnMyOwnAI-Host-portable-x64.zip"
-          $uri = "$env:SUPABASE_URL/storage/v1/object/host-releases/$object"
-          $headers = @{
-            Authorization = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
-            "x-upsert" = "true"
-            "Content-Type" = "application/zip"
-          }
-          Invoke-RestMethod -Method Put -Uri $uri -Headers $headers -InFile $zip
-          $public = "$env:SUPABASE_URL/storage/v1/object/public/host-releases/$object"
-          Write-Host "Published: $public"
 
       - name: Set release tag
         id: tag

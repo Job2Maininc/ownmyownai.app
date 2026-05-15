@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
-import { resolveReleaseDownload } from "@/lib/release-download";
+import { PORTABLE_ZIP_FILENAME, resolvePortableZipUrl } from "@/lib/release-download";
 
-export async function GET() {
-  try {
-    const found = await resolveReleaseDownload();
+/** JSON pour debug / clients — URL du ZIP via le site. */
+export async function GET(request: Request) {
+  const zipUrl = await resolvePortableZipUrl();
+  const siteDownload = new URL("/api/download", request.url).toString();
 
-    if (!found) {
-      return NextResponse.json({ error: "no_asset" }, { status: 404 });
-    }
-
-    return NextResponse.json(found);
-  } catch {
-    return NextResponse.json({ error: "fetch_failed" }, { status: 500 });
-  }
+  return NextResponse.json({
+    url: siteDownload,
+    upstream: zipUrl,
+    name: PORTABLE_ZIP_FILENAME,
+  });
 }

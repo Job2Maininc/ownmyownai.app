@@ -1,13 +1,28 @@
 import { NextResponse } from "next/server";
-import { resolveReleaseDownload } from "@/lib/release-download";
+import { PORTABLE_ZIP_FILENAME, resolvePortableZipUrl } from "@/lib/release-download";
 
-/** Redirection directe vers le ZIP (Supabase en priorité). */
-export async function GET(request: Request) {
-  const found = await resolveReleaseDownload();
+/** Téléchargement du ZIP portable au clic (fichier servi par le site). */
+export async function GET() {
+  const zipUrl = await resolvePortableZipUrl();
 
-  if (!found) {
-    return NextResponse.redirect(new URL("/download?error=no_asset", request.url));
+  const upstream = await fetch(zipUrl);
+  if (!upstream.ok) {
+    return NextResponse.json(
+      { error: "zip_unavailable" },
+      { status: upstream.status === 404 ? 404 : 502 },
+    );
   }
 
-  return NextResponse.redirect(found.url);
+  const body = upstream.body;
+  if (!body) {
+    return NextResponse.json({ error: "empty_response" }, { status: 502 });
+  }
+
+  return new NextResponse(body, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${PORTABLE_ZIP_FILENAME}"`,
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }
