@@ -1,28 +1,43 @@
 import { NextResponse } from "next/server";
-import { PORTABLE_ZIP_FILENAME, resolvePortableZipUrl } from "@/lib/release-download";
+import {
+  fetchPortableZipStream,
+  PORTABLE_ZIP_FILENAME,
+  resolvePortableZipAsset,
+  resolveSupabaseZipUrl,
+} from "@/lib/release-download";
 
-/** Téléchargement du ZIP portable au clic (fichier servi par le site). */
+export const runtime = "nodejs";
+
+/** Télécharge le ZIP portable (Supabase public, ou GitHub avec token serveur). */
 export async function GET() {
-  const zipUrl = await resolvePortableZipUrl();
+  try {
+    const upstream = await fetchPortableZipStream();
 
-  const upstream = await fetch(zipUrl);
-  if (!upstream.ok) {
+    return new NextResponse(upstream.body, {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${PORTABLE_ZIP_FILENAME}"`,
+        "Cache-Control": "public, max-age=300",
+      },
+    });
+  } catch {
+    const supabase = await resolveSupabaseZipUrl();
+    if (supabase) {
+      return NextResponse.redirect(supabase);
+    }
+
+    const asset = await resolvePortableZipAsset();
+    if (asset) {
+      return NextResponse.redirect(asset.browser_download_url);
+    }
+
     return NextResponse.json(
-      { error: "zip_unavailable" },
-      { status: upstream.status === 404 ? 404 : 502 },
+      {
+        error: "zip_unavailable",
+        hint:
+          "Le dépôt GitHub est privé : ajoutez GITHUB_TOKEN sur Vercel, ou publiez le ZIP sur Supabase Storage (bucket host-releases).",
+      },
+      { status: 404 },
     );
   }
-
-  const body = upstream.body;
-  if (!body) {
-    return NextResponse.json({ error: "empty_response" }, { status: 502 });
-  }
-
-  return new NextResponse(body, {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${PORTABLE_ZIP_FILENAME}"`,
-      "Cache-Control": "public, max-age=300",
-    },
-  });
 }
