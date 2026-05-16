@@ -7,14 +7,6 @@ use ollama::{check_ollama, ensure_ollama_running, pull_model, OllamaStatus};
 use relay::start_background_services;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
-struct CompletePairingArgs {
-    code: String,
-    name: String,
-    #[serde(rename = "supabaseUrl")]
-    supabase_url: String,
-}
-
 #[tauri::command(rename = "check_ollama")]
 fn check_ollama_cmd() -> Result<OllamaStatus, String> {
     check_ollama()
@@ -36,16 +28,21 @@ fn get_credentials_cmd() -> Result<Option<StoredCredentials>, String> {
 }
 
 #[tauri::command(rename = "complete_pairing")]
-async fn complete_pairing_cmd(args: CompletePairingArgs) -> Result<StoredCredentials, String> {
+async fn complete_pairing_cmd(
+    code: String,
+    name: String,
+    #[serde(rename = "supabaseUrl")]
+    supabase_url: String,
+) -> Result<StoredCredentials, String> {
     let client = reqwest::Client::new();
     let url = format!(
         "{}/functions/v1/complete-pairing",
-        args.supabase_url.trim_end_matches('/')
+        supabase_url.trim_end_matches('/')
     );
 
     let body = serde_json::json!({
-        "code": args.code,
-        "name": args.name,
+        "code": code.trim(),
+        "name": name,
         "platform": "windows",
     });
 
