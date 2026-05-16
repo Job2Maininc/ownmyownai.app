@@ -83,6 +83,17 @@ jobs:
             Copy-Item -Recurse $resources (Join-Path $staging "resources")
           }
 
+          Copy-Item "apps/runner/scripts/uninstall-host.ps1" $staging
+          Copy-Item "apps/runner/scripts/Desinstaller.bat" $staging
+          @"
+OwnMyOwnAI Host - version portable
+
+1. Lancer l'application .exe
+2. Suivre l'assistant (Ollama + pairing)
+3. Pour tout retirer : double-clic sur Desinstaller.bat
+
+"@ | Set-Content -Path (Join-Path $staging "LISEZMOI.txt") -Encoding UTF8
+
           $zip = "apps/runner/OwnMyOwnAI-Host-portable-x64.zip"
           if (Test-Path $zip) { Remove-Item -Force $zip }
           Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zip

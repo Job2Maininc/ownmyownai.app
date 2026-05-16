@@ -29,3 +29,12 @@ pub fn get_credentials() -> Result<Option<StoredCredentials>, String> {
         Err(e) => Err(e.to_string()),
     }
 }
+
+pub fn delete_credentials() -> Result<(), String> {
+    let entry = Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
