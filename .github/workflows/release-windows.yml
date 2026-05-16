@@ -85,14 +85,14 @@ jobs:
 
           Copy-Item "apps/runner/scripts/uninstall-host.ps1" $staging
           Copy-Item "apps/runner/scripts/Desinstaller.bat" $staging
-          @"
-OwnMyOwnAI Host - version portable
-
-1. Lancer l'application .exe
-2. Suivre l'assistant (Ollama + pairing)
-3. Pour tout retirer : double-clic sur Desinstaller.bat
-
-"@ | Set-Content -Path (Join-Path $staging "LISEZMOI.txt") -Encoding UTF8
+          $readme = Join-Path $staging "LISEZMOI.txt"
+          Set-Content -Path $readme -Encoding UTF8 -Value @(
+            "OwnMyOwnAI Host - version portable",
+            "",
+            "1. Lancer l'application .exe",
+            "2. Suivre l'assistant (Ollama + pairing)",
+            "3. Pour tout retirer : double-clic sur Desinstaller.bat"
+          )
 
           $zip = "apps/runner/OwnMyOwnAI-Host-portable-x64.zip"
           if (Test-Path $zip) { Remove-Item -Force $zip }
@@ -101,11 +101,10 @@ OwnMyOwnAI Host - version portable
           echo "path=$zip" >> $env:GITHUB_OUTPUT
 
       - name: Upload ZIP to Supabase (téléchargement public sur le site)
-        if: env.SUPABASE_SERVICE_ROLE_KEY != ''
+        if: ${{ env.SUPABASE_SERVICE_ROLE_KEY != '' }}
         shell: pwsh
         env:
           SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           $zip = "${{ steps.portable.outputs.path }}"
           $object = "latest/OwnMyOwnAI-Host-portable-x64.zip"
