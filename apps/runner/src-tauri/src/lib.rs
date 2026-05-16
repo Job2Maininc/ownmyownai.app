@@ -31,7 +31,6 @@ fn get_credentials_cmd() -> Result<Option<StoredCredentials>, String> {
 async fn complete_pairing_cmd(
     code: String,
     name: String,
-    #[serde(rename = "supabaseUrl")]
     supabase_url: String,
 ) -> Result<StoredCredentials, String> {
     let client = reqwest::Client::new();
