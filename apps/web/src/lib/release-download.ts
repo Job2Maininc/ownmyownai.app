@@ -2,7 +2,7 @@ const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 
 export const PORTABLE_ZIP_FILENAME = "OwnMyOwnAI-Host-portable-x64.zip";
 
-const PINNED_TAG = "v0.1.8";
+const PINNED_TAG = "v0.1.9";
 
 export type PortableZipAsset = {
   name: string;

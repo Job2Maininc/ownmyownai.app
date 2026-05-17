@@ -68,6 +68,7 @@ async fn complete_pairing_cmd(
     let creds = StoredCredentials {
         host_id: data.host_id,
         device_secret: data.device_secret,
+        supabase_url: Some(supabase_url.trim_end_matches('/').to_string()),
     };
     save_credentials(&creds)?;
     Ok(creds)

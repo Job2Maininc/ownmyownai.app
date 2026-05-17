@@ -8,6 +8,27 @@ const ACCOUNT: &str = "default";
 pub struct StoredCredentials {
     pub host_id: String,
     pub device_secret: String,
+    /// URL Supabase (sauvegardée au pairing — le .exe n'a pas les variables Vite en runtime).
+    #[serde(default)]
+    pub supabase_url: Option<String>,
+}
+
+pub fn resolve_supabase_url(creds: &StoredCredentials) -> Result<String, String> {
+    if let Some(url) = &creds.supabase_url {
+        if !url.is_empty() {
+            return Ok(url.trim_end_matches('/').to_string());
+        }
+    }
+
+    if let Ok(url) = std::env::var("SUPABASE_URL").or_else(|_| std::env::var("VITE_SUPABASE_URL")) {
+        return Ok(url.trim_end_matches('/').to_string());
+    }
+
+    if let Some(url) = option_env!("VITE_SUPABASE_URL") {
+        return Ok(url.trim_end_matches('/').to_string());
+    }
+
+    Err("URL Supabase introuvable. Reliez ce PC depuis l'application.".into())
 }
 
 pub fn save_credentials(creds: &StoredCredentials) -> Result<(), String> {

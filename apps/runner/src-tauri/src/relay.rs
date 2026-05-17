@@ -1,5 +1,5 @@
-use crate::credentials::get_credentials;
-use crate::ollama::{stream_chat, ensure_ollama_running};
+use crate::credentials::{get_credentials, resolve_supabase_url, StoredCredentials};
+use crate::ollama::{ensure_ollama_running, stream_chat};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,20 +23,22 @@ struct WsEnvelope {
 }
 
 pub async fn start_background_services() -> Result<(), String> {
+    let creds = get_credentials()?.ok_or("Pas de credentials — pairing requis")?;
+    let supabase_url = resolve_supabase_url(&creds)?;
+
     if SERVICES_RUNNING.swap(true, Ordering::SeqCst) {
+        let _ = send_heartbeat(&creds, &supabase_url).await;
         return Ok(());
     }
 
-    let creds = get_credentials()?.ok_or("Pas de credentials — pairing requis")?;
-    let supabase_url = std::env::var("SUPABASE_URL")
-        .or_else(|_| std::env::var("VITE_SUPABASE_URL"))
-        .map_err(|_| "SUPABASE_URL non configuré")?;
+    let creds_relay = creds.clone();
+    let supabase_url_relay = supabase_url.clone();
 
-    let supabase_url_hb = supabase_url.clone();
+    send_heartbeat(&creds, &supabase_url).await?;
 
     tauri::async_runtime::spawn(async move {
         loop {
-            if let Err(e) = run_relay_loop(&creds, &supabase_url).await {
+            if let Err(e) = run_relay_loop(&creds_relay, &supabase_url_relay).await {
                 eprintln!("Relay error: {e}");
             }
             sleep(Duration::from_secs(5)).await;
@@ -46,18 +48,28 @@ pub async fn start_background_services() -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
         loop {
             if let Some(creds) = get_credentials().ok().flatten() {
-                let _ = send_heartbeat(&creds, &supabase_url_hb).await;
+                if let Ok(url) = resolve_supabase_url(&creds) {
+                    if let Err(e) = send_heartbeat(&creds, &url).await {
+                        eprintln!("Heartbeat error: {e}");
+                    }
+                }
             }
-            sleep(Duration::from_secs(30)).await;
+            sleep(Duration::from_secs(15)).await;
         }
     });
 
     Ok(())
 }
 
-async fn mint_relay_token(creds: &crate::credentials::StoredCredentials, supabase_url: &str) -> Result<RelayTokenResponse, String> {
+async fn mint_relay_token(
+    creds: &StoredCredentials,
+    supabase_url: &str,
+) -> Result<RelayTokenResponse, String> {
     let client = reqwest::Client::new();
-    let url = format!("{}/functions/v1/runner-mint-relay-token", supabase_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/functions/v1/runner-mint-relay-token",
+        supabase_url.trim_end_matches('/')
+    );
 
     let res = client
         .post(&url)
@@ -74,11 +86,17 @@ async fn mint_relay_token(creds: &crate::credentials::StoredCredentials, supabas
     res.json().await.map_err(|e| e.to_string())
 }
 
-async fn send_heartbeat(creds: &crate::credentials::StoredCredentials, supabase_url: &str) -> Result<(), String> {
+async fn send_heartbeat(
+    creds: &StoredCredentials,
+    supabase_url: &str,
+) -> Result<(), String> {
     let client = reqwest::Client::new();
-    let url = format!("{}/functions/v1/runner-heartbeat", supabase_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/functions/v1/runner-heartbeat",
+        supabase_url.trim_end_matches('/')
+    );
 
-    client
+    let res = client
         .post(&url)
         .header("X-Device-Secret", &creds.device_secret)
         .header("X-Host-Id", &creds.host_id)
@@ -88,14 +106,24 @@ async fn send_heartbeat(creds: &crate::credentials::StoredCredentials, supabase_
         .await
         .map_err(|e| e.to_string())?;
 
+    if !res.status().is_success() {
+        return Err(res.text().await.unwrap_or_default());
+    }
+
     Ok(())
 }
 
-async fn run_relay_loop(creds: &crate::credentials::StoredCredentials, supabase_url: &str) -> Result<(), String> {
+async fn run_relay_loop(
+    creds: &StoredCredentials,
+    supabase_url: &str,
+) -> Result<(), String> {
     let token_resp = mint_relay_token(creds, supabase_url).await?;
     let ws_url = format!(
         "{}?token={}",
-        token_resp.relay_url.replace("https://", "wss://").replace("http://", "ws://"),
+        token_resp
+            .relay_url
+            .replace("https://", "wss://")
+            .replace("http://", "ws://"),
         urlencoding::encode(&token_resp.token)
     );
 
