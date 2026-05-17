@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "OwnMyOwnAI Host",
-        "width": 480,
-        "height": 640,
+        "width": 520,
+        "height": 720,
         "resizable": true
       }
     ],

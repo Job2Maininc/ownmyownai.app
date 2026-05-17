@@ -1,4 +1,8 @@
 use crate::credentials::{get_credentials, resolve_supabase_url, StoredCredentials};
+use crate::host_status::{
+    self, session_ended, session_started, set_heartbeat_error, set_heartbeat_ok,
+    set_relay_connected, set_relay_error,
+};
 use crate::ollama::{ensure_ollama_running, stream_chat};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -7,6 +11,10 @@ use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 static SERVICES_RUNNING: AtomicBool = AtomicBool::new(false);
+
+pub fn services_running() -> bool {
+    SERVICES_RUNNING.load(Ordering::SeqCst)
+}
 
 #[derive(Debug, Deserialize)]
 struct RelayTokenResponse {
@@ -27,19 +35,28 @@ pub async fn start_background_services() -> Result<(), String> {
     let supabase_url = resolve_supabase_url(&creds)?;
 
     if SERVICES_RUNNING.swap(true, Ordering::SeqCst) {
-        let _ = send_heartbeat(&creds, &supabase_url).await;
+        match send_heartbeat(&creds, &supabase_url).await {
+            Ok(()) => set_heartbeat_ok(),
+            Err(e) => set_heartbeat_error(e),
+        }
+        host_status::emit_status();
         return Ok(());
     }
 
     let creds_relay = creds.clone();
     let supabase_url_relay = supabase_url.clone();
 
-    send_heartbeat(&creds, &supabase_url).await?;
+    match send_heartbeat(&creds, &supabase_url).await {
+        Ok(()) => set_heartbeat_ok(),
+        Err(e) => set_heartbeat_error(e),
+    }
+    host_status::emit_status();
 
     tauri::async_runtime::spawn(async move {
         loop {
             if let Err(e) = run_relay_loop(&creds_relay, &supabase_url_relay).await {
                 eprintln!("Relay error: {e}");
+                set_relay_error(e);
             }
             sleep(Duration::from_secs(5)).await;
         }
@@ -49,8 +66,12 @@ pub async fn start_background_services() -> Result<(), String> {
         loop {
             if let Some(creds) = get_credentials().ok().flatten() {
                 if let Ok(url) = resolve_supabase_url(&creds) {
-                    if let Err(e) = send_heartbeat(&creds, &url).await {
-                        eprintln!("Heartbeat error: {e}");
+                    match send_heartbeat(&creds, &url).await {
+                        Ok(()) => set_heartbeat_ok(),
+                        Err(e) => {
+                            eprintln!("Heartbeat error: {e}");
+                            set_heartbeat_error(e);
+                        }
                     }
                 }
             }
@@ -129,6 +150,7 @@ async fn run_relay_loop(
 
     let (ws, _) = connect_async(&ws_url).await.map_err(|e| e.to_string())?;
     let (mut write, mut read) = ws.split();
+    set_relay_connected(true);
 
     while let Some(msg) = read.next().await {
         let msg = msg.map_err(|e| e.to_string())?;
@@ -141,10 +163,24 @@ async fn run_relay_loop(
         }
     }
 
+    set_relay_connected(false);
     Ok(())
 }
 
 async fn handle_chat_start(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    session_started();
+    let result = handle_chat_start_inner(envelope, write).await;
+    session_ended();
+    result
+}
+
+async fn handle_chat_start_inner(
     envelope: &WsEnvelope,
     write: &mut futures_util::stream::SplitSink<
         tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,

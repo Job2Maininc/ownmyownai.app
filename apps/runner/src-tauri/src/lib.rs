@@ -1,8 +1,10 @@
 mod credentials;
+mod host_status;
 mod ollama;
 mod relay;
 
 use credentials::{get_credentials, save_credentials, StoredCredentials};
+use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
 use ollama::{check_ollama, ensure_ollama_running, pull_model, OllamaStatus};
 use relay::start_background_services;
 use serde::Deserialize;
@@ -79,6 +81,11 @@ async fn start_background_services_cmd() -> Result<(), String> {
     start_background_services().await
 }
 
+#[tauri::command(rename = "get_host_status")]
+fn get_host_status_cmd() -> Result<HostStatusSnapshot, String> {
+    Ok(build_snapshot())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -90,8 +97,10 @@ pub fn run() {
             get_credentials_cmd,
             complete_pairing_cmd,
             start_background_services_cmd,
+            get_host_status_cmd,
         ])
-        .setup(|_app| {
+        .setup(|app| {
+            set_app_handle(app.handle().clone());
             tauri::async_runtime::spawn(async move {
                 if get_credentials().ok().flatten().is_some() {
                     let _ = start_background_services().await;

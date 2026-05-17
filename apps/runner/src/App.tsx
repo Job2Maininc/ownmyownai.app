@@ -2,19 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
+import Dashboard from "./components/Dashboard";
+import type { OllamaStatus, StoredCredentials } from "./types";
 
 type Step = "welcome" | "ollama" | "pairing" | "online";
-
-interface OllamaStatus {
-  installed: boolean;
-  running: boolean;
-  models: string[];
-}
-
-interface StoredCredentials {
-  host_id: string;
-  device_secret: string;
-}
 
 const DEFAULT_MODEL = "llama3.2:3b";
 
@@ -24,7 +15,7 @@ export default function App() {
   const [pullProgress, setPullProgress] = useState("");
   const [pairingCode, setPairingCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<StoredCredentials | null>(null);
+  const [, setCredentials] = useState<StoredCredentials | null>(null);
   const [hostName, setHostName] = useState("Mon PC");
 
   const appUrl = import.meta.env.VITE_APP_URL ?? "http://localhost:3000";
@@ -50,7 +41,7 @@ export default function App() {
         await invoke("start_background_services");
       }
     } catch {
-      /* no creds yet */
+      /* pas encore lié */
     }
   }, []);
 
@@ -125,23 +116,32 @@ export default function App() {
       ? "60%"
       : "20%";
 
-  return (
-    <main style={{ padding: 32, minHeight: "100vh" }}>
-      <div className="steps">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={`step ${i <= stepIndex ? "active" : ""}`} />
-        ))}
-      </div>
+  const showSteps = step !== "online";
 
-      <div className="card">
+  return (
+    <main className={`app ${step === "online" ? "app--dashboard" : ""}`}>
+      {showSteps && (
+        <div className="steps">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={`step ${i <= stepIndex ? "active" : ""}`} />
+          ))}
+        </div>
+      )}
+
+      <div className={step === "online" ? "card card--wide" : "card"}>
         {step === "welcome" && (
           <>
             <h1>OwnMyOwnAI Host</h1>
-            <p style={{ color: "var(--muted)" }}>
+            <p className="muted">
               Tout s&apos;installe automatiquement : Ollama, le modèle IA, puis la liaison avec votre compte.
               Prévoyez ~8 Go de RAM et ~10 Go d&apos;espace disque.
             </p>
-            <button className="btn-primary" style={{ width: "100%", marginTop: 16 }} onClick={handleWelcomeNext}>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ width: "100%", marginTop: 16 }}
+              onClick={handleWelcomeNext}
+            >
               Commencer
             </button>
           </>
@@ -152,9 +152,10 @@ export default function App() {
             <h1>Préparation de l&apos;IA</h1>
             {pullProgress && <p>{pullProgress}</p>}
             {ollamaStatus && (
-              <p style={{ color: "var(--muted)", fontSize: 14 }}>
+              <p className="muted" style={{ fontSize: 14 }}>
                 {ollamaStatus.running ? "Moteur IA actif" : "Installation ou démarrage…"}
-                {ollamaStatus.models.length > 0 && ` · ${ollamaStatus.models.length} modèle(s)`}
+                {ollamaStatus.models.length > 0 &&
+                  ` · ${ollamaStatus.models.length} modèle(s)`}
               </p>
             )}
             <div className="progress">
@@ -166,53 +167,52 @@ export default function App() {
         {step === "pairing" && (
           <>
             <h1>Lier votre compte</h1>
-            <p style={{ color: "var(--muted)", fontSize: 14 }}>
+            <p className="muted" style={{ fontSize: 14 }}>
               1. Ouvrez le site et connectez-vous
               <br />
               2. Générez un code de pairing
               <br />
               3. Entrez le code ci-dessous
             </p>
-            <button className="btn-secondary" style={{ width: "100%", margin: "12px 0" }} onClick={openPairingPage}>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ width: "100%", margin: "12px 0" }}
+              onClick={openPairingPage}
+            >
               Ouvrir le site web
             </button>
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>Nom du PC</label>
-            <input value={hostName} onChange={(e) => setHostName(e.target.value)} style={{ marginBottom: 8 }} />
-            <label style={{ fontSize: 12, color: "var(--muted)" }}>Code de pairing</label>
+            <label className="field-label">Nom du PC</label>
             <input
+              value={hostName}
+              onChange={(e) => setHostName(e.target.value)}
+              style={{ marginBottom: 8 }}
+            />
+            <label className="field-label">Code de pairing</label>
+            <input
+              className="input-code"
               value={pairingCode}
-              onChange={(e) => setPairingCode(e.target.value)}
+              onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
               placeholder="ABCD-1234"
               style={{ marginBottom: 12 }}
             />
-            <button className="btn-primary" style={{ width: "100%" }} onClick={handlePairing} disabled={!pairingCode.trim()}>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ width: "100%" }}
+              onClick={handlePairing}
+              disabled={!pairingCode.trim()}
+            >
               Lier ce PC
             </button>
           </>
         )}
 
-        {step === "online" && (
-          <>
-            <h1>En ligne</h1>
-            <p style={{ color: "var(--accent)" }}>
-              Votre host est connecté. Discutez depuis le navigateur.
-            </p>
-            {credentials && (
-              <p style={{ fontSize: 12, color: "var(--muted)" }}>
-                Host ID : {credentials.host_id.slice(0, 8)}…
-              </p>
-            )}
-            <button
-              className="btn-primary"
-              style={{ width: "100%", marginTop: 16 }}
-              onClick={() => open(`${appUrl}/dashboard`)}
-            >
-              Ouvrir le chat web
-            </button>
-          </>
-        )}
+        {step === "online" && <Dashboard appUrl={appUrl} />}
 
-        {error && <p style={{ color: "#f87171", fontSize: 14, marginTop: 12 }}>{error}</p>}
+        {error && step !== "online" && (
+          <p className="error-banner">{error}</p>
+        )}
       </div>
     </main>
   );
