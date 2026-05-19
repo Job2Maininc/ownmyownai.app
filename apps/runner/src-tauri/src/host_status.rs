@@ -125,9 +125,23 @@ pub fn build_snapshot() -> HostStatusSnapshot {
     }
 }
 
+pub fn tray_tooltip(snapshot: &HostStatusSnapshot) -> String {
+    let status = if snapshot.active_sessions > 0 {
+        format!("En ligne · {} chat(s)", snapshot.active_sessions)
+    } else if snapshot.ollama_running && snapshot.relay_connected && snapshot.cloud_synced {
+        "En ligne · en attente".to_string()
+    } else if snapshot.services_running {
+        "Connexion en cours…".to_string()
+    } else {
+        "Configuration".to_string()
+    };
+    format!("OwnMyOwnAI Host — {status}")
+}
+
 pub fn emit_status() {
     let snapshot = build_snapshot();
     if let Some(app) = APP_HANDLE.get() {
+        crate::tray::set_tooltip(app, &tray_tooltip(&snapshot));
         let _ = app.emit("host-status", &snapshot);
     }
 }

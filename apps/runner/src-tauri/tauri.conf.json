@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "OwnMyOwnAI Host",
         "width": 520,
         "height": 720,

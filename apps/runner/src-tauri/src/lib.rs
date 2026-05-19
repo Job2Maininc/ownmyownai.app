@@ -2,6 +2,7 @@ mod credentials;
 mod host_status;
 mod ollama;
 mod relay;
+mod tray;
 
 use credentials::{get_credentials, save_credentials, StoredCredentials};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
@@ -101,6 +102,8 @@ pub fn run() {
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());
+            tray::setup(app)?;
+            tray::set_tooltip(app.handle(), &host_status::tray_tooltip(&build_snapshot()));
             tauri::async_runtime::spawn(async move {
                 if get_credentials().ok().flatten().is_some() {
                     let _ = start_background_services().await;
