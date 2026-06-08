@@ -3,7 +3,7 @@ use crate::context::{
     delete_document,
     delete_knowledge_base, get_context_summary, ingest_document, list_chunks, list_context_links,
     list_documents, list_knowledge_bases, load_project_rules, log_audit, preview_inline_edit,
-    start_context_watcher, AuditAction, ContextLimits, RagCitation, init_context_db,
+    start_context_watcher, AuditAction, ContextLimits, init_context_db,
 };
 use crate::projects::{
     get_active_project_id, get_project, list_projects, open_project, resolve_project_context_ids,
@@ -27,6 +27,7 @@ use crate::ollama::{
 use crate::providers::{
     is_available_model, is_cloud_model, list_available_models, relay_chat_stream,
 };
+use crate::mcp::{call_tool as call_mcp_tool, list_all_tools, list_servers};
 use crate::playbooks::{self, PlaybookRunParams};
 use crate::settings::set_user_memory_enabled;
 use crate::user_memory::{add_fact, build_memory_context, delete_fact, memory_state};
@@ -359,6 +360,13 @@ async fn run_relay_loop(
                                     let _ = handle_context_chunks(&envelope, &write_task).await;
                                 });
                             }
+                            "terminal.exec" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_terminal_exec(&envelope, &write_task).await;
+                                });
+                            }
                             "pr.review" => {
                                 let write_task = write.clone();
                                 let envelope = envelope.clone();
@@ -479,6 +487,27 @@ async fn run_relay_loop(
                                     let _ = send_relay_host_status(&write_task).await;
                                 });
                             }
+                            "mcp.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_mcp_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "mcp.tools" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_mcp_tools(&envelope, &write_task).await;
+                                });
+                            }
+                            "mcp.call" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_mcp_call(&envelope, &write_task).await;
+                                });
+                            }
                             _ => {}
                         }
                     }
@@ -579,7 +608,7 @@ async fn send_chat_delta(
 async fn send_chat_citations(
     write: &SharedRelayWrite,
     request_id: &Option<String>,
-    citations: &[RagCitation],
+    citations: &[serde_json::Value],
 ) -> Result<(), String> {
     let msg = WsEnvelope {
         msg_type: "chat.citations".into(),
@@ -769,7 +798,7 @@ async fn handle_chat_start_inner(
         .get("projectId")
         .and_then(|v| v.as_str())
         .map(String::from)
-        .or_else(|| get_active_project_id().ok().flatten());
+        .or_else(get_active_project_id);
 
     if context_ids.is_empty() {
         if let Some(ref pid) = project_id {
@@ -1281,7 +1310,7 @@ async fn handle_project_list(
     write: &SharedRelayWrite,
 ) -> Result<(), String> {
     let _ = init_context_db();
-    let active_id = get_active_project_id().ok().flatten();
+    let active_id = get_active_project_id();
     let projects = list_projects(active_id.as_deref()).unwrap_or_default();
     send_ws_response(
         write,
@@ -1508,6 +1537,105 @@ async fn handle_context_upload(
                 write,
                 "context.error",
                 serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_mcp_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let servers = list_servers();
+    send_ws_response(
+        write,
+        "mcp.servers",
+        serde_json::json!({ "servers": servers }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_mcp_tools(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    match list_all_tools() {
+        Ok(tools) => {
+            send_ws_response(
+                write,
+                "mcp.tools",
+                serde_json::json!({ "tools": tools }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(message) => {
+            send_ws_response(
+                write,
+                "mcp.error",
+                serde_json::json!({ "message": message }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_mcp_call(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let qualified_name = envelope
+        .payload
+        .get("qualifiedName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if qualified_name.is_empty() {
+        return send_ws_response(
+            write,
+            "mcp.error",
+            serde_json::json!({ "message": "qualifiedName requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+
+    let arguments = envelope
+        .payload
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let context_ids: Vec<String> = envelope
+        .payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|id| id.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    match call_mcp_tool(&qualified_name, &arguments, &context_ids).await {
+        Ok(result) => {
+            send_ws_response(
+                write,
+                "mcp.result",
+                serde_json::json!({ "qualifiedName": qualified_name, "result": result }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(message) => {
+            send_ws_response(
+                write,
+                "mcp.error",
+                serde_json::json!({ "message": message }),
                 &envelope.requestId,
             )
             .await
