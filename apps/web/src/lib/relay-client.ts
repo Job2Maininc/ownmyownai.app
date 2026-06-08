@@ -64,6 +64,7 @@ export class RelayClient {
       this.reconnectAttempt = 0;
       this.callbacks.onStatus?.("connected");
     } catch {
+      this.callbacks.onStatus?.("error");
       if (!this.intentionalDisconnect) {
         this.scheduleReconnect();
       }

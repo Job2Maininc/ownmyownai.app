@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-shell";
 import Dashboard from "./components/Dashboard";
 import InstallProgress from "./components/InstallProgress";
 import ModelSetup from "./components/ModelSetup";
@@ -141,7 +140,7 @@ export default function App() {
   }
 
   async function openPairingPage() {
-    await open(`${appUrl}/host/link`);
+    await invoke("open_url", { url: `${appUrl}/host/link` });
   }
 
   function handleUnpaired() {

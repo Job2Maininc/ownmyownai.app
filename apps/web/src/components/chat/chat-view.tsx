@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ChatMessage, HostStatus } from "@ownmyownai/protocol";
+import type { Host } from "@ownmyownai/supabase-types";
 import { mintRelayToken } from "@/lib/api";
 import { hostStatusClassName, hostStatusLabel } from "@/lib/host-status";
 import { RelayClient } from "@/lib/relay-client";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
@@ -83,6 +85,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [showContext, setShowContext] = useState(true);
   const [historyMeta, setHistoryMeta] = useState<ConversationMeta[]>([]);
   const [conversationNotice, setConversationNotice] = useState<string | null>(null);
+  const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
   const relayRef = useRef<RelayClient | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
@@ -121,12 +124,49 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, [messages, streaming]);
 
   useEffect(() => {
+    const supabase = createClient();
+
+    async function loadCloudHost() {
+      const { data } = await supabase
+        .from("hosts")
+        .select("status, last_seen_at")
+        .eq("id", hostId)
+        .single();
+      if (data) {
+        setCloudHost(data as Pick<Host, "status" | "last_seen_at">);
+      }
+    }
+
+    void loadCloudHost();
+
+    const channel = supabase
+      .channel(`chat-host-${hostId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "hosts", filter: `id=eq.${hostId}` },
+        (payload) => {
+          setCloudHost(payload.new as Pick<Host, "status" | "last_seen_at">);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [hostId]);
+
+  useEffect(() => {
     hasConnectedRef.current = false;
     const client = new RelayClient({
       mintToken: () => mintRelayToken(hostId),
       onStatus: (status) => {
         if (status === "connected") hasConnectedRef.current = true;
         setRelayStatus(status);
+        if (status === "error") {
+          setError(
+            "Connexion au relay impossible. Vérifiez que l'app Host est ouverte sur ce PC.",
+          );
+        }
       },
       onHostStatus: (status) => setHostStatus(status),
       onDelta: (content) => {
@@ -164,10 +204,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
 
   const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
-  const hostBusy = hostStatus === "busy";
-  const hostOffline = hostStatus === "offline";
-  const hostReachable = hostStatus === "online" || hostStatus === "busy";
+
+  const cloudFresh =
+    cloudHost?.last_seen_at != null &&
+    Date.now() - new Date(cloudHost.last_seen_at).getTime() < 60_000;
+
+  const effectiveHostStatus: HostStatus =
+    hostStatus !== "offline"
+      ? hostStatus
+      : connected &&
+          cloudFresh &&
+          cloudHost?.status &&
+          cloudHost.status !== "offline"
+        ? cloudHost.status
+        : hostStatus;
+
+  const hostBusy = effectiveHostStatus === "busy";
+  const hostOffline = effectiveHostStatus === "offline";
+  const hostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
   const canSend = hostReachable && !hostOffline && (!hostBusy || streaming);
+  const usingCloudFallback =
+    hostStatus === "offline" && effectiveHostStatus !== "offline" && connected;
 
   function handleNewConversation() {
     if (messages.length > 0) {
@@ -234,8 +291,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             className: "text-amber-400",
           }
         : {
-            label: `Host ${hostStatusLabel(hostStatus).toLowerCase()}`,
-            className: hostStatusClassName(hostStatus),
+            label: usingCloudFallback
+              ? `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()} (sync relay…)`
+              : `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
+            className: hostStatusClassName(effectiveHostStatus),
           };
 
   return (

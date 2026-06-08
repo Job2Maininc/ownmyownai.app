@@ -18,8 +18,13 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Interval};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+
+type RelayWrite = futures_util::stream::SplitSink<
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    Message,
+>;
 
 static SERVICES_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVICES_STOP: AtomicBool = AtomicBool::new(false);
@@ -188,6 +193,26 @@ async fn send_heartbeat(
     Ok(())
 }
 
+fn relay_host_status() -> &'static str {
+    if host_status::is_session_active() {
+        "busy"
+    } else {
+        "online"
+    }
+}
+
+async fn send_relay_host_status(write: &mut RelayWrite) -> Result<(), String> {
+    let envelope = WsEnvelope {
+        msg_type: "host.status".into(),
+        payload: serde_json::json!({ "status": relay_host_status() }),
+        requestId: None,
+    };
+    write
+        .send(Message::Text(serde_json::to_string(&envelope).map_err(|e| e.to_string())?))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn run_relay_loop(
     creds: &StoredCredentials,
     supabase_url: &str,
@@ -205,44 +230,56 @@ async fn run_relay_loop(
     let (ws, _) = connect_async(&ws_url).await.map_err(|e| e.to_string())?;
     let (mut write, mut read) = ws.split();
     set_relay_connected(true);
+    let _ = send_relay_host_status(&mut write).await;
 
-    while let Some(msg) = read.next().await {
-        if SERVICES_STOP.load(Ordering::SeqCst) {
-            break;
-        }
-        let msg = msg.map_err(|e| e.to_string())?;
-        if let Message::Text(text) = msg {
-            if let Ok(envelope) = serde_json::from_str::<WsEnvelope>(&text) {
-                match envelope.msg_type.as_str() {
-                    "chat.start" => {
-                        let _ = handle_chat_start(&envelope, &mut write).await;
-                    }
-                    "chat.cancel" => {
-                        handle_chat_cancel(&envelope);
-                    }
-                    "model.pull" => {
-                        let _ = handle_model_pull(&envelope, &mut write).await;
-                    }
-                    "context.list" => {
-                        let _ = handle_context_list(&envelope, &mut write).await;
-                    }
-                    "context.create" => {
-                        let _ = handle_context_create(&envelope, &mut write).await;
-                    }
-                    "context.delete" => {
-                        let _ = handle_context_delete(&envelope, &mut write).await;
-                    }
-                    "context.status" => {
-                        let _ = handle_context_status(&envelope, &mut write).await;
-                    }
-                    "context.upload" => {
-                        let _ = handle_context_upload(&envelope, &mut write).await;
-                    }
-                    "context.chunks" => {
-                        let _ = handle_context_chunks(&envelope, &mut write).await;
-                    }
-                    _ => {}
+    let mut status_tick: Interval = tokio::time::interval(Duration::from_secs(8));
+
+    loop {
+        tokio::select! {
+            msg = read.next() => {
+                let Some(msg) = msg else { break };
+                if SERVICES_STOP.load(Ordering::SeqCst) {
+                    break;
                 }
+                let msg = msg.map_err(|e| e.to_string())?;
+                if let Message::Text(text) = msg {
+                    if let Ok(envelope) = serde_json::from_str::<WsEnvelope>(&text) {
+                        match envelope.msg_type.as_str() {
+                            "chat.start" => {
+                                let _ = handle_chat_start(&envelope, &mut write).await;
+                                let _ = send_relay_host_status(&mut write).await;
+                            }
+                            "chat.cancel" => {
+                                handle_chat_cancel(&envelope);
+                            }
+                            "model.pull" => {
+                                let _ = handle_model_pull(&envelope, &mut write).await;
+                            }
+                            "context.list" => {
+                                let _ = handle_context_list(&envelope, &mut write).await;
+                            }
+                            "context.create" => {
+                                let _ = handle_context_create(&envelope, &mut write).await;
+                            }
+                            "context.delete" => {
+                                let _ = handle_context_delete(&envelope, &mut write).await;
+                            }
+                            "context.status" => {
+                                let _ = handle_context_status(&envelope, &mut write).await;
+                            }
+                            "context.upload" => {
+                                let _ = handle_context_upload(&envelope, &mut write).await;
+                            }
+                            "context.chunks" => {
+                                let _ = handle_context_chunks(&envelope, &mut write).await;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            _ = status_tick.tick() => {
+                let _ = send_relay_host_status(&mut write).await;
             }
         }
     }
@@ -267,10 +304,7 @@ fn handle_chat_cancel(envelope: &WsEnvelope) {
 }
 
 async fn send_chat_error(
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
     envelope: &WsEnvelope,
     message: &str,
 ) -> Result<(), String> {
@@ -286,10 +320,7 @@ async fn send_chat_error(
 }
 
 async fn send_chat_done(
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
     request_id: &Option<String>,
 ) -> Result<(), String> {
     let done = WsEnvelope {
@@ -305,10 +336,7 @@ async fn send_chat_done(
 
 async fn handle_chat_start(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     if !session_started() {
         return send_chat_error(
@@ -318,6 +346,8 @@ async fn handle_chat_start(
         )
         .await;
     }
+
+    let _ = send_relay_host_status(write).await;
 
     CHAT_CANCEL.store(false, Ordering::SeqCst);
     if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
@@ -336,10 +366,7 @@ async fn handle_chat_start(
 
 async fn handle_chat_start_inner(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let _ = ensure_ollama_running(None).await;
 
@@ -440,10 +467,7 @@ fn context_limits() -> ContextLimits {
 }
 
 async fn send_ws_response(
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
     msg_type: &str,
     payload: serde_json::Value,
     request_id: &Option<String>,
@@ -461,10 +485,7 @@ async fn send_ws_response(
 
 async fn handle_model_pull(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let model = envelope
         .payload
@@ -534,10 +555,7 @@ async fn handle_model_pull(
 
 async fn handle_context_list(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let _ = init_context_db();
     let bases = list_knowledge_bases().unwrap_or_default();
@@ -552,10 +570,7 @@ async fn handle_context_list(
 
 async fn handle_context_create(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let _ = init_context_db();
     let _ = ensure_embedding_model(None).await;
@@ -593,10 +608,7 @@ async fn handle_context_create(
 
 async fn handle_context_delete(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let kb_id = envelope
         .payload
@@ -635,10 +647,7 @@ async fn handle_context_delete(
 
 async fn handle_context_status(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let kb_id = envelope
         .payload
@@ -657,10 +666,7 @@ async fn handle_context_status(
 
 async fn handle_context_upload(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let _ = init_context_db();
     let _ = ensure_embedding_model(None).await;
@@ -725,10 +731,7 @@ async fn handle_context_upload(
 
 async fn handle_context_chunks(
     envelope: &WsEnvelope,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
-        Message,
-    >,
+    write: &mut RelayWrite,
 ) -> Result<(), String> {
     let doc_id = envelope
         .payload

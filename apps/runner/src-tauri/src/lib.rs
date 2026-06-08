@@ -122,6 +122,11 @@ async fn start_background_services_cmd() -> Result<(), String> {
     start_background_services(None).await
 }
 
+#[tauri::command(rename = "open_url")]
+fn open_url_cmd(url: String) -> Result<(), String> {
+    open::that(url).map_err(|e| e.to_string())
+}
+
 #[tauri::command(rename = "get_host_status")]
 async fn get_host_status_cmd() -> Result<HostStatusSnapshot, String> {
     tauri::async_runtime::spawn_blocking(build_snapshot)
@@ -200,6 +205,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            open_url_cmd,
             check_ollama_cmd,
             ensure_ollama_running_cmd,
             pull_model_cmd,

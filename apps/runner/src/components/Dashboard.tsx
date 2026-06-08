@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-shell";
 import ContextManager from "./ContextManager";
 import ModelManager from "./ModelManager";
 import type { HostStatusSnapshot } from "../types";
@@ -94,7 +93,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   async function openInBrowser(path: string) {
     setOpenError(null);
     try {
-      await open(path);
+      await invoke("open_url", { url: path });
     } catch (e) {
       setOpenError(`Impossible d'ouvrir le navigateur : ${String(e)}`);
     }
