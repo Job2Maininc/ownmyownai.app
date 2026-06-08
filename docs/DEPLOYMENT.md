@@ -77,6 +77,20 @@ Sur `/download`, le bouton appelle **`/api/download`** : le site envoie le ZIP p
 
 La CI publie `OwnMyOwnAI-Host-portable-x64.zip` sur **GitHub Releases** (tag `v*`).
 
+
+### Sources du ZIP (site web)
+
+Le serveur `/api/download` choisit la source la plus récente entre Supabase (`host-releases/latest/...`) et la dernière GitHub Release avec un ZIP portable. Un déploiement Vercel du web **ne rebuild pas** le runner : sans workflow **Release Windows Host**, les utilisateurs gardent l'ancien binaire.
+
+### Publier une nouvelle version Host
+
+Le workflow `.github/workflows/release-windows.yml` ne s'exécute **pas** sur un simple `push` vers `main`. Déclenchement :
+
+- Manuel : GitHub Actions → *Release Windows Host* → *Run workflow*, ou `gh workflow run "Release Windows Host"`
+- Tag : `git tag v0.2.0` puis `git push origin v0.2.0` (pattern `v*`)
+
+Le job build Windows upload le ZIP sur Supabase (secret `SUPABASE_SERVICE_ROLE_KEY`) et crée une GitHub Release.
+
 ### Build local
 
 ```bash

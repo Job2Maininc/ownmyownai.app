@@ -2,16 +2,16 @@ const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 
 export const PORTABLE_ZIP_FILENAME = "OwnMyOwnAI-Host-portable-x64.zip";
 
-const PINNED_TAG = "v0.1.9";
-
 export type PortableZipAsset = {
   name: string;
   browser_download_url: string;
   api_url: string;
+  publishedAt?: Date;
 };
 
 type Release = {
   tag_name?: string;
+  published_at?: string;
   assets?: {
     id: number;
     name: string;
@@ -27,16 +27,36 @@ function supabasePublicZipUrl(): string | null {
 }
 
 export async function resolveSupabaseZipUrl(): Promise<string | null> {
+  const meta = await resolveSupabaseZipMeta();
+  return meta?.url ?? null;
+}
+
+export async function resolveSupabaseZipMeta(): Promise<{
+  url: string;
+  lastModified: Date | null;
+} | null> {
   const url = supabasePublicZipUrl();
   if (!url) return null;
 
   try {
     const head = await fetch(url, { method: "HEAD", next: { revalidate: 60 } });
-    if (head.ok) return url;
+    if (!head.ok) return null;
+    const raw = head.headers.get("last-modified");
+    const lastModified = raw ? new Date(raw) : null;
+    return { url, lastModified };
   } catch {
-    /* ignore */
+    return null;
   }
-  return null;
+}
+
+function githubAuthHeaders(): Record<string, string> {
+  const token =
+    process.env.GITHUB_TOKEN ?? process.env.GITHUB_RELEASES_TOKEN ?? null;
+  return {
+    Accept: "application/vnd.github+json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    "User-Agent": "OwnMyOwnAI-Web",
+  };
 }
 
 export async function resolvePortableZipAsset(): Promise<PortableZipAsset | null> {
@@ -49,65 +69,52 @@ export async function resolvePortableZipAsset(): Promise<PortableZipAsset | null
     };
   }
 
-  const token =
-    process.env.GITHUB_TOKEN ?? process.env.GITHUB_RELEASES_TOKEN ?? null;
-
   try {
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
       {
-        headers: {
-          Accept: "application/vnd.github+json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          "User-Agent": "OwnMyOwnAI-Web",
-        },
+        headers: githubAuthHeaders(),
         next: { revalidate: 120 },
       },
     );
 
-    if (res.ok) {
-      const releases = (await res.json()) as Release[];
-      for (const release of releases) {
-        const zip = release.assets?.find(
-          (a) => a.name.endsWith(".zip") && a.name.includes("portable"),
-        );
-        if (zip) {
-          return {
-            name: zip.name,
-            browser_download_url: zip.browser_download_url,
-            api_url: zip.url,
-          };
-        }
+    if (!res.ok) return null;
+
+    const releases = (await res.json()) as Release[];
+    for (const release of releases) {
+      const zip = release.assets?.find(
+        (a) => a.name.endsWith(".zip") && a.name.includes("portable"),
+      );
+      if (zip) {
+        return {
+          name: zip.name,
+          browser_download_url: zip.browser_download_url,
+          api_url: zip.url,
+          publishedAt: release.published_at
+            ? new Date(release.published_at)
+            : undefined,
+        };
       }
     }
   } catch {
-    /* fallback below */
+    return null;
   }
 
-  return {
-    name: PORTABLE_ZIP_FILENAME,
-    browser_download_url: `https://github.com/${GITHUB_REPO}/releases/download/${PINNED_TAG}/${PORTABLE_ZIP_FILENAME}`,
-    api_url: `https://github.com/${GITHUB_REPO}/releases/download/${PINNED_TAG}/${PORTABLE_ZIP_FILENAME}`,
-  };
+  return null;
 }
 
-export async function fetchPortableZipStream(): Promise<Response> {
-  const supabaseUrl = await resolveSupabaseZipUrl();
-  if (supabaseUrl) {
-    const res = await fetch(supabaseUrl);
-    if (res.ok && res.body) return res;
-  }
+function isNewer(candidate: Date | null | undefined, baseline: Date | null): boolean {
+  if (!candidate) return false;
+  if (!baseline || Number.isNaN(baseline.getTime())) return true;
+  return candidate.getTime() > baseline.getTime();
+}
 
-  const asset = await resolvePortableZipAsset();
-  if (!asset) {
-    throw new Error("release_not_found");
-  }
-
+async function fetchZipFromUrl(url: string, apiStyle: boolean): Promise<Response> {
   const token =
     process.env.GITHUB_TOKEN ?? process.env.GITHUB_RELEASES_TOKEN ?? null;
 
-  if (token && asset.api_url.includes("api.github.com")) {
-    const res = await fetch(asset.api_url, {
+  if (apiStyle && token && url.includes("api.github.com")) {
+    const res = await fetch(url, {
       headers: {
         Accept: "application/octet-stream",
         Authorization: `Bearer ${token}`,
@@ -118,7 +125,7 @@ export async function fetchPortableZipStream(): Promise<Response> {
     if (res.ok && res.body) return res;
   }
 
-  const res = await fetch(asset.browser_download_url, {
+  const res = await fetch(url, {
     headers: {
       Accept: "application/octet-stream",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -132,4 +139,31 @@ export async function fetchPortableZipStream(): Promise<Response> {
   }
 
   return res;
+}
+
+/** Choisit Supabase ou GitHub selon la date la plus récente (évite un ZIP figé sur Storage). */
+export async function fetchPortableZipStream(): Promise<Response> {
+  const [supabase, github] = await Promise.all([
+    resolveSupabaseZipMeta(),
+    resolvePortableZipAsset(),
+  ]);
+
+  const preferGithub =
+    github &&
+    isNewer(github.publishedAt, supabase?.lastModified ?? null);
+
+  if (preferGithub) {
+    return fetchZipFromUrl(github.api_url, true);
+  }
+
+  if (supabase) {
+    const res = await fetch(supabase.url);
+    if (res.ok && res.body) return res;
+  }
+
+  if (github) {
+    return fetchZipFromUrl(github.api_url, true);
+  }
+
+  throw new Error("release_not_found");
 }
