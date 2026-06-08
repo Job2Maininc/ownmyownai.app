@@ -26,8 +26,10 @@ use settings::{
 use serde::Deserialize;
 
 #[tauri::command(rename = "check_ollama")]
-fn check_ollama_cmd() -> Result<OllamaStatus, String> {
-    check_ollama()
+async fn check_ollama_cmd() -> Result<OllamaStatus, String> {
+    tauri::async_runtime::spawn_blocking(check_ollama)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(rename = "ensure_ollama_running")]
@@ -121,8 +123,10 @@ async fn start_background_services_cmd() -> Result<(), String> {
 }
 
 #[tauri::command(rename = "get_host_status")]
-fn get_host_status_cmd() -> Result<HostStatusSnapshot, String> {
-    Ok(build_snapshot())
+async fn get_host_status_cmd() -> Result<HostStatusSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(build_snapshot)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command(rename = "unpair_host")]
@@ -223,7 +227,15 @@ pub fn run() {
         .setup(|app| {
             set_app_handle(app.handle().clone());
             tray::setup(app)?;
-            tray::set_tooltip(app.handle(), &host_status::tray_tooltip(&build_snapshot()));
+            ollama::start_status_poller();
+            let tray_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Ok(snapshot) =
+                    tauri::async_runtime::spawn_blocking(host_status::build_snapshot).await
+                {
+                    tray::set_tooltip(&tray_handle, &host_status::tray_tooltip(&snapshot));
+                }
+            });
             tauri::async_runtime::spawn(async move {
                 if get_credentials().ok().flatten().is_some() {
                     let _ = start_background_services(None).await;

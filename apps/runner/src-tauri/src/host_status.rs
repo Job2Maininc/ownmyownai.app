@@ -3,7 +3,7 @@ use crate::ollama::{check_ollama, default_model};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 static RELAY_CONNECTED: AtomicBool = AtomicBool::new(false);
@@ -14,6 +14,9 @@ static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 static LAST_HEARTBEAT_ERR: Mutex<Option<String>> = Mutex::new(None);
 static LAST_RELAY_ERR: Mutex<Option<String>> = Mutex::new(None);
+static LAST_EMIT_AT: Mutex<Option<Instant>> = Mutex::new(None);
+
+const MIN_EMIT_INTERVAL: Duration = Duration::from_millis(350);
 
 pub fn set_app_handle(app: AppHandle) {
     let _ = APP_HANDLE.set(app);
@@ -156,6 +159,15 @@ pub fn tray_tooltip(snapshot: &HostStatusSnapshot) -> String {
 }
 
 pub fn emit_status() {
+    if let Ok(mut last) = LAST_EMIT_AT.lock() {
+        if let Some(at) = *last {
+            if at.elapsed() < MIN_EMIT_INTERVAL {
+                return;
+            }
+        }
+        *last = Some(Instant::now());
+    }
+
     let snapshot = build_snapshot();
     if let Some(app) = APP_HANDLE.get() {
         crate::tray::set_tooltip(app, &tray_tooltip(&snapshot));

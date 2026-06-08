@@ -68,7 +68,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
 
   useEffect(() => {
     refresh();
-    const poll = window.setInterval(refresh, 3000);
+    const poll = window.setInterval(refresh, 12_000);
     const unlisten = listen<HostStatusSnapshot>("host-status", (event) => {
       setStatus(event.payload);
     });

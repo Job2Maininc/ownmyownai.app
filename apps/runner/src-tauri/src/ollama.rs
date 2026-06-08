@@ -1,6 +1,7 @@
 use crate::process::command_hidden;
 use crate::settings::{resolved_default_model, resolved_models_dir, FALLBACK_DEFAULT_MODEL};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
@@ -71,6 +72,7 @@ static OLLAMA_EXE_CACHE: Mutex<Option<Option<PathBuf>>> = Mutex::new(None);
 
 pub fn invalidate_ollama_exe_cache() {
     *OLLAMA_EXE_CACHE.lock().unwrap() = None;
+    invalidate_ollama_status_cache();
 }
 
 pub fn resolve_ollama_exe() -> Option<PathBuf> {
@@ -268,46 +270,104 @@ fn spawn_stream_reader(
     })
 }
 
-pub fn check_ollama() -> Result<OllamaStatus, String> {
+const OLLAMA_PROBE_TIMEOUT: Duration = Duration::from_millis(900);
+const OLLAMA_STATUS_TTL: Duration = Duration::from_secs(4);
+
+struct CachedOllamaStatus {
+    status: OllamaStatus,
+    fetched_at: Instant,
+}
+
+static OLLAMA_STATUS_CACHE: Mutex<Option<CachedOllamaStatus>> = Mutex::new(None);
+
+pub fn invalidate_ollama_status_cache() {
+    *OLLAMA_STATUS_CACHE.lock().unwrap() = None;
+}
+
+fn store_ollama_status(status: OllamaStatus) -> OllamaStatus {
+    let snapshot = status.clone();
+    *OLLAMA_STATUS_CACHE.lock().unwrap() = Some(CachedOllamaStatus {
+        status: snapshot.clone(),
+        fetched_at: Instant::now(),
+    });
+    snapshot
+}
+
+fn fetch_ollama_status_sync() -> OllamaStatus {
     let installed = resolve_ollama_exe().is_some();
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
+    #[derive(Deserialize)]
+    struct TagsResponse {
+        models: Vec<ModelEntry>,
+    }
+    #[derive(Deserialize)]
+    struct ModelEntry {
+        name: String,
+    }
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(OLLAMA_PROBE_TIMEOUT)
         .build()
-        .map_err(|e| e.to_string())?;
-
-    let running = client
-        .get(format!("{OLLAMA_URL}/api/tags"))
-        .send()
-        .map(|r| r.status().is_success())
-        .unwrap_or(false);
-
-    let models = if running {
-        #[derive(Deserialize)]
-        struct TagsResponse {
-            models: Vec<ModelEntry>,
+    {
+        Ok(c) => c,
+        Err(_) => {
+            return OllamaStatus {
+                installed,
+                running: false,
+                models: vec![],
+            };
         }
-        #[derive(Deserialize)]
-        struct ModelEntry {
-            name: String,
-        }
-
-        client
-            .get(format!("{OLLAMA_URL}/api/tags"))
-            .send()
-            .ok()
-            .and_then(|r| r.json::<TagsResponse>().ok())
-            .map(|t| t.models.into_iter().map(|m| m.name).collect())
-            .unwrap_or_default()
-    } else {
-        vec![]
     };
 
-    Ok(OllamaStatus {
-        installed,
-        running,
-        models,
-    })
+    match client.get(format!("{OLLAMA_URL}/api/tags")).send() {
+        Ok(response) if response.status().is_success() => {
+            let models = response
+                .json::<TagsResponse>()
+                .map(|t| t.models.into_iter().map(|m| m.name).collect())
+                .unwrap_or_default();
+            OllamaStatus {
+                installed,
+                running: true,
+                models,
+            }
+        }
+        _ => OllamaStatus {
+            installed,
+            running: false,
+            models: vec![],
+        },
+    }
+}
+
+/// Lecture rapide depuis le cache (utilisé par l'UI).
+pub fn check_ollama() -> Result<OllamaStatus, String> {
+    if let Ok(cache) = OLLAMA_STATUS_CACHE.lock() {
+        if let Some(cached) = cache.as_ref() {
+            if cached.fetched_at.elapsed() < OLLAMA_STATUS_TTL {
+                return Ok(cached.status.clone());
+            }
+        }
+    }
+    Ok(store_ollama_status(fetch_ollama_status_sync()))
+}
+
+/// Sonde réseau immédiate (démarrage Ollama, install).
+pub fn probe_ollama_now() -> Result<OllamaStatus, String> {
+    Ok(store_ollama_status(fetch_ollama_status_sync()))
+}
+
+/// Rafraîchit l'état Ollama en arrière-plan pour ne pas bloquer l'interface.
+pub fn start_status_poller() {
+    tauri::async_runtime::spawn(async {
+        let mut interval = tokio::time::interval(Duration::from_secs(6));
+        loop {
+            interval.tick().await;
+            let result = tauri::async_runtime::spawn_blocking(probe_ollama_now).await;
+            if result.is_ok() {
+                crate::host_status::emit_status();
+            }
+        }
+    });
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -596,7 +656,7 @@ async fn spawn_ollama_serve(app: Option<&AppHandle>) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     for i in 0..45 {
-        if check_ollama()?.running {
+        if probe_ollama_now()?.running {
             emit_message(app, "ollama_start", "Ollama est prêt.");
             return Ok(());
         }
@@ -610,7 +670,7 @@ async fn spawn_ollama_serve(app: Option<&AppHandle>) -> Result<(), String> {
 }
 
 pub async fn ensure_ollama_running(app: Option<&AppHandle>) -> Result<(), String> {
-    if check_ollama()?.running {
+    if probe_ollama_now()?.running {
         return Ok(());
     }
 
@@ -870,7 +930,7 @@ pub fn delete_model(model: &str) -> Result<(), String> {
 }
 
 pub fn disk_free_gb_for_models_dir() -> Option<f64> {
-    crate::hardware::disk_free_gb_for_path(&resolved_models_dir())
+    crate::hardware::cached_disk_free_gb_for_path(&resolved_models_dir())
 }
 
 pub async fn create_embedding(model: &str, text: &str) -> Result<Vec<f32>, String> {

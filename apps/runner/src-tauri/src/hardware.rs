@@ -1,7 +1,15 @@
 use crate::process::command_hidden;
 use serde::Serialize;
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 use sysinfo::{Disks, System};
+
+const DISK_CACHE_TTL: Duration = Duration::from_secs(45);
+
+static DISK_FREE_CACHE: LazyLock<Mutex<HashMap<PathBuf, (f64, Instant)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,6 +134,23 @@ pub fn disk_free_gb_for_path(path: &Path) -> Option<f64> {
         }
     }
     None
+}
+
+pub fn cached_disk_free_gb_for_path(path: &Path) -> Option<f64> {
+    let key = path.to_path_buf();
+    if let Ok(cache) = DISK_FREE_CACHE.lock() {
+        if let Some((value, at)) = cache.get(&key) {
+            if at.elapsed() < DISK_CACHE_TTL {
+                return Some(*value);
+            }
+        }
+    }
+
+    let value = disk_free_gb_for_path(path)?;
+    if let Ok(mut cache) = DISK_FREE_CACHE.lock() {
+        cache.insert(key, (value, Instant::now()));
+    }
+    Some(value)
 }
 
 pub fn compatibility_for_ram(model_ram_gb: u32, system_ram_gb: f64) -> &'static str {
