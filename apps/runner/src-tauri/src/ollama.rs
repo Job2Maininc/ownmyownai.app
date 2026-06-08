@@ -971,6 +971,14 @@ pub fn fallback_default_model() -> &'static str {
     FALLBACK_DEFAULT_MODEL
 }
 
+fn ollama_http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
 pub async fn stream_chat(
     model: &str,
     messages: &[serde_json::Value],
@@ -980,17 +988,36 @@ pub async fn stream_chat(
             "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
         ));
     }
-    let client = reqwest::Client::new();
+    let client = ollama_http_client()?;
     let body = serde_json::json!({
         "model": model,
         "messages": messages,
         "stream": true,
+        "keep_alive": "10m",
     });
 
-    client
+    let response = client
         .post(format!("{OLLAMA_URL}/v1/chat/completions"))
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| {
+            if e.is_connect() {
+                "Impossible de joindre Ollama sur ce PC. Vérifiez qu'il est démarré.".to_string()
+            } else if e.is_timeout() {
+                "Ollama met trop de temps à répondre. Le modèle charge peut-être encore en mémoire.".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Ollama a renvoyé une erreur ({status}) : {detail}"
+        ));
+    }
+
+    Ok(response)
 }

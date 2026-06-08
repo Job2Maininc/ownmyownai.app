@@ -31,7 +31,8 @@ export interface RelayClientCallbacks {
 
 const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
-const CHAT_IDLE_TIMEOUT_MS = 120_000;
+const CHAT_IDLE_TIMEOUT_MS = 300_000;
+const CONTEXT_REQUEST_TIMEOUT_MS = 45_000;
 
 export class RelayClient {
   private ws: WebSocket | null = null;
@@ -151,7 +152,7 @@ export class RelayClient {
     this.chatIdleTimer = setTimeout(() => {
       this.activeRequestId = null;
       this.callbacks.onError?.(
-        "Le modèle met trop de temps à répondre. Vérifiez qu'Ollama tourne sur votre PC.",
+        "Le modèle met trop de temps à répondre (5 min). Vérifiez qu'Ollama tourne et que le modèle est bien installé sur votre PC.",
       );
     }, CHAT_IDLE_TIMEOUT_MS);
   }
@@ -199,9 +200,9 @@ export class RelayClient {
       }
       case WS_MESSAGE_TYPES.CHAT_DELTA: {
         if (!this.isActiveRequest(envelope)) return;
+        this.resetChatIdleTimer();
         const payload = envelope.payload as { content?: string };
         if (payload.content) {
-          this.resetChatIdleTimer();
           this.callbacks.onDelta?.(payload.content);
         }
         break;
@@ -240,7 +241,7 @@ export class RelayClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(requestId);
-        reject(new Error("Délai dépassé"));
+        reject(new Error("Le host ne répond pas — vérifiez que l'app Host est ouverte et à jour."));
       }, timeoutMs);
       this.pendingRequests.set(requestId, {
         resolve: (env) => {
@@ -282,7 +283,11 @@ export class RelayClient {
 
   async listContextBases(): Promise<KnowledgeBaseSummary[]> {
     const requestId = this.send(WS_MESSAGE_TYPES.CONTEXT_LIST, {}) ?? "";
-    const env = await this.waitFor(requestId, [WS_MESSAGE_TYPES.CONTEXT_LIST, WS_MESSAGE_TYPES.CONTEXT_ERROR]);
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.CONTEXT_LIST, WS_MESSAGE_TYPES.CONTEXT_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
     if (env.type !== WS_MESSAGE_TYPES.CONTEXT_LIST) {
       throw new Error(this.payloadMessage(env, "Impossible de charger les bases de contexte"));
     }

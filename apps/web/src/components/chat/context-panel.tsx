@@ -61,7 +61,12 @@ export function ContextPanel({
       const list = await relay.listContextBases();
       setBases(list);
     } catch (e) {
-      setError(formatPanelError(e));
+      const message = formatPanelError(e);
+      setError(
+        message.includes("ne répond pas")
+          ? `${message} (installez la v0.1.17+ si besoin)`
+          : message,
+      );
     } finally {
       setLoading(false);
     }

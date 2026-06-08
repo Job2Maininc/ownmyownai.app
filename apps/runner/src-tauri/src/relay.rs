@@ -269,16 +269,32 @@ async fn run_relay_loop(
                                 });
                             }
                             "context.list" => {
-                                let _ = handle_context_list(&envelope, &write).await;
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_context_list(&envelope, &write_task).await;
+                                });
                             }
                             "context.create" => {
-                                let _ = handle_context_create(&envelope, &write).await;
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_context_create(&envelope, &write_task).await;
+                                });
                             }
                             "context.delete" => {
-                                let _ = handle_context_delete(&envelope, &write).await;
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_context_delete(&envelope, &write_task).await;
+                                });
                             }
                             "context.status" => {
-                                let _ = handle_context_status(&envelope, &write).await;
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_context_status(&envelope, &write_task).await;
+                                });
                             }
                             "context.upload" => {
                                 let write_task = write.clone();
@@ -288,7 +304,11 @@ async fn run_relay_loop(
                                 });
                             }
                             "context.chunks" => {
-                                let _ = handle_context_chunks(&envelope, &write).await;
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_context_chunks(&envelope, &write_task).await;
+                                });
                             }
                             _ => {}
                         }
@@ -334,6 +354,24 @@ async fn send_chat_error(
         .lock()
         .await
         .send(Message::Text(serde_json::to_string(&err).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn send_chat_delta(
+    write: &SharedRelayWrite,
+    request_id: &Option<String>,
+    content: &str,
+) -> Result<(), String> {
+    let delta = WsEnvelope {
+        msg_type: "chat.delta".into(),
+        payload: serde_json::json!({ "content": content }),
+        requestId: request_id.clone(),
+    };
+    write
+        .lock()
+        .await
+        .send(Message::Text(serde_json::to_string(&delta).unwrap()))
         .await
         .map_err(|e| e.to_string())
 }
@@ -392,7 +430,14 @@ async fn handle_chat_start_inner(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
 ) -> Result<(), String> {
-    let _ = ensure_ollama_running(None).await;
+    let _ = send_chat_delta(
+        write,
+        &envelope.requestId,
+        "Chargement du modèle sur votre PC…\n\n",
+    )
+    .await;
+
+    ensure_ollama_running(None).await?;
 
     let payload = &envelope.payload;
     let fallback_model = default_model();
@@ -469,17 +514,7 @@ async fn handle_chat_start_inner(
             }
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                 if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
-                    let delta = WsEnvelope {
-                        msg_type: "chat.delta".into(),
-                        payload: serde_json::json!({ "content": content }),
-                        requestId: envelope.requestId.clone(),
-                    };
-                    write
-                        .lock()
-                        .await
-                        .send(Message::Text(serde_json::to_string(&delta).unwrap()))
-                        .await
-                        .map_err(|e| e.to_string())?;
+                    let _ = send_chat_delta(write, &envelope.requestId, content).await;
                 }
             }
         }
