@@ -1,6 +1,9 @@
 use crate::credentials::get_credentials;
 use crate::process::command_hidden;
-use crate::settings::{resolved_default_model, resolved_models_dir, FALLBACK_DEFAULT_MODEL};
+use crate::settings::{
+    get_settings, resolved_default_model, resolved_models_dir, resolved_thinking_model,
+    FALLBACK_DEFAULT_MODEL,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -1074,6 +1077,143 @@ fn ollama_http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Modèles Ollama capables d'émettre un champ `thinking` séparé (`think: true`).
+pub fn model_supports_thinking(model: &str) -> bool {
+    let base = model.split(':').next().unwrap_or(model).to_lowercase();
+    const PREFIXES: &[&str] = &[
+        "deepseek-r1",
+        "qwen3",
+        "qwq",
+        "phi4-reasoning",
+        "marco-o1",
+        "gpt-oss",
+    ];
+    PREFIXES.iter().any(|p| base.starts_with(p))
+        || base.contains("r1")
+        || base.contains("think")
+        || base.contains("reason")
+}
+
+/// Route vers un modèle thinking installé (paramètre Host ou sélection).
+pub fn resolve_thinking_model(requested: &str) -> Result<String, String> {
+    if model_supports_thinking(requested) && model_exists(requested) {
+        return Ok(requested.to_string());
+    }
+
+    let dedicated = resolved_thinking_model(requested);
+    if dedicated != requested && model_exists(&dedicated) {
+        return Ok(dedicated);
+    }
+
+    if let Ok(settings) = get_settings() {
+        for candidate in &settings.selected_models {
+            if model_supports_thinking(candidate) && model_exists(candidate) {
+                return Ok(candidate.clone());
+            }
+        }
+    }
+
+    Err(format!(
+        "Mode réflexion : installez un modèle compatible (ex. qwen3, deepseek-r1). Modèle demandé : {requested}."
+    ))
+}
+
+pub async fn stream_chat_thinking(
+    model: &str,
+    messages: &[serde_json::Value],
+) -> Result<reqwest::Response, String> {
+    if !model_exists(model) {
+        return Err(format!(
+            "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
+        ));
+    }
+    let client = ollama_http_client()?;
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": true,
+        "think": true,
+        "keep_alive": "10m",
+    });
+
+    let response = client
+        .post(format!("{OLLAMA_URL}/api/chat"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                "Impossible de joindre Ollama sur ce PC. Vérifiez qu'il est démarré.".to_string()
+            } else if e.is_timeout() {
+                "Ollama met trop de temps à répondre. Le modèle charge peut-être encore en mémoire.".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Ollama a renvoyé une erreur ({status}) : {detail}"
+        ));
+    }
+
+    Ok(response)
+}
+
+/// Alias conservé pour les modules agent (PR review, etc.).
+pub async fn chat_completion(model: &str, messages: &[serde_json::Value]) -> Result<String, String> {
+    complete_chat(model, messages).await
+}
+
+pub async fn complete_chat(
+    model: &str,
+    messages: &[serde_json::Value],
+) -> Result<String, String> {
+    if !model_exists(model) {
+        return Err(format!(
+            "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
+        ));
+    }
+    let client = ollama_http_client()?;
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+        "keep_alive": "10m",
+    });
+
+    let response = client
+        .post(format!("{OLLAMA_URL}/v1/chat/completions"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                "Impossible de joindre Ollama sur ce PC. Vérifiez qu'il est démarré.".to_string()
+            } else if e.is_timeout() {
+                "Ollama met trop de temps à répondre.".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!("Ollama a renvoyé une erreur ({status}) : {detail}"));
+    }
+
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    json["choices"][0]["message"]["content"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "Réponse vide du modèle.".to_string())
+}
+
 pub async fn stream_chat(
     model: &str,
     messages: &[serde_json::Value],
@@ -1115,4 +1255,89 @@ pub async fn stream_chat(
     }
 
     Ok(response)
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolCall {
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+#[derive(Debug)]
+pub struct ChatWithToolsResponse {
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+fn parse_tool_arguments(raw: &serde_json::Value) -> serde_json::Value {
+    if let Some(s) = raw.as_str() {
+        return serde_json::from_str(s).unwrap_or_else(|_| serde_json::json!({}));
+    }
+    if raw.is_object() {
+        return raw.clone();
+    }
+    serde_json::json!({})
+}
+
+fn parse_tool_calls(message: &serde_json::Value) -> Option<Vec<ToolCall>> {
+    let calls = message.get("tool_calls")?.as_array()?;
+    let mut out = Vec::new();
+    for tc in calls {
+        let func = tc.get("function")?;
+        let name = func.get("name")?.as_str()?.to_string();
+        let arguments = func
+            .get("arguments")
+            .map(parse_tool_arguments)
+            .unwrap_or_else(|| serde_json::json!({}));
+        out.push(ToolCall { name, arguments });
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+/// Appel Ollama non streamé avec schémas d'outils (tool calling natif).
+pub async fn chat_with_tools(
+    model: &str,
+    messages: &[serde_json::Value],
+    tools: &[serde_json::Value],
+) -> Result<ChatWithToolsResponse, String> {
+    if !model_exists(model) {
+        return Err(format!(
+            "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
+        ));
+    }
+    let client = ollama_http_client()?;
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "tools": tools,
+        "stream": false,
+        "keep_alive": "10m",
+    });
+
+    let response = client
+        .post(format!("{OLLAMA_URL}/api/chat"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!("Ollama a renvoyé une erreur ({status}) : {detail}"));
+    }
+
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let message = &data["message"];
+    let content = message["content"].as_str().map(String::from);
+    let tool_calls = parse_tool_calls(message);
+
+    Ok(ChatWithToolsResponse {
+        content,
+        tool_calls,
+    })
 }

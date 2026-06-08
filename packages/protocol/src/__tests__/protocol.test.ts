@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ChatAgentStepPayloadSchema,
+  ChatCitationsPayloadSchema,
   ChatStartPayloadSchema,
   ChatThinkingDeltaPayloadSchema,
   CloudProviderStatusSchema,

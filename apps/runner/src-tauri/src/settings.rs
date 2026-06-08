@@ -87,6 +87,63 @@ impl From<&ContextLimitsSettings> for ContextLimits {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CloudProviderToggle {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for CloudProviderToggle {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudProvidersSettings {
+    #[serde(default)]
+    pub openai: CloudProviderToggle,
+    #[serde(default)]
+    pub anthropic: CloudProviderToggle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelTaskRouting {
+    /// Petit modèle pour résumés / synthèses (ex. llama3.2:3b).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_model: Option<String>,
+    /// Gros modèle pour rédaction (ex. llama3.1:8b).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writing_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledSyncSettings {
+    /// Active la resynchronisation planifiée des liens de contexte.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Expression cron 5 champs (`minute heure jour mois dow`). Ex. `0 3 * * *` = 03:00 chaque jour.
+    #[serde(default = "default_scheduled_sync_cron")]
+    pub cron: String,
+}
+
+fn default_scheduled_sync_cron() -> String {
+    "0 3 * * *".to_string()
+}
+
+impl Default for ScheduledSyncSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cron: default_scheduled_sync_cron(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HostSettings {
     #[serde(default = "default_models_dir")]
     pub models_dir: String,
@@ -94,6 +151,8 @@ pub struct HostSettings {
     pub selected_models: Vec<String>,
     #[serde(default = "default_model_id")]
     pub default_model: String,
+    #[serde(default)]
+    pub model_routing: ModelTaskRouting,
     #[serde(default)]
     pub context_limits: ContextLimitsSettings,
     /// Si true, plusieurs onglets web peuvent chatter en parallèle sur ce host.
@@ -103,6 +162,27 @@ pub struct HostSettings {
     pub rag_top_k: u32,
     #[serde(default = "default_rag_chunk_tokens")]
     pub rag_chunk_tokens: u32,
+    /// Modèle dédié au mode réflexion si le modèle sélectionné ne le supporte pas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_model: Option<String>,
+    #[serde(default)]
+    pub scheduled_sync: ScheduledSyncSettings,
+    /// Projet actif (bases de contexte et règles injectées au chat).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_project_id: Option<String>,
+    /// Fournisseurs cloud optionnels (OpenAI, Anthropic) — clés en keyring Host.
+    #[serde(default)]
+    pub cloud_providers: CloudProvidersSettings,
+    /// Mémoire utilisateur opt-in : injection sélective au chat.
+    #[serde(default)]
+    pub user_memory_enabled: bool,
+    /// Toasts Windows à la fin d'une indexation ou d'un agent.
+    #[serde(default = "default_desktop_notifications")]
+    pub desktop_notifications: bool,
+}
+
+fn default_desktop_notifications() -> bool {
+    true
 }
 
 fn default_rag_top_k() -> u32 {
@@ -133,12 +213,62 @@ impl Default for HostSettings {
             models_dir: default_models_dir(),
             selected_models: default_selected_models(),
             default_model: default_model_id(),
+            model_routing: ModelTaskRouting::default(),
             context_limits: ContextLimitsSettings::default(),
             allow_multi_session: false,
             rag_top_k: default_rag_top_k(),
             rag_chunk_tokens: default_rag_chunk_tokens(),
+            thinking_model: None,
+            scheduled_sync: ScheduledSyncSettings::default(),
+            active_project_id: None,
+            cloud_providers: CloudProvidersSettings::default(),
+            user_memory_enabled: false,
+            desktop_notifications: default_desktop_notifications(),
         }
     }
+}
+
+pub fn desktop_notifications_enabled() -> bool {
+    get_settings()
+        .map(|s| s.desktop_notifications)
+        .unwrap_or(true)
+}
+
+pub fn user_memory_enabled() -> bool {
+    get_settings()
+        .map(|s| s.user_memory_enabled)
+        .unwrap_or(false)
+}
+
+pub fn set_user_memory_enabled(enabled: bool) -> Result<(), String> {
+    let mut settings = get_settings().unwrap_or_default();
+    settings.user_memory_enabled = enabled;
+    save_settings(&settings)
+}
+
+fn is_cloud_model_id(model: &str) -> bool {
+    model.starts_with("openai:") || model.starts_with("anthropic:")
+}
+
+pub fn resolved_scheduled_sync() -> ScheduledSyncSettings {
+    get_settings()
+        .map(|s| s.scheduled_sync)
+        .unwrap_or_default()
+}
+
+fn validate_scheduled_sync(settings: &ScheduledSyncSettings) -> Result<(), String> {
+    if !settings.enabled {
+        return Ok(());
+    }
+    crate::sync_schedule::parse_cron_expression(&settings.cron)?;
+    Ok(())
+}
+
+pub fn resolved_thinking_model(fallback: &str) -> String {
+    get_settings()
+        .ok()
+        .and_then(|s| s.thinking_model.clone().filter(|m| !m.is_empty()))
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 pub fn resolved_context_limits() -> ContextLimits {
@@ -207,9 +337,13 @@ pub fn save_settings(settings: &HostSettings) -> Result<(), String> {
         return Err("Sélectionnez au moins un modèle".into());
     }
 
-    if !settings.selected_models.contains(&settings.default_model) {
+    if !settings.selected_models.contains(&settings.default_model)
+        && !is_cloud_model_id(&settings.default_model)
+    {
         return Err("Le modèle par défaut doit faire partie de la sélection".into());
     }
+
+    validate_scheduled_sync(&settings.scheduled_sync)?;
 
     let models_path = PathBuf::from(&settings.models_dir);
     std::fs::create_dir_all(&models_path).map_err(|e| {
@@ -227,6 +361,16 @@ pub fn save_settings(settings: &HostSettings) -> Result<(), String> {
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn get_active_project_id() -> Result<Option<String>, String> {
+    get_settings().map(|s| s.active_project_id)
+}
+
+pub fn set_active_project_id(id: Option<String>) -> Result<(), String> {
+    let mut settings = get_settings()?;
+    settings.active_project_id = id;
+    save_settings(&settings)
 }
 
 pub fn resolved_default_model() -> String {
