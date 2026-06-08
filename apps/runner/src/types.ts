@@ -39,6 +39,7 @@ export interface HostStatusSnapshot {
   lastHeartbeatError: string | null;
   lastRelayError: string | null;
   activeSessions: number;
+  webViewers: number;
   servicesRunning: boolean;
   diskFreeGb: number | null;
 }

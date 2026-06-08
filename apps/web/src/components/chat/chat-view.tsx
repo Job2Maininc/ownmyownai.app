@@ -205,19 +205,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
 
-  const cloudFresh =
-    cloudHost?.last_seen_at != null &&
-    Date.now() - new Date(cloudHost.last_seen_at).getTime() < 60_000;
-
-  const effectiveHostStatus: HostStatus =
-    hostStatus !== "offline"
-      ? hostStatus
-      : connected &&
-          cloudFresh &&
-          cloudHost?.status &&
-          cloudHost.status !== "offline"
-        ? cloudHost.status
-        : hostStatus;
+  const effectiveHostStatus: HostStatus = connected
+    ? hostStatus
+    : cloudHost?.status === "busy"
+      ? "busy"
+      : cloudHost?.status === "online"
+        ? "online"
+        : "offline";
 
   const relayHostReachable = hostStatus === "online" || hostStatus === "busy";
   const hostBusy = effectiveHostStatus === "busy";
@@ -229,9 +223,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     hostReachable &&
     !hostOffline &&
     (!hostBusy || streaming);
-  const usingCloudFallback =
-    hostStatus === "offline" && effectiveHostStatus !== "offline" && connected;
-  const relayOutOfSync = usingCloudFallback;
 
   function handleNewConversation() {
     if (messages.length > 0) {
@@ -298,9 +289,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             className: "text-amber-400",
           }
         : {
-            label: usingCloudFallback
-              ? `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()} (sync relay…)`
-              : `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
+            label: `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
             className: hostStatusClassName(effectiveHostStatus),
           };
 
@@ -406,12 +395,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
           )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
-          {relayOutOfSync && (
-            <p className="mb-2 text-sm text-amber-400">
-              Le relay n&apos;est pas synchronisé avec votre PC. Ouvrez l&apos;app Host Windows et
-              attendez « Connecté » avant d&apos;envoyer un message.
-            </p>
-          )}
           {hostBusy && !streaming && (
             <p className="mb-2 text-sm text-amber-400">
               Ce PC est utilisé par une autre session. Attendez ou fermez l&apos;autre onglet.

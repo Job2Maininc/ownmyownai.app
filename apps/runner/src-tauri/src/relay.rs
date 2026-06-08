@@ -261,6 +261,14 @@ async fn run_relay_loop(
                             "chat.cancel" => {
                                 handle_chat_cancel(&envelope);
                             }
+                            "relay.web_clients" => {
+                                let count = envelope
+                                    .payload
+                                    .get("count")
+                                    .and_then(|c| c.as_u64())
+                                    .unwrap_or(0) as u32;
+                                host_status::set_web_viewers(count);
+                            }
                             "model.pull" => {
                                 let write_task = write.clone();
                                 let envelope = envelope.clone();
@@ -321,6 +329,7 @@ async fn run_relay_loop(
         }
     }
 
+    host_status::set_web_viewers(0);
     set_relay_connected(false);
     Ok(())
 }

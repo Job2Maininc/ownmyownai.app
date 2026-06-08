@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter};
 static RELAY_CONNECTED: AtomicBool = AtomicBool::new(false);
 static CLOUD_OK: AtomicBool = AtomicBool::new(false);
 static ACTIVE_SESSIONS: AtomicU32 = AtomicU32::new(0);
+static WEB_VIEWERS: AtomicU32 = AtomicU32::new(0);
 static LAST_HEARTBEAT_MS: AtomicU64 = AtomicU64::new(0);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
@@ -88,6 +89,11 @@ pub fn session_ended() {
     emit_status();
 }
 
+pub fn set_web_viewers(count: u32) {
+    WEB_VIEWERS.store(count, Ordering::SeqCst);
+    emit_status();
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostStatusSnapshot {
@@ -102,6 +108,7 @@ pub struct HostStatusSnapshot {
     pub last_heartbeat_error: Option<String>,
     pub last_relay_error: Option<String>,
     pub active_sessions: u32,
+    pub web_viewers: u32,
     pub services_running: bool,
     pub disk_free_gb: Option<f64>,
 }
@@ -140,6 +147,7 @@ pub fn build_snapshot() -> HostStatusSnapshot {
         last_heartbeat_error,
         last_relay_error,
         active_sessions: ACTIVE_SESSIONS.load(Ordering::SeqCst),
+        web_viewers: WEB_VIEWERS.load(Ordering::SeqCst),
         services_running: crate::relay::services_running(),
         disk_free_gb: crate::ollama::disk_free_gb_for_models_dir(),
     }
@@ -148,6 +156,11 @@ pub fn build_snapshot() -> HostStatusSnapshot {
 pub fn tray_tooltip(snapshot: &HostStatusSnapshot) -> String {
     let status = if snapshot.active_sessions > 0 {
         format!("En ligne · {} chat(s)", snapshot.active_sessions)
+    } else if snapshot.web_viewers > 0 {
+        format!(
+            "En ligne · {} navigateur(s)",
+            snapshot.web_viewers
+        )
     } else if snapshot.ollama_running && snapshot.relay_connected && snapshot.cloud_synced {
         "En ligne · en attente".to_string()
     } else if snapshot.services_running {

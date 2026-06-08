@@ -2,15 +2,21 @@ import type { Host } from "@ownmyownai/supabase-types";
 
 export type HostDisplayStatus = "online" | "busy" | "offline";
 
+/** Heartbeat runner toutes les 15 s — au-delà, le host est considéré éteint. */
+export const HOST_STALE_MS = 90_000;
+
+export function isHostHeartbeatFresh(lastSeenAt: string | null | undefined): boolean {
+  if (!lastSeenAt) return false;
+  const lastSeen = new Date(lastSeenAt).getTime();
+  return !Number.isNaN(lastSeen) && Date.now() - lastSeen < HOST_STALE_MS;
+}
+
 export function getHostDisplayStatus(host: Host): HostDisplayStatus {
+  if (!isHostHeartbeatFresh(host.last_seen_at)) {
+    return "offline";
+  }
   if (host.status === "busy") return "busy";
   if (host.status === "online") return "online";
-  if (host.last_seen_at) {
-    const lastSeen = new Date(host.last_seen_at).getTime();
-    if (Date.now() - lastSeen < 60_000 && host.status !== "offline") {
-      return "online";
-    }
-  }
   return "offline";
 }
 

@@ -133,8 +133,10 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         </div>
         <p className="dashboard__subtitle">
           {status?.activeSessions
-            ? `${status.activeSessions} client${status.activeSessions > 1 ? "s" : ""} en chat`
-            : "En attente de clients"}
+            ? `${status.activeSessions} chat${status.activeSessions > 1 ? "s" : ""} actif${status.activeSessions > 1 ? "s" : ""}`
+            : status?.webViewers
+              ? `${status.webViewers} navigateur${status.webViewers > 1 ? "s" : ""} connecté${status.webViewers > 1 ? "s" : ""}`
+              : "En attente de clients"}
         </p>
       </header>
 
@@ -237,18 +239,24 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
 
       <section className="panel">
         <h2>Clients connectés</h2>
-        {status && status.activeSessions > 0 ? (
+        {status && (status.webViewers > 0 || status.activeSessions > 0) ? (
           <ul className="session-list">
-            {Array.from({ length: status.activeSessions }).map((_, i) => (
-              <li key={i} className="session-item">
+            {Array.from({ length: status.webViewers }).map((_, i) => (
+              <li key={`web-${i}`} className="session-item">
                 <span className="session-item__dot" />
-                Session chat active
+                Navigateur web connecté
+              </li>
+            ))}
+            {Array.from({ length: status.activeSessions }).map((_, i) => (
+              <li key={`chat-${i}`} className="session-item">
+                <span className="session-item__dot" />
+                Génération IA en cours
               </li>
             ))}
           </ul>
         ) : (
           <p className="panel__empty">
-            Aucune session. Ouvrez le chat web depuis votre navigateur.
+            Aucun client. Ouvrez le chat web depuis votre navigateur.
           </p>
         )}
       </section>

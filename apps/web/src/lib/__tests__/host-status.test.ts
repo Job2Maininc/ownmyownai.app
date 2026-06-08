@@ -29,6 +29,22 @@ describe("host-status", () => {
     expect(getHostDisplayStatus(host)).toBe("offline");
   });
 
+  it("affiche hors ligne si status online mais heartbeat expiré", () => {
+    const host = makeHost({
+      status: "online",
+      last_seen_at: new Date(Date.now() - 120_000).toISOString(),
+    });
+    expect(getHostDisplayStatus(host)).toBe("offline");
+  });
+
+  it("reste en ligne si heartbeat récent", () => {
+    const host = makeHost({
+      status: "online",
+      last_seen_at: new Date().toISOString(),
+    });
+    expect(getHostDisplayStatus(host)).toBe("online");
+  });
+
   it("traduit busy en Occupé", () => {
     expect(hostStatusLabel("busy")).toBe("Occupé");
   });

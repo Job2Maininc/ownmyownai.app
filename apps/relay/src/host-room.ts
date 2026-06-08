@@ -37,6 +37,7 @@ export class HostRoom implements DurableObject {
       this.broadcastToWeb(
         JSON.stringify({ type: "host.status", payload: { status: "online" } }),
       );
+      this.notifyRunnerWebClients();
     } else {
       this.webClients.add(ws);
       ws.send(
@@ -45,6 +46,7 @@ export class HostRoom implements DurableObject {
           payload: { status: this.runner ? "online" : "offline" },
         }),
       );
+      this.notifyRunnerWebClients();
     }
 
     ws.addEventListener("message", (event) => {
@@ -79,8 +81,19 @@ export class HostRoom implements DurableObject {
         );
       } else {
         this.webClients.delete(ws);
+        this.notifyRunnerWebClients();
       }
     });
+  }
+
+  private notifyRunnerWebClients() {
+    if (!this.runner || this.runner.readyState !== WebSocket.OPEN) return;
+    this.runner.send(
+      JSON.stringify({
+        type: "relay.web_clients",
+        payload: { count: this.webClients.size },
+      }),
+    );
   }
 
   private broadcastToWeb(data: string) {
