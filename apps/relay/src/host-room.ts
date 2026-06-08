@@ -1,5 +1,6 @@
 const RUNNER_STALE_MS = 45_000;
 const LIVENESS_CHECK_MS = 20_000;
+const WEB_CLIENT_CHECK_MS = 30_000;
 
 export class HostRoom implements DurableObject {
   private runner: WebSocket | null = null;
@@ -12,7 +13,11 @@ export class HostRoom implements DurableObject {
   ) {}
 
   async alarm(): Promise<void> {
+    this.pruneWebClients();
     this.checkRunnerLiveness();
+    if (this.webClients.size > 0) {
+      this.scheduleWebClientCheck();
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -48,6 +53,7 @@ export class HostRoom implements DurableObject {
       );
       this.notifyRunnerWebClients();
     } else {
+      this.pruneWebClients();
       this.webClients.add(ws);
       ws.send(
         JSON.stringify({
@@ -56,6 +62,7 @@ export class HostRoom implements DurableObject {
         }),
       );
       this.notifyRunnerWebClients();
+      this.scheduleWebClientCheck();
     }
 
     ws.addEventListener("message", (event) => {
@@ -88,9 +95,28 @@ export class HostRoom implements DurableObject {
         this.dropRunner();
       } else {
         this.webClients.delete(ws);
+        this.pruneWebClients();
         this.notifyRunnerWebClients();
       }
     });
+  }
+
+  private pruneWebClients() {
+    for (const client of this.webClients) {
+      if (client.readyState !== WebSocket.OPEN) {
+        this.webClients.delete(client);
+      }
+    }
+  }
+
+  private aliveWebClientCount(): number {
+    this.pruneWebClients();
+    return this.webClients.size;
+  }
+
+  private scheduleWebClientCheck() {
+    if (this.aliveWebClientCount() === 0) return;
+    void this.state.storage.setAlarm(Date.now() + WEB_CLIENT_CHECK_MS);
   }
 
   private touchRunner() {
@@ -137,16 +163,18 @@ export class HostRoom implements DurableObject {
   }
 
   private notifyRunnerWebClients() {
+    const count = this.aliveWebClientCount();
     if (!this.isRunnerAlive()) return;
     this.runner!.send(
       JSON.stringify({
         type: "relay.web_clients",
-        payload: { count: this.webClients.size },
+        payload: { count },
       }),
     );
   }
 
   private broadcastToWeb(data: string) {
+    this.pruneWebClients();
     for (const client of this.webClients) {
       if (client.readyState === WebSocket.OPEN) {
         client.send(data);

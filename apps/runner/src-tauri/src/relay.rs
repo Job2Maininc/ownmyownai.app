@@ -254,7 +254,15 @@ async fn run_relay_loop(
                     break;
                 }
                 let msg = msg.map_err(|e| e.to_string())?;
-                if let Message::Text(text) = msg {
+                match msg {
+                    Message::Close(_) => break,
+                    Message::Ping(payload) => {
+                        let mut w = write.lock().await;
+                        if w.send(Message::Pong(payload)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Message::Text(text) => {
                     if let Ok(envelope) = serde_json::from_str::<WsEnvelope>(&text) {
                         match envelope.msg_type.as_str() {
                             "chat.start" => {
@@ -328,10 +336,14 @@ async fn run_relay_loop(
                             _ => {}
                         }
                     }
+                    }
+                    _ => {}
                 }
             }
             _ = status_tick.tick() => {
-                let _ = send_relay_host_status(&write).await;
+                if send_relay_host_status(&write).await.is_err() {
+                    break;
+                }
             }
         }
     }

@@ -241,12 +241,14 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         <h2>Clients connectés</h2>
         {status && (status.webViewers > 0 || status.activeSessions > 0) ? (
           <ul className="session-list">
-            {Array.from({ length: status.webViewers }).map((_, i) => (
-              <li key={`web-${i}`} className="session-item">
+            {status.webViewers > 0 ? (
+              <li className="session-item">
                 <span className="session-item__dot" />
-                Navigateur web connecté
+                {status.webViewers === 1
+                  ? "1 onglet web ouvert"
+                  : `${status.webViewers} onglets web ouverts`}
               </li>
-            ))}
+            ) : null}
             {Array.from({ length: status.activeSessions }).map((_, i) => (
               <li key={`chat-${i}`} className="session-item">
                 <span className="session-item__dot" />

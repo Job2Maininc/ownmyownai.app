@@ -139,6 +139,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     }
 
     void loadCloudHost();
+    const poll = window.setInterval(() => {
+      void loadCloudHost();
+    }, 30_000);
 
     const channel = supabase
       .channel(`chat-host-${hostId}`)
@@ -152,6 +155,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       .subscribe();
 
     return () => {
+      window.clearInterval(poll);
       void supabase.removeChannel(channel);
     };
   }, [hostId]);
