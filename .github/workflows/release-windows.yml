@@ -55,7 +55,7 @@ jobs:
         working-directory: apps/runner
         env:
           VITE_SUPABASE_URL: https://jcknolulyrsvcwvttaed.supabase.co
-          VITE_APP_URL: https://ownmyownai-app-runner.vercel.app
+          VITE_APP_URL: ${{ vars.WEB_APP_URL || 'https://ownmyownai.app' }}
         run: npm run tauri build -- --no-bundle
 
       - name: Package portable zip

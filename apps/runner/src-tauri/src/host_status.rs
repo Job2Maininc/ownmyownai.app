@@ -57,9 +57,19 @@ pub fn set_heartbeat_error(msg: String) {
     emit_status();
 }
 
-pub fn session_started() {
-    ACTIVE_SESSIONS.fetch_add(1, Ordering::SeqCst);
+pub fn is_session_active() -> bool {
+    ACTIVE_SESSIONS.load(Ordering::SeqCst) > 0
+}
+
+/// Returns false if a chat session is already active (V1: one chat at a time).
+pub fn session_started() -> bool {
+    let prev = ACTIVE_SESSIONS.fetch_add(1, Ordering::SeqCst);
+    if prev > 0 {
+        ACTIVE_SESSIONS.fetch_sub(1, Ordering::SeqCst);
+        return false;
+    }
     emit_status();
+    true
 }
 
 pub fn session_ended() {

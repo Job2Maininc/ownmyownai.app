@@ -8,7 +8,13 @@ import {
 
 export type RelayStatus = "connecting" | "connected" | "offline" | "error";
 
+export interface RelayToken {
+  token: string;
+  relay_url: string;
+}
+
 export interface RelayClientCallbacks {
+  mintToken: () => Promise<RelayToken>;
   onStatus?: (status: RelayStatus) => void;
   onHostStatus?: (online: boolean) => void;
   onDelta?: (content: string) => void;
@@ -16,42 +22,101 @@ export interface RelayClientCallbacks {
   onError?: (message: string) => void;
 }
 
+const BASE_BACKOFF_MS = 1_000;
+const MAX_BACKOFF_MS = 30_000;
+
 export class RelayClient {
   private ws: WebSocket | null = null;
-  private callbacks: RelayClientCallbacks = {};
+  private callbacks: RelayClientCallbacks;
+  private intentionalDisconnect = false;
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(callbacks: RelayClientCallbacks) {
     this.callbacks = callbacks;
   }
 
-  connect(relayUrl: string, token: string): Promise<void> {
+  async connect(): Promise<void> {
+    this.intentionalDisconnect = false;
+    this.reconnectAttempt = 0;
+    await this.doConnect();
+  }
+
+  private async doConnect(): Promise<void> {
+    if (this.intentionalDisconnect) return;
+
+    this.callbacks.onStatus?.("connecting");
+    try {
+      const { token, relay_url } = await this.callbacks.mintToken();
+      await this.openWebSocket(relay_url, token);
+      this.reconnectAttempt = 0;
+      this.callbacks.onStatus?.("connected");
+    } catch {
+      if (!this.intentionalDisconnect) {
+        this.scheduleReconnect();
+      }
+    }
+  }
+
+  private openWebSocket(relayUrl: string, token: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.callbacks.onStatus?.("connecting");
+      if (this.ws) {
+        this.ws.onclose = null;
+        this.ws.close();
+        this.ws = null;
+      }
+
       const url = `${relayUrl}${relayUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
       const wsUrl = url.replace(/^http/, "ws");
+      const ws = new WebSocket(wsUrl);
+      this.ws = ws;
 
-      this.ws = new WebSocket(wsUrl);
+      let opened = false;
 
-      this.ws.onopen = () => {
-        this.callbacks.onStatus?.("connected");
+      ws.onopen = () => {
+        opened = true;
         resolve();
       };
 
-      this.ws.onerror = () => {
-        this.callbacks.onStatus?.("error");
-        reject(new Error("WebSocket connection failed"));
+      ws.onerror = () => {
+        if (!opened) {
+          this.callbacks.onStatus?.("error");
+          reject(new Error("WebSocket connection failed"));
+        }
       };
 
-      this.ws.onclose = () => {
+      ws.onclose = () => {
+        if (this.ws === ws) {
+          this.ws = null;
+        }
         this.callbacks.onStatus?.("offline");
+        if (!this.intentionalDisconnect) {
+          this.scheduleReconnect();
+        }
       };
 
-      this.ws.onmessage = (event) => {
+      ws.onmessage = (event) => {
         const envelope = parseEnvelope(event.data as string);
         if (!envelope) return;
         this.handleMessage(envelope);
       };
     });
+  }
+
+  private scheduleReconnect() {
+    if (this.intentionalDisconnect || this.reconnectTimer) return;
+
+    const delay = Math.min(
+      BASE_BACKOFF_MS * 2 ** this.reconnectAttempt,
+      MAX_BACKOFF_MS,
+    );
+    this.reconnectAttempt += 1;
+    this.callbacks.onStatus?.("connecting");
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.doConnect();
+    }, delay);
   }
 
   private handleMessage(envelope: WsEnvelope) {
@@ -91,7 +156,15 @@ export class RelayClient {
   }
 
   disconnect() {
-    this.ws?.close();
-    this.ws = null;
+    this.intentionalDisconnect = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
   }
 }

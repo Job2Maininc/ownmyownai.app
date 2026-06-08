@@ -122,12 +122,18 @@ async fn send_heartbeat(
         supabase_url.trim_end_matches('/')
     );
 
+    let status = if host_status::is_session_active() {
+        "busy"
+    } else {
+        "online"
+    };
+
     let res = client
         .post(&url)
         .header("X-Device-Secret", &creds.device_secret)
         .header("X-Host-Id", &creds.host_id)
         .header("Content-Type", "application/json")
-        .json(&serde_json::json!({ "status": "online" }))
+        .json(&serde_json::json!({ "status": status }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -172,6 +178,25 @@ async fn run_relay_loop(
     Ok(())
 }
 
+async fn send_chat_error(
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+    envelope: &WsEnvelope,
+    message: &str,
+) -> Result<(), String> {
+    let err = WsEnvelope {
+        msg_type: "chat.error".into(),
+        payload: serde_json::json!({ "message": message }),
+        requestId: envelope.requestId.clone(),
+    };
+    write
+        .send(Message::Text(serde_json::to_string(&err).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn handle_chat_start(
     envelope: &WsEnvelope,
     write: &mut futures_util::stream::SplitSink<
@@ -179,7 +204,9 @@ async fn handle_chat_start(
         Message,
     >,
 ) -> Result<(), String> {
-    session_started();
+    if !session_started() {
+        return send_chat_error(write, envelope, "Host occupé").await;
+    }
     let result = handle_chat_start_inner(envelope, write).await;
     session_ended();
     result

@@ -12,7 +12,7 @@ Votre IA sur votre PC — host Windows + client web.
 
 ## Prérequis
 
-- Node.js 20+, pnpm 9+
+- Node.js 20+, npm 10+
 - Rust (pour le runner Tauri)
 - Compte Supabase
 - Compte Cloudflare (relay)
@@ -47,8 +47,8 @@ supabase functions deploy
 
 ```bash
 cd apps/relay
-pnpm wrangler secret put RELAY_JWT_SECRET
-pnpm deploy
+npx wrangler secret put RELAY_JWT_SECRET
+npm run deploy
 ```
 
 ### Web (Vercel)
@@ -60,7 +60,7 @@ Copiez `.env.example` vers `apps/web/.env.local` et déployez sur Vercel.
 ```bash
 cd apps/runner
 # Configurez .env avec VITE_SUPABASE_URL et VITE_APP_URL
-pnpm tauri build
+npm run tauri build
 ```
 
 ## Flux V1

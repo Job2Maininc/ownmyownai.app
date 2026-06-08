@@ -17,7 +17,17 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/runner/src-tauri
+
       - run: npm install
       - run: npm run build:protocol
       - run: npm run build --workspace=@ownmyownai/web
       - run: npm run typecheck --workspace=@ownmyownai/relay
+
+      - name: Check runner (Rust)
+        working-directory: apps/runner/src-tauri
+        run: cargo check

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { ChatMessage } from "@ownmyownai/protocol";
@@ -22,52 +22,55 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [hostOnline, setHostOnline] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [relayStatus, setRelayStatus] = useState<"connecting" | "connected" | "offline" | "error">(
+    "connecting",
+  );
   const relayRef = useRef<RelayClient | null>(null);
+  const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
 
-  const connectRelay = useCallback(async () => {
-    try {
-      const { token, relay_url } = await mintRelayToken(hostId);
-      const client = new RelayClient({
-        onHostStatus: (online) => setHostOnline(online),
-        onDelta: (content) => {
-          assistantBuffer.current += content;
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last?.role === "assistant") {
-              next[next.length - 1] = { role: "assistant", content: assistantBuffer.current };
-            } else {
-              next.push({ role: "assistant", content: assistantBuffer.current });
-            }
-            return next;
-          });
-        },
-        onDone: () => {
-          setStreaming(false);
-          assistantBuffer.current = "";
-        },
-        onError: (msg) => {
-          setError(msg);
-          setStreaming(false);
-        },
-      });
-      relayRef.current = client;
-      await client.connect(relay_url, token);
-      setConnected(true);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Connexion impossible");
-    }
+  useEffect(() => {
+    hasConnectedRef.current = false;
+    const client = new RelayClient({
+      mintToken: () => mintRelayToken(hostId),
+      onStatus: (status) => {
+        if (status === "connected") hasConnectedRef.current = true;
+        setRelayStatus(status);
+      },
+      onHostStatus: (online) => setHostOnline(online),
+      onDelta: (content) => {
+        assistantBuffer.current += content;
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant") {
+            next[next.length - 1] = { role: "assistant", content: assistantBuffer.current };
+          } else {
+            next.push({ role: "assistant", content: assistantBuffer.current });
+          }
+          return next;
+        });
+      },
+      onDone: () => {
+        setStreaming(false);
+        assistantBuffer.current = "";
+      },
+      onError: (msg) => {
+        setError(msg);
+        setStreaming(false);
+      },
+    });
+    relayRef.current = client;
+    void client.connect();
+
+    return () => {
+      client.disconnect();
+      relayRef.current = null;
+    };
   }, [hostId]);
 
-  useEffect(() => {
-    connectRelay();
-    return () => {
-      relayRef.current?.disconnect();
-    };
-  }, [connectRelay]);
+  const connected = relayStatus === "connected";
+  const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -95,8 +98,16 @@ export default function ChatPage() {
         <Link href="/dashboard" className="text-sm text-brand-500 hover:underline">
           ← Mes PCs
         </Link>
-        <span className={`text-sm ${hostOnline ? "text-brand-500" : "text-red-400"}`}>
-          {connected ? (hostOnline ? "Host en ligne" : "Host hors ligne") : "Connexion…"}
+        <span
+          className={`text-sm ${hostOnline && connected ? "text-brand-500" : "text-red-400"}`}
+        >
+          {reconnecting
+            ? "Reconnexion…"
+            : connected
+              ? hostOnline
+                ? "Host en ligne"
+                : "Host hors ligne"
+              : "Connexion…"}
         </span>
       </header>
 
