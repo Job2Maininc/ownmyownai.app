@@ -1,10 +1,12 @@
 use crate::context::ContextLimits;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 const APP_DIR: &str = "OwnMyOwnAI";
 const SETTINGS_FILE: &str = "settings.json";
 pub const FALLBACK_DEFAULT_MODEL: &str = "llama3.2:3b";
+pub const FALLBACK_VISION_MODEL: &str = "moondream:1.8b";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +23,12 @@ pub struct ContextLimitsSettings {
     pub max_scan_depth: u32,
     #[serde(default = "default_sync_debounce_ms")]
     pub sync_debounce_ms: u64,
+    #[serde(default = "default_allowed_extensions")]
+    pub default_allowed_extensions: Vec<String>,
+}
+
+fn default_allowed_extensions() -> Vec<String> {
+    default_allowed_extensions_list()
 }
 
 fn default_max_bases() -> u32 {
@@ -45,6 +53,43 @@ fn default_sync_debounce_ms() -> u64 {
     3000
 }
 
+/// Extensions extractibles par l'ingestion (sous-ensemble autorisé pour les liens).
+pub const EXTRACTABLE_EXTENSIONS: &[&str] =
+    &["txt", "md", "pdf", "docx", "png", "jpg", "jpeg"];
+
+pub fn default_allowed_extensions_list() -> Vec<String> {
+    EXTRACTABLE_EXTENSIONS
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect()
+}
+
+pub fn normalize_allowed_extensions(exts: &[String]) -> Result<Vec<String>, String> {
+    if exts.is_empty() {
+        return Err("Au moins une extension requise".into());
+    }
+    let mut out = Vec::new();
+    for ext in exts {
+        let e = ext.trim().trim_start_matches('.').to_lowercase();
+        if e.is_empty() {
+            continue;
+        }
+        if !EXTRACTABLE_EXTENSIONS.contains(&e.as_str()) {
+            return Err(format!(
+                "Extension non supportée : {e}. Extensions acceptées : {}",
+                EXTRACTABLE_EXTENSIONS.join(", ")
+            ));
+        }
+        if !out.contains(&e) {
+            out.push(e);
+        }
+    }
+    if out.is_empty() {
+        return Err("Au moins une extension requise".into());
+    }
+    Ok(out)
+}
+
 impl Default for ContextLimitsSettings {
     fn default() -> Self {
         Self {
@@ -54,6 +99,7 @@ impl Default for ContextLimitsSettings {
             max_scan_files: default_max_scan_files(),
             max_scan_depth: default_max_scan_depth(),
             sync_debounce_ms: default_sync_debounce_ms(),
+            default_allowed_extensions: default_allowed_extensions(),
         }
     }
 }
@@ -96,6 +142,23 @@ impl Default for CloudProviderToggle {
     fn default() -> Self {
         Self { enabled: false }
     }
+}
+
+/// Serveur MCP externe lancé côté Host (stdio JSON-RPC). Le builtin `builtin-fs` est toujours actif.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerConfig {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub builtin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -179,6 +242,12 @@ pub struct HostSettings {
     /// Toasts Windows à la fin d'une indexation ou d'un agent.
     #[serde(default = "default_desktop_notifications")]
     pub desktop_notifications: bool,
+    /// Serveurs MCP optionnels (ex. `npx -y @modelcontextprotocol/server-filesystem <path>`).
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
+    /// Modèle Ollama vision pour décrire les images liées et les questions multimodales.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vision_model: Option<String>,
 }
 
 fn default_desktop_notifications() -> bool {
@@ -224,8 +293,14 @@ impl Default for HostSettings {
             cloud_providers: CloudProvidersSettings::default(),
             user_memory_enabled: false,
             desktop_notifications: default_desktop_notifications(),
+            mcp_servers: Vec::new(),
+            vision_model: None,
         }
     }
+}
+
+pub fn resolved_vision_model_setting() -> Option<String> {
+    get_settings().ok().and_then(|s| s.vision_model)
 }
 
 pub fn desktop_notifications_enabled() -> bool {
@@ -275,6 +350,15 @@ pub fn resolved_context_limits() -> ContextLimits {
     get_settings()
         .map(|s| ContextLimits::from(&s.context_limits))
         .unwrap_or_default()
+}
+
+pub fn resolved_default_allowed_extensions() -> Vec<String> {
+    get_settings()
+        .map(|s| {
+            normalize_allowed_extensions(&s.context_limits.default_allowed_extensions)
+                .unwrap_or_else(|_| default_allowed_extensions_list())
+        })
+        .unwrap_or_else(|_| default_allowed_extensions_list())
 }
 
 pub fn resolved_sync_scan_settings() -> SyncScanSettings {

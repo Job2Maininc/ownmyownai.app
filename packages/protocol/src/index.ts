@@ -290,6 +290,35 @@ export const PlaybookRunPayloadSchema = z.object({
 });
 export type PlaybookRunPayload = z.infer<typeof PlaybookRunPayloadSchema>;
 
+/** Serveur MCP côté Host (stdio JSON-RPC). `builtin-fs` est toujours actif. */
+export const McpServerSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.enum(["builtin", "external"]),
+  enabled: z.boolean(),
+  command: z.string().nullable().optional(),
+  args: z.array(z.string()),
+  toolCount: z.number().int().nonnegative(),
+});
+export type McpServerSummary = z.infer<typeof McpServerSummarySchema>;
+
+export const McpToolDescriptorSchema = z.object({
+  serverId: z.string(),
+  serverName: z.string(),
+  name: z.string(),
+  qualifiedName: z.string(),
+  description: z.string().optional(),
+  inputSchema: z.record(z.unknown()),
+});
+export type McpToolDescriptor = z.infer<typeof McpToolDescriptorSchema>;
+
+export const McpCallPayloadSchema = z.object({
+  qualifiedName: z.string().min(1),
+  arguments: z.record(z.unknown()).optional(),
+  contextIds: z.array(z.string()).optional(),
+});
+export type McpCallPayload = z.infer<typeof McpCallPayloadSchema>;
+
 export const WS_MESSAGE_TYPES = {
   CHAT_START: "chat.start",
   CHAT_DELTA: "chat.delta",
@@ -369,6 +398,12 @@ export const WS_MESSAGE_TYPES = {
   PLAYBOOK_LIST: "playbook.list",
   PLAYBOOK_RUN: "playbook.run",
   PLAYBOOK_ERROR: "playbook.error",
+  MCP_LIST: "mcp.list",
+  MCP_SERVERS: "mcp.servers",
+  MCP_TOOLS: "mcp.tools",
+  MCP_CALL: "mcp.call",
+  MCP_RESULT: "mcp.result",
+  MCP_ERROR: "mcp.error",
   /** Review assistée d'un diff git (Host local + Ollama). */
   PR_REVIEW: "pr.review",
   PR_REVIEW_DONE: "pr.review.done",

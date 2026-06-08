@@ -1,16 +1,19 @@
 mod agent;
 mod cloud_keys;
 mod context;
+mod mcp;
 mod dpapi;
 mod playbooks;
 mod projects;
 mod credentials;
 mod hardware;
 mod history;
+mod jobs;
 mod providers;
 mod share;
 mod process;
 mod host_status;
+mod local_metrics;
 mod model_routing;
 mod ollama;
 mod relay;
@@ -31,8 +34,8 @@ use context::{
     create_knowledge_base, delete_knowledge_base, export_knowledge_base, import_knowledge_base,
     init_context_db, link_context_file, link_context_folder, link_context_repo, list_audit_log,
     list_context_links, list_documents, list_knowledge_bases, reindex_uploaded_documents,
-    set_context_link_enabled, set_knowledge_base_system_instruction, sync_all_links, sync_link,
-    unlink_context_link, AuditEntry, ContextLink,
+    set_context_link_enabled, set_knowledge_base_system_instruction, update_context_link_extensions,
+    sync_all_links, sync_link, unlink_context_link, AuditEntry, ContextLink,
 };
 use projects::{
     create_project, delete_project, list_projects, open_project, update_project, ProjectSummary,
@@ -50,6 +53,7 @@ use settings::{
     save_settings, set_user_memory_enabled, HostSettings,
 };
 use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemoryState};
+use jobs::{cancel_job, list_jobs, submit_job, JobKind, JobSnapshot};
 use serde::Deserialize;
 
 #[tauri::command(rename = "check_ollama")]
@@ -366,28 +370,61 @@ fn unlink_context_link_cmd(link_id: String) -> Result<(), String> {
 }
 
 #[tauri::command(rename = "sync_context_link")]
-async fn sync_context_link_cmd(link_id: String) -> Result<(), String> {
+async fn sync_context_link_cmd(link_id: String) -> Result<String, String> {
     init_context_db()?;
     ensure_embedding_model(None).await?;
-    sync_link(&link_id).await?;
-    notifications::notify_task_done(
-        notifications::TaskDoneKind::SyncLink,
-        "Indexation du lien terminée.",
-    );
-    Ok(())
+    Ok(submit_job(JobKind::ContextSync {
+        link_id: Some(link_id),
+    }))
 }
 
 #[tauri::command(rename = "sync_all_context_links")]
-async fn sync_all_context_links_cmd() -> Result<(), String> {
+async fn sync_all_context_links_cmd() -> Result<String, String> {
     init_context_db()?;
     ensure_embedding_model(None).await?;
-    sync_all_links().await;
-    Ok(())
+    Ok(submit_job(JobKind::ContextSyncAll))
+}
+
+#[tauri::command(rename = "list_background_jobs")]
+fn list_background_jobs_cmd() -> Vec<JobSnapshot> {
+    list_jobs()
+}
+
+#[tauri::command(rename = "cancel_background_job")]
+fn cancel_background_job_cmd(job_id: String) -> Result<(), String> {
+    if cancel_job(&job_id) {
+        Ok(())
+    } else {
+        Err("Tâche introuvable ou déjà terminée".into())
+    }
+}
+
+#[tauri::command(rename = "start_agent_job")]
+fn start_agent_job_cmd(prompt: String) -> Result<String, String> {
+    if prompt.trim().is_empty() {
+        return Err("Prompt requis".into());
+    }
+    Ok(submit_job(JobKind::AgentRun {
+        prompt,
+        context_ids: vec![],
+    }))
 }
 
 #[tauri::command(rename = "set_context_link_enabled")]
 fn set_context_link_enabled_cmd(link_id: String, enabled: bool) -> Result<(), String> {
     set_context_link_enabled(&link_id, enabled)
+}
+
+#[tauri::command(rename = "set_context_link_extensions")]
+async fn set_context_link_extensions_cmd(
+    link_id: String,
+    allowed_extensions: Vec<String>,
+) -> Result<ContextLink, String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    update_context_link_extensions(&link_id, &allowed_extensions)?;
+    sync_link(&link_id).await?;
+    get_context_link(&link_id)
 }
 
 #[tauri::command(rename = "list_git_repos")]
@@ -499,6 +536,10 @@ pub fn run() {
             sync_context_link_cmd,
             sync_all_context_links_cmd,
             set_context_link_enabled_cmd,
+            set_context_link_extensions_cmd,
+            list_background_jobs_cmd,
+            cancel_background_job_cmd,
+            start_agent_job_cmd,
             list_git_repos_cmd,
             collect_git_diff_cmd,
             collect_gh_pr_diff_cmd,

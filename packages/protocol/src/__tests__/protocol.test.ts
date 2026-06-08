@@ -221,4 +221,36 @@ describe("protocol", () => {
     expect(status.configured).toBe(true);
     expect(status.models[0]).toMatch(/^openai:/);
   });
+
+  it("valide MCP list/call via relay", () => {
+    const { McpCallPayloadSchema, McpServerSummarySchema, McpToolDescriptorSchema } =
+      require("../index");
+    const server = McpServerSummarySchema.parse({
+      id: "builtin-fs",
+      name: "Fichiers locaux",
+      kind: "builtin",
+      enabled: true,
+      args: [],
+      toolCount: 4,
+    });
+    expect(server.kind).toBe("builtin");
+
+    const tool = McpToolDescriptorSchema.parse({
+      serverId: "builtin-fs",
+      serverName: "Fichiers locaux",
+      name: "read_file",
+      qualifiedName: "mcp/builtin-fs/read_file",
+      inputSchema: { type: "object" },
+    });
+    expect(tool.qualifiedName).toContain("read_file");
+
+    const call = McpCallPayloadSchema.parse({
+      qualifiedName: "mcp/builtin-fs/list_dir",
+      arguments: { path: "C:\\docs" },
+      contextIds: ["kb-1"],
+    });
+    expect(call.qualifiedName).toBe("mcp/builtin-fs/list_dir");
+    expect(WS_MESSAGE_TYPES.MCP_CALL).toBe("mcp.call");
+    expect(WS_MESSAGE_TYPES.MCP_RESULT).toBe("mcp.result");
+  });
 });

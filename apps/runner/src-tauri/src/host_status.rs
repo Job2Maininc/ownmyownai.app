@@ -1,5 +1,7 @@
 use crate::credentials::get_credentials;
+use crate::local_metrics::{self, LastRequestMetrics};
 use crate::ollama::{check_ollama, default_model};
+use crate::providers::{get_cloud_providers_status, list_available_models, CloudProviderStatus};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -21,6 +23,10 @@ const MIN_EMIT_INTERVAL: Duration = Duration::from_millis(350);
 
 pub fn set_app_handle(app: AppHandle) {
     let _ = APP_HANDLE.set(app);
+}
+
+pub fn app_handle() -> Option<AppHandle> {
+    APP_HANDLE.get().cloned()
 }
 
 pub fn set_relay_connected(connected: bool) {
@@ -111,6 +117,9 @@ pub struct HostStatusSnapshot {
     pub web_viewers: u32,
     pub services_running: bool,
     pub disk_free_gb: Option<f64>,
+    pub last_request_metrics: Option<LastRequestMetrics>,
+    pub cloud_providers: Vec<CloudProviderStatus>,
+    pub background_jobs: u32,
 }
 
 pub fn build_snapshot() -> HostStatusSnapshot {
@@ -139,8 +148,9 @@ pub fn build_snapshot() -> HostStatusSnapshot {
         host_id,
         ollama_installed: ollama.installed,
         ollama_running: ollama.running,
-        models: ollama.models,
+        models: list_available_models(),
         default_model: default_model().to_string(),
+        cloud_providers: get_cloud_providers_status(),
         relay_connected: RELAY_CONNECTED.load(Ordering::SeqCst),
         cloud_synced: CLOUD_OK.load(Ordering::SeqCst),
         last_heartbeat_at,
@@ -150,12 +160,21 @@ pub fn build_snapshot() -> HostStatusSnapshot {
         web_viewers: WEB_VIEWERS.load(Ordering::SeqCst),
         services_running: crate::relay::services_running(),
         disk_free_gb: crate::ollama::disk_free_gb_for_models_dir(),
+        last_request_metrics: local_metrics::get_last_metrics(),
+        background_jobs: crate::jobs::list_jobs()
+            .into_iter()
+            .filter(|j| j.status == "running" || j.status == "queued")
+            .count() as u32,
     }
 }
 
 pub fn tray_tooltip(snapshot: &HostStatusSnapshot) -> String {
     let status = if snapshot.active_sessions > 0 {
         format!("En ligne · {} chat(s)", snapshot.active_sessions)
+    } else if let Some(label) = crate::jobs::active_job_label() {
+        format!("Tâche · {label}")
+    } else if snapshot.background_jobs > 0 {
+        format!("Tâche en cours ({})", snapshot.background_jobs)
     } else if snapshot.web_viewers > 0 {
         format!(
             "En ligne · {} navigateur(s)",

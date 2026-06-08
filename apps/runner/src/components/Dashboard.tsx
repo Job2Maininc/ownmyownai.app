@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import AuditTrail from "./AuditTrail";
 import ContextManager from "./ContextManager";
+import PrReviewPanel from "./PrReviewPanel";
+import ProjectManager from "./ProjectManager";
+import LocalChat from "./LocalChat";
 import ModelManager from "./ModelManager";
-import type { HostStatusSnapshot } from "../types";
+import type { HostSettings, HostStatusSnapshot, LastRequestMetrics } from "../types";
 
-type DashboardTab = "status" | "models" | "context";
+type DashboardTab = "status" | "chat" | "models" | "context" | "review" | "projects" | "audit";
 
 interface DashboardProps {
   appUrl: string;
@@ -25,6 +29,41 @@ function formatRelativeTime(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatLatency(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function MetricsPanel({ metrics }: { metrics: LastRequestMetrics }) {
+  return (
+    <section className="panel" aria-label="Dernière requête">
+      <h2>Dernière requête</h2>
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <span className="metric-card__value">{metrics.tokensPerSecond}</span>
+          <span className="metric-card__label">tokens/s</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-card__value">{formatLatency(metrics.latencyMs)}</span>
+          <span className="metric-card__label">latence</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-card__value">{metrics.ramUsedGb} Go</span>
+          <span className="metric-card__label">RAM utilisée</span>
+        </div>
+      </div>
+      <p className="panel__meta muted">
+        Modèle {metrics.model}
+        {metrics.completionTokens > 0
+          ? ` · ${metrics.completionTokens} tokens générés`
+          : ""}
+        {" · "}
+        {formatRelativeTime(metrics.completedAt)}
+      </p>
+    </section>
+  );
 }
 
 function StatusPill({
@@ -55,6 +94,8 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [unpairing, setUnpairing] = useState(false);
   const [tab, setTab] = useState<DashboardTab>("status");
   const [openError, setOpenError] = useState<string | null>(null);
+  const [airGapped, setAirGapped] = useState(false);
+  const [togglingAirGapped, setTogglingAirGapped] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -64,6 +105,18 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    invoke<HostSettings>("get_host_settings")
+      .then((s) => setAirGapped(!!s.airGapped))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (status?.airGapped != null) {
+      setAirGapped(status.airGapped);
+    }
+  }, [status?.airGapped]);
 
   useEffect(() => {
     refresh();
@@ -118,8 +171,31 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
     }
   }
 
-  const allOk =
-    status?.ollamaRunning && status?.relayConnected && status?.cloudSynced;
+  const airGappedMode = airGapped || !!status?.airGapped;
+  const allOk = airGappedMode
+    ? !!status?.ollamaRunning
+    : status?.ollamaRunning && status?.relayConnected && status?.cloudSynced;
+
+  async function handleAirGappedToggle(enabled: boolean) {
+    setTogglingAirGapped(true);
+    setOpenError(null);
+    try {
+      const settings = await invoke<HostSettings>("get_host_settings");
+      await invoke("save_host_settings", {
+        settings: { ...settings, airGapped: enabled },
+      });
+      setAirGapped(enabled);
+      await invoke("restart_background_services");
+      await refresh();
+      if (enabled) {
+        setTab("chat");
+      }
+    } catch (e) {
+      setOpenError(String(e));
+    } finally {
+      setTogglingAirGapped(false);
+    }
+  }
 
   return (
     <div className="dashboard">
@@ -129,14 +205,22 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
             className={`live-dot ${allOk ? "live-dot--on" : "live-dot--partial"}`}
             title="Mise à jour en direct"
           />
-          <h1>{allOk ? "En ligne" : "Partiellement actif"}</h1>
+          <h1>
+            {airGappedMode
+              ? "Mode air-gapped"
+              : allOk
+                ? "En ligne"
+                : "Partiellement actif"}
+          </h1>
         </div>
         <p className="dashboard__subtitle">
-          {status?.activeSessions
-            ? `${status.activeSessions} chat${status.activeSessions > 1 ? "s" : ""} actif${status.activeSessions > 1 ? "s" : ""}`
-            : status?.webViewers
-              ? `${status.webViewers} navigateur${status.webViewers > 1 ? "s" : ""} connecté${status.webViewers > 1 ? "s" : ""}`
-              : "En attente de clients"}
+          {airGappedMode
+            ? "Chat local uniquement — relay et cloud désactivés"
+            : status?.activeSessions
+              ? `${status.activeSessions} chat${status.activeSessions > 1 ? "s" : ""} actif${status.activeSessions > 1 ? "s" : ""}`
+              : status?.webViewers
+                ? `${status.webViewers} navigateur${status.webViewers > 1 ? "s" : ""} connecté${status.webViewers > 1 ? "s" : ""}`
+                : "En attente de clients"}
         </p>
       </header>
 
@@ -144,8 +228,12 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         {(
           [
             ["status", "État"],
+            ["chat", "Chat local"],
             ["models", "Modèles"],
             ["context", "Contexte"],
+            ["review", "Review PR"],
+            ["projects", "Projets"],
+            ["audit", "Journal"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -169,6 +257,12 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
 
       {tab === "context" && <ContextManager />}
 
+      {tab === "review" && <PrReviewPanel />}
+
+      {tab === "projects" && <ProjectManager />}
+
+      {tab === "audit" && <AuditTrail />}
+
       {tab === "status" && (
       <>
       <section className="status-grid" aria-label="État des services">
@@ -186,13 +280,23 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         />
         <StatusPill
           label="Relay"
-          ok={!!status?.relayConnected}
-          detail={status?.relayConnected ? "Connecté" : "Reconnexion…"}
+          ok={airGappedMode ? false : !!status?.relayConnected}
+          detail={
+            airGappedMode
+              ? "Désactivé"
+              : status?.relayConnected
+                ? "Connecté"
+                : "Reconnexion…"
+          }
         />
         <StatusPill
           label="Cloud"
-          ok={!!status?.cloudSynced}
-          detail={formatRelativeTime(status?.lastHeartbeatAt ?? null)}
+          ok={airGappedMode ? false : !!status?.cloudSynced}
+          detail={
+            airGappedMode
+              ? "Désactivé"
+              : formatRelativeTime(status?.lastHeartbeatAt ?? null)
+          }
         />
       </section>
 
@@ -200,6 +304,17 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         <p className="muted panel__meta">
           Espace disque libre (modèles) : {status.diskFreeGb} Go
         </p>
+      )}
+
+      {status?.lastRequestMetrics ? (
+        <MetricsPanel metrics={status.lastRequestMetrics} />
+      ) : (
+        <section className="panel">
+          <h2>Dernière requête</h2>
+          <p className="panel__empty">
+            Aucune génération encore. Lancez un chat pour voir tokens/s, latence et RAM.
+          </p>
+        </section>
       )}
 
       <section className="panel">
@@ -322,6 +437,10 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
           {unpairing ? "Déliaison…" : "Délier ce PC"}
         </button>
       </div>
+    </div>
+  );
+}
+   </div>
     </div>
   );
 }

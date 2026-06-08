@@ -1,9 +1,11 @@
 use crate::context::{
-    apply_inline_edit, build_codebase_context, build_rag_context, create_knowledge_base,
+    apply_inline_edit, build_codebase_context, build_rag_context_scoped, create_knowledge_base,
     delete_document,
-    delete_knowledge_base, get_context_summary, ingest_document, list_chunks, list_context_links,
-    list_documents, list_knowledge_bases, load_project_rules, log_audit, preview_inline_edit,
-    start_context_watcher, AuditAction, ContextLimits, init_context_db,
+    delete_knowledge_base, extract_mentions_from_chat, find_relevant_image_paths, get_context_summary,
+    ingest_document,
+    list_chunks, list_context_links, list_documents, list_knowledge_bases, load_project_rules,
+    log_audit, preview_inline_edit, resolve_rag_kb_ids, start_context_watcher, strip_mentions,
+    AuditAction, ContextLimits, init_context_db, RagScope,
 };
 use crate::projects::{
     get_active_project_id, get_project, list_projects, open_project, resolve_project_context_ids,
@@ -21,7 +23,8 @@ use crate::agent::{review_git_diff, run_agent_loop, AgentConfig, PrReviewInput};
 use crate::model_routing::{resolve_chat_model, ChatTaskIntent};
 use crate::ollama::{
     default_model, disk_free_gb_for_models_dir, ensure_embedding_model, ensure_ollama_running,
-    model_exists, pull_model, resolve_thinking_model, stream_chat, stream_chat_thinking,
+    attach_images_to_last_user_message, is_vision_model, model_exists, pull_model,
+    resolve_thinking_model, stream_chat, stream_chat_thinking,
     PullProgressCallback, SetupProgress,
 };
 use crate::providers::{
@@ -38,7 +41,7 @@ use crate::settings::{resolved_context_limits, resolved_default_model};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::time::{sleep, Duration, Interval};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -53,6 +56,31 @@ static SERVICES_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVICES_STOP: AtomicBool = AtomicBool::new(false);
 static CHAT_CANCEL: AtomicBool = AtomicBool::new(false);
 static ACTIVE_CHAT_REQUEST: Mutex<Option<String>> = Mutex::new(None);
+static RELAY_WRITE: OnceLock<Mutex<Option<SharedRelayWrite>>> = OnceLock::new();
+
+fn relay_write_slot() -> &'static Mutex<Option<SharedRelayWrite>> {
+    RELAY_WRITE.get_or_init(|| Mutex::new(None))
+}
+
+pub fn set_relay_write(write: Option<SharedRelayWrite>) {
+    if let Ok(mut slot) = relay_write_slot().lock() {
+        *slot = write;
+    }
+}
+
+pub async fn broadcast_ws(
+    msg_type: &str,
+    payload: serde_json::Value,
+    request_id: Option<String>,
+) {
+    let write = relay_write_slot()
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().cloned());
+    if let Some(write) = write {
+        let _ = send_ws_response(&write, msg_type, payload, &request_id).await;
+    }
+}
 
 const ARTIFACTS_SYSTEM_HINT: &str = "When producing standalone documents (reports, markdown, tables) for the user to copy or download locally, wrap them in a fenced block:\n\n```artifact\ntitle: Short title\n---\n(full markdown content)\n```\n\nKeep conversational text outside the block.";
 
@@ -200,7 +228,7 @@ async fn send_heartbeat(
         supabase_url.trim_end_matches('/')
     );
 
-    let status = if host_status::is_session_active() {
+    let status = if host_status::is_session_active() || crate::jobs::has_active_jobs() {
         "busy"
     } else {
         "online"
@@ -217,6 +245,7 @@ async fn send_heartbeat(
             "installed_models": list_available_models(),
             "disk_free_gb": disk_free_gb_for_models_dir(),
             "context_summary": get_context_summary(),
+            "last_metrics": crate::local_metrics::heartbeat_payload(),
         }))
         .send()
         .await
@@ -230,7 +259,7 @@ async fn send_heartbeat(
 }
 
 fn relay_host_status() -> &'static str {
-    if host_status::is_session_active() {
+    if host_status::is_session_active() || crate::jobs::has_active_jobs() {
         "busy"
     } else {
         "online"
@@ -268,6 +297,7 @@ async fn run_relay_loop(
     let (ws, _) = connect_async(&ws_url).await.map_err(|e| e.to_string())?;
     let (write, mut read) = ws.split();
     let write: SharedRelayWrite = Arc::new(tokio::sync::Mutex::new(write));
+    set_relay_write(Some(write.clone()));
     set_relay_connected(true);
     let _ = send_relay_host_status(&write).await;
 
@@ -487,6 +517,23 @@ async fn run_relay_loop(
                                     let _ = send_relay_host_status(&write_task).await;
                                 });
                             }
+                            "job.start" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_job_start(&envelope, &write_task).await;
+                                });
+                            }
+                            "job.cancel" => {
+                                handle_job_cancel(&envelope);
+                            }
+                            "job.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_job_list(&envelope, &write_task).await;
+                                });
+                            }
                             "mcp.list" => {
                                 let write_task = write.clone();
                                 let envelope = envelope.clone();
@@ -524,6 +571,7 @@ async fn run_relay_loop(
     }
 
     host_status::set_web_viewers(0);
+    set_relay_write(None);
     set_relay_connected(false);
     Ok(())
 }
@@ -834,23 +882,43 @@ async fn handle_chat_start_inner(
             }
         }
     }
-    if let Ok(kb_instrs) = crate::context::collect_kb_system_instructions(&context_ids) {
-        for instr in kb_instrs {
-            prepend_system.push(serde_json::json!({ "role": "system", "content": instr }));
+    let mentions = extract_mentions_from_chat(payload, last_user);
+    let rag_kb_ids = resolve_rag_kb_ids(&mentions, &context_ids).unwrap_or_default();
+    let rag_query = if mentions.has_any() {
+        strip_mentions(last_user)
+    } else {
+        last_user.to_string()
+    };
+
+    if mentions.has_any() {
+        if let Some(idx) = messages.iter().rposition(|m| {
+            m.get("role").and_then(|r| r.as_str()) == Some("user")
+        }) {
+            messages[idx] = serde_json::json!({ "role": "user", "content": rag_query });
         }
     }
 
     let mut rag_injected = false;
     let mut codebase_injected = false;
-    if !context_ids.is_empty() {
-        if let Ok(Some(rules)) = load_project_rules(&context_ids) {
+    if !rag_kb_ids.is_empty() {
+        if let Ok(kb_instrs) = crate::context::collect_kb_system_instructions(&rag_kb_ids) {
+            for instr in kb_instrs {
+                prepend_system.push(serde_json::json!({ "role": "system", "content": instr }));
+            }
+        }
+        if let Ok(Some(rules)) = load_project_rules(&rag_kb_ids) {
             prepend_system.push(serde_json::json!({ "role": "system", "content": rules }));
         }
-        if let Ok(Some(rag)) = build_rag_context(&context_ids, last_user).await {
+        let scope = RagScope {
+            kb_ids: rag_kb_ids.clone(),
+            file_hints: mentions.file_hints.clone(),
+            folder_hints: mentions.folder_hints.clone(),
+        };
+        if let Ok(Some(rag)) = build_rag_context_scoped(&scope, &rag_query).await {
             prepend_system.push(serde_json::json!({ "role": "system", "content": rag }));
             rag_injected = true;
         }
-        if let Ok(Some(code_ctx)) = build_codebase_context(&context_ids, last_user).await {
+        if let Ok(Some(code_ctx)) = build_codebase_context(&rag_kb_ids, &rag_query).await {
             prepend_system.push(serde_json::json!({ "role": "system", "content": code_ctx }));
             codebase_injected = true;
         }
@@ -859,11 +927,16 @@ async fn handle_chat_start_inner(
             Some("chat"),
             envelope.requestId.as_deref(),
             Some(serde_json::json!({
-                "contextIds": context_ids,
+                "contextIds": rag_kb_ids,
                 "model": model,
                 "projectId": project_id,
                 "ragInjected": rag_injected,
                 "codebaseInjected": codebase_injected,
+                "mentionScope": {
+                    "baseNames": mentions.base_names,
+                    "fileHints": mentions.file_hints,
+                    "folderHints": mentions.folder_hints,
+                },
             })),
         );
     }
@@ -872,14 +945,23 @@ async fn handle_chat_start_inner(
         messages.insert(i, sys);
     }
 
+    if is_vision_model(model) && !rag_kb_ids.is_empty() {
+        if let Ok(paths) = find_relevant_image_paths(&rag_kb_ids, &rag_query, 3).await {
+            let _ = attach_images_to_last_user_message(&mut messages, &paths);
+        }
+    }
+
     if is_cloud {
         stream_cloud_chat(envelope, write, &model, &messages).await
-    } else if thinking_mode {
-        let response = stream_chat_thinking(&model, &messages).await?;
-        stream_thinking_chat(envelope, write, response, &mut String::new()).await
     } else {
-        let response = stream_chat(&model, &messages).await?;
-        stream_openai_chat(envelope, write, response, &mut String::new()).await
+        crate::local_metrics::begin_request(&model);
+        if thinking_mode {
+            let response = stream_chat_thinking(&model, &messages).await?;
+            stream_thinking_chat(envelope, write, response, &mut String::new()).await
+        } else {
+            let response = stream_chat(&model, &messages).await?;
+            stream_openai_chat(envelope, write, response, &mut String::new()).await
+        }
     }
 }
 
@@ -1052,6 +1134,7 @@ async fn stream_openai_chat(
                 return finish_chat_with_persist(envelope, write, assistant_content).await;
             }
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                crate::local_metrics::merge_stream_chunk(&json);
                 if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
                     assistant_content.push_str(content);
                     let _ = send_chat_delta(write, &envelope.requestId, content).await;
@@ -1095,6 +1178,8 @@ async fn stream_thinking_chat(
                 continue;
             };
 
+            crate::local_metrics::merge_stream_chunk(&json);
+
             if let Some(thinking) = json["message"]["thinking"].as_str() {
                 if !thinking.is_empty() {
                     let _ =
@@ -1121,6 +1206,7 @@ async fn finish_chat_with_persist(
     write: &SharedRelayWrite,
     assistant_content: &str,
 ) -> Result<(), String> {
+    crate::local_metrics::finish_request();
     let result = send_chat_done(write, &envelope.requestId).await;
     if result.is_ok() {
         let _ = persist_chat_turn(envelope, assistant_content);
@@ -1641,6 +1727,62 @@ async fn handle_mcp_call(
             .await
         }
     }
+}
+
+async fn handle_job_start(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    match crate::jobs::parse_job_start_payload(&envelope.payload) {
+        Ok(kind) => {
+            let job_id = crate::jobs::submit_job(kind);
+            send_ws_response(
+                write,
+                "job.progress",
+                serde_json::json!({
+                    "jobId": job_id,
+                    "status": "queued",
+                    "message": "Tâche en file d'attente",
+                    "progress": 0,
+                }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "job.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+fn handle_job_cancel(envelope: &WsEnvelope) {
+    if let Some(job_id) = envelope.payload.get("jobId").and_then(|v| v.as_str()) {
+        crate::jobs::cancel_job(job_id);
+        return;
+    }
+    if let Some(job_id) = envelope.requestId.as_deref() {
+        crate::jobs::cancel_job(job_id);
+    }
+}
+
+async fn handle_job_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let jobs = crate::jobs::list_jobs();
+    send_ws_response(
+        write,
+        "job.status",
+        serde_json::json!({ "jobs": jobs }),
+        &envelope.requestId,
+    )
+    .await
 }
 
 async fn handle_playbook_list(

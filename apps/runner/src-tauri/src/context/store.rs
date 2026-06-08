@@ -1,9 +1,13 @@
 use super::audit::{log_audit, AuditAction};
+use super::vision::{document_media_type, is_image_filename};
 use super::db_crypto::{
     ensure_decrypted_working_db, migrate_plain_to_encrypted_if_needed,
     persist_encrypted_working_db,
 };
 use super::{context_db_path, context_root_dir};
+use crate::settings::{
+    default_allowed_extensions_list, normalize_allowed_extensions, resolved_default_allowed_extensions,
+};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::fs;
@@ -39,6 +43,12 @@ pub struct DocumentInfo {
     pub external_path: Option<String>,
     pub source_mtime: Option<i64>,
     pub source_size: Option<u64>,
+    #[serde(default = "default_media_type")]
+    pub media_type: String,
+}
+
+fn default_media_type() -> String {
+    "text".into()
 }
 
 fn default_source_type() -> String {
@@ -59,6 +69,7 @@ pub struct ContextLink {
     pub last_sync_error: Option<String>,
     pub doc_count: u32,
     pub symbol_count: u32,
+    pub allowed_extensions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -159,7 +170,7 @@ where
 }
 
 /// Public alias used by other Host modules (e.g. projects).
-pub(crate) fn with_context_db<F, T>(f: F) -> Result<T, String>
+pub fn with_context_db<F, T>(f: F) -> Result<T, String>
 where
     F: FnOnce(&Connection) -> Result<T, String>,
 {
@@ -222,8 +233,51 @@ fn init_db_schema(conn: &Connection) -> Result<(), String> {
     migrate_schema_v5_user_memory(conn)?;
     migrate_schema_v6_content_dedup(conn)?;
     migrate_schema_v7_audit(conn)?;
+    migrate_schema_v8_extension_policy(conn)?;
     init_fts_schema(conn)?;
     backfill_fts_if_empty(conn)
+}
+
+fn migrate_schema_v8_extension_policy(conn: &Connection) -> Result<(), String> {
+    let _ = conn.execute(
+        "ALTER TABLE context_links ADD COLUMN allowed_extensions TEXT",
+        [],
+    );
+    let default_json = serde_json::to_string(&default_allowed_extensions_list())
+        .unwrap_or_else(|_| r#"["txt","md","pdf","docx","png","jpg","jpeg"]"#.into());
+    conn.execute(
+        "UPDATE context_links SET allowed_extensions = ?1 WHERE allowed_extensions IS NULL",
+        params![default_json],
+    )
+    .ok();
+    Ok(())
+}
+
+fn parse_allowed_extensions(raw: Option<String>) -> Vec<String> {
+    match raw {
+        Some(json) if !json.is_empty() => serde_json::from_str(&json)
+            .ok()
+            .and_then(|v: Vec<String>| normalize_allowed_extensions(&v).ok())
+            .unwrap_or_else(resolved_default_allowed_extensions),
+        _ => resolved_default_allowed_extensions(),
+    }
+}
+
+fn row_to_context_link(row: &rusqlite::Row<'_>) -> Result<ContextLink, rusqlite::Error> {
+    Ok(ContextLink {
+        id: row.get(0)?,
+        knowledge_base_id: row.get(1)?,
+        link_type: row.get(2)?,
+        path: row.get(3)?,
+        recursive: row.get::<_, i32>(4)? != 0,
+        enabled: row.get::<_, i32>(5)? != 0,
+        last_sync_at: row.get(6)?,
+        last_sync_status: row.get(7)?,
+        last_sync_error: row.get(8)?,
+        doc_count: row.get(9)?,
+        symbol_count: row.get(10)?,
+        allowed_extensions: parse_allowed_extensions(row.get(11).ok()),
+    })
 }
 
 fn migrate_schema_v7_audit(conn: &Connection) -> Result<(), String> {
@@ -449,6 +503,113 @@ fn search_chunks_fts_conn(
         .query_map(param_refs.as_slice(), |row| row.get::<_, String>(0))
         .map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn document_matches_mention_scope(
+    filepath: &str,
+    filename_or_relative: &str,
+    file_hints: &[String],
+    folder_hints: &[String],
+) -> bool {
+    if file_hints.is_empty() && folder_hints.is_empty() {
+        return true;
+    }
+
+    let filepath_lc = filepath.to_lowercase();
+    let display_lc = filename_or_relative.to_lowercase();
+
+    let file_match = file_hints.iter().any(|hint| {
+        let h = hint.to_lowercase();
+        display_lc == h
+            || display_lc.ends_with(&h)
+            || filepath_lc.contains(&h)
+            || filepath_lc.ends_with(&h)
+    });
+
+    let folder_match = folder_hints.iter().any(|hint| {
+        let h = hint.to_lowercase().replace('/', "\\");
+        filepath_lc.contains(&h) || display_lc.starts_with(&h) || display_lc.contains(&h)
+    });
+
+    match (file_hints.is_empty(), folder_hints.is_empty()) {
+        (true, true) => true,
+        (false, true) => file_match,
+        (true, false) => folder_match,
+        (false, false) => file_match && folder_match,
+    }
+}
+
+pub fn search_chunks_fts_scoped(
+    kb_ids: &[String],
+    query: &str,
+    limit: usize,
+    file_hints: &[String],
+    folder_hints: &[String],
+) -> Result<Vec<String>, String> {
+    if file_hints.is_empty() && folder_hints.is_empty() {
+        return search_chunks_fts(kb_ids, query, limit);
+    }
+
+    with_db(|conn| {
+        if kb_ids.is_empty() || query.trim().is_empty() || limit == 0 {
+            return Ok(vec![]);
+        }
+        let fts_query = match build_fts_query(query) {
+            Some(q) => q,
+            None => return Ok(vec![]),
+        };
+
+        let placeholders = kb_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT cf.content, d.filepath, d.filename, d.relative_path
+             FROM chunks_fts cf
+             JOIN documents d ON d.id = cf.document_id
+             WHERE cf.knowledge_base_id IN ({placeholders})
+             AND cf MATCH ?
+             ORDER BY bm25(cf)
+             LIMIT ?"
+        );
+
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let fetch_limit = (limit * 4).max(limit) as i64;
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = kb_ids
+            .iter()
+            .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::ToSql>)
+            .collect();
+        params.push(Box::new(fts_query));
+        params.push(Box::new(fetch_limit));
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            let (content, filepath, filename, relative_path) = row.map_err(|e| e.to_string())?;
+            let display = relative_path
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| filename.clone());
+            if document_matches_mention_scope(&filepath, &display, file_hints, folder_hints) {
+                out.push(content);
+                if out.len() >= limit {
+                    break;
+                }
+            }
+        }
+        Ok(out)
+    })
 }
 
 pub fn search_chunks_fts(
@@ -1144,10 +1305,11 @@ pub fn list_documents(kb_id: &str) -> Result<Vec<DocumentInfo>, String> {
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map(params![kb_id], |row| {
+                let filename: String = row.get(2)?;
                 Ok(DocumentInfo {
                     id: row.get(0)?,
                     knowledge_base_id: row.get(1)?,
-                    filename: row.get(2)?,
+                    filename: filename.clone(),
                     status: row.get(3)?,
                     error_message: row.get(4)?,
                     chunk_count: row.get(5)?,
@@ -1157,6 +1319,7 @@ pub fn list_documents(kb_id: &str) -> Result<Vec<DocumentInfo>, String> {
                     external_path: row.get(9)?,
                     source_mtime: row.get(10)?,
                     source_size: row.get(11)?,
+                    media_type: document_media_type(&filename).to_string(),
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -1215,6 +1378,61 @@ pub fn insert_embedding(chunk_id: &str, vector: &[f32]) -> Result<(), String> {
     })
 }
 
+pub fn get_embeddings_for_scope(
+    kb_ids: &[String],
+    file_hints: &[String],
+    folder_hints: &[String],
+) -> Result<Vec<(String, Vec<f32>)>, String> {
+    if file_hints.is_empty() && folder_hints.is_empty() {
+        return get_embeddings_for_bases(kb_ids);
+    }
+
+    if kb_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut all = Vec::new();
+    for kb_id in kb_ids {
+        let mut batch = with_db(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT c.content, e.vector, d.filepath, d.filename, d.relative_path
+                     FROM chunks c
+                     JOIN embeddings e ON e.chunk_id = c.id
+                     JOIN documents d ON d.id = c.document_id
+                     WHERE d.knowledge_base_id = ?1 AND d.status = 'ready'
+                       AND d.canonical_document_id IS NULL",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![kb_id], |row| {
+                    let content: String = row.get(0)?;
+                    let blob: Vec<u8> = row.get(1)?;
+                    let filepath: String = row.get(2)?;
+                    let filename: String = row.get(3)?;
+                    let relative_path: Option<String> = row.get(4)?;
+                    let vector: Vec<f32> = blob
+                        .chunks_exact(4)
+                        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                        .collect();
+                    let display = relative_path
+                        .filter(|p| !p.is_empty())
+                        .unwrap_or(filename);
+                    Ok((content, vector, filepath, display))
+                })
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        })?;
+
+        for (content, vector, filepath, display) in batch {
+            if document_matches_mention_scope(&filepath, &display, file_hints, folder_hints) {
+                all.push((content, vector));
+            }
+        }
+    }
+    Ok(all)
+}
+
 pub fn get_embeddings_for_bases(kb_ids: &[String]) -> Result<Vec<(String, Vec<f32>)>, String> {
     if kb_ids.is_empty() {
         return Ok(vec![]);
@@ -1245,6 +1463,48 @@ pub fn get_embeddings_for_bases(kb_ids: &[String]) -> Result<Vec<(String, Vec<f3
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
         })?;
         all.append(&mut batch);
+    }
+    Ok(all)
+}
+
+/// Embeddings des documents image (`.png`/`.jpg`) avec chemin fichier pour le chat vision.
+pub fn get_image_embeddings_for_bases(
+    kb_ids: &[String],
+) -> Result<Vec<(Vec<f32>, String)>, String> {
+    if kb_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut all = Vec::new();
+    for kb_id in kb_ids {
+        let mut batch = with_db(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT e.vector, d.filepath, d.filename FROM chunks c
+                     JOIN embeddings e ON e.chunk_id = c.id
+                     JOIN documents d ON d.id = c.document_id
+                     WHERE d.knowledge_base_id = ?1 AND d.status = 'ready'
+                       AND d.canonical_document_id IS NULL",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![kb_id], |row| {
+                    let blob: Vec<u8> = row.get(0)?;
+                    let filepath: String = row.get(1)?;
+                    let filename: String = row.get(2)?;
+                    let vector: Vec<f32> = blob
+                        .chunks_exact(4)
+                        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                        .collect();
+                    Ok((vector, filepath, filename))
+                })
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        })?;
+        for (vector, filepath, filename) in batch {
+            if is_image_filename(&filename) {
+                all.push((vector, filepath));
+            }
+        }
     }
     Ok(all)
 }
@@ -1351,13 +1611,20 @@ pub fn create_context_link(
     link_type: &str,
     path: &str,
     recursive: bool,
+    allowed_extensions: Option<Vec<String>>,
 ) -> Result<ContextLink, String> {
+    let extensions = match allowed_extensions {
+        Some(exts) => normalize_allowed_extensions(&exts)?,
+        None => resolved_default_allowed_extensions(),
+    };
+    let extensions_json = serde_json::to_string(&extensions).map_err(|e| e.to_string())?;
+
     with_db(|conn| {
         let id = Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO context_links (id, knowledge_base_id, link_type, path, recursive, enabled, last_sync_status)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, 'pending')",
-            params![id, kb_id, link_type, path, recursive as i32],
+            "INSERT INTO context_links (id, knowledge_base_id, link_type, path, recursive, enabled, last_sync_status, allowed_extensions)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, 'pending', ?6)",
+            params![id, kb_id, link_type, path, recursive as i32, extensions_json],
         )
         .map_err(|e| e.to_string())?;
         Ok(ContextLink {
@@ -1372,6 +1639,7 @@ pub fn create_context_link(
             last_sync_error: None,
             doc_count: 0,
             symbol_count: 0,
+            allowed_extensions: extensions,
         })
     })
 }
@@ -1383,26 +1651,13 @@ pub fn list_context_links(kb_id: &str) -> Result<Vec<ContextLink>, String> {
                 "SELECT cl.id, cl.knowledge_base_id, cl.link_type, cl.path, cl.recursive, cl.enabled,
                         cl.last_sync_at, cl.last_sync_status, cl.last_sync_error,
                         (SELECT COUNT(*) FROM documents d WHERE d.link_id = cl.id) as doc_count,
-                        (SELECT COUNT(*) FROM code_symbols cs WHERE cs.link_id = cl.id) as symbol_count
+                        (SELECT COUNT(*) FROM code_symbols cs WHERE cs.link_id = cl.id) as symbol_count,
+                        cl.allowed_extensions
                  FROM context_links cl WHERE cl.knowledge_base_id = ?1 ORDER BY cl.path",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params![kb_id], |row| {
-                Ok(ContextLink {
-                    id: row.get(0)?,
-                    knowledge_base_id: row.get(1)?,
-                    link_type: row.get(2)?,
-                    path: row.get(3)?,
-                    recursive: row.get::<_, i32>(4)? != 0,
-                    enabled: row.get::<_, i32>(5)? != 0,
-                    last_sync_at: row.get(6)?,
-                    last_sync_status: row.get(7)?,
-                    last_sync_error: row.get(8)?,
-                    doc_count: row.get(9)?,
-                    symbol_count: row.get(10)?,
-                })
-            })
+            .query_map(params![kb_id], row_to_context_link)
             .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     })
@@ -1415,26 +1670,13 @@ pub fn list_all_context_links() -> Result<Vec<ContextLink>, String> {
                 "SELECT cl.id, cl.knowledge_base_id, cl.link_type, cl.path, cl.recursive, cl.enabled,
                         cl.last_sync_at, cl.last_sync_status, cl.last_sync_error,
                         (SELECT COUNT(*) FROM documents d WHERE d.link_id = cl.id) as doc_count,
-                        (SELECT COUNT(*) FROM code_symbols cs WHERE cs.link_id = cl.id) as symbol_count
+                        (SELECT COUNT(*) FROM code_symbols cs WHERE cs.link_id = cl.id) as symbol_count,
+                        cl.allowed_extensions
                  FROM context_links cl ORDER BY cl.path",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([], |row| {
-                Ok(ContextLink {
-                    id: row.get(0)?,
-                    knowledge_base_id: row.get(1)?,
-                    link_type: row.get(2)?,
-                    path: row.get(3)?,
-                    recursive: row.get::<_, i32>(4)? != 0,
-                    enabled: row.get::<_, i32>(5)? != 0,
-                    last_sync_at: row.get(6)?,
-                    last_sync_status: row.get(7)?,
-                    last_sync_error: row.get(8)?,
-                    doc_count: row.get(9)?,
-                    symbol_count: row.get(10)?,
-                })
-            })
+            .query_map([], row_to_context_link)
             .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     })
@@ -1446,27 +1688,34 @@ pub fn get_context_link(link_id: &str) -> Result<ContextLink, String> {
             "SELECT cl.id, cl.knowledge_base_id, cl.link_type, cl.path, cl.recursive, cl.enabled,
                     cl.last_sync_at, cl.last_sync_status, cl.last_sync_error,
                     (SELECT COUNT(*) FROM documents d WHERE d.link_id = cl.id) as doc_count,
-                    (SELECT COUNT(*) FROM code_symbols cs WHERE cs.link_id = cl.id) as symbol_count
+                    (SELECT COUNT(*) FROM code_symbols cs WHERE cs.link_id = cl.id) as symbol_count,
+                    cl.allowed_extensions
              FROM context_links cl WHERE cl.id = ?1",
             params![link_id],
-            |row| {
-                Ok(ContextLink {
-                    id: row.get(0)?,
-                    knowledge_base_id: row.get(1)?,
-                    link_type: row.get(2)?,
-                    path: row.get(3)?,
-                    recursive: row.get::<_, i32>(4)? != 0,
-                    enabled: row.get::<_, i32>(5)? != 0,
-                    last_sync_at: row.get(6)?,
-                    last_sync_status: row.get(7)?,
-                    last_sync_error: row.get(8)?,
-                    doc_count: row.get(9)?,
-                    symbol_count: row.get(10)?,
-                })
-            },
+            row_to_context_link,
         )
         .map_err(|e| e.to_string())
     })
+}
+
+pub fn update_context_link_extensions(
+    link_id: &str,
+    extensions: &[String],
+) -> Result<ContextLink, String> {
+    let normalized = normalize_allowed_extensions(extensions)?;
+    let json = serde_json::to_string(&normalized).map_err(|e| e.to_string())?;
+    with_db(|conn| {
+        let updated = conn.execute(
+            "UPDATE context_links SET allowed_extensions = ?1 WHERE id = ?2",
+            params![json, link_id],
+        )
+        .map_err(|e| e.to_string())?;
+        if updated == 0 {
+            return Err("Lien introuvable".into());
+        }
+        Ok(())
+    })?;
+    get_context_link(link_id)
 }
 
 pub fn set_context_link_enabled(link_id: &str, enabled: bool) -> Result<(), String> {

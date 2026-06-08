@@ -77,6 +77,8 @@
 
 ## Contexte lié (Host v0.2.0)
 
+- [x] Images liées (.png/.jpg) décrites via modèle vision Ollama local, indexées en RAG
+- [x] Chat vision : images pertinentes attachées au message quand un modèle multimodal est actif
 - [x] Table `context_links` + colonnes `documents` (source lié / upload)
 - [x] Ingestion depuis chemin (`ingest_from_path`, `reindex_document`)
 - [x] Sync au lancement + watcher `notify` avec debounce
@@ -84,6 +86,14 @@
 - [x] UI Host : lier fichier / dossier / disque, sync manuel
 - [x] Web : statut liens, suppression document, progression upload
 - [x] Déduplication cross-liens : même contenu sous deux chemins → un seul index (hash SHA-256)
+- [x] Politique par extension : allowlist configurable par lien (Host + protocole WS)
+
+## Recherche full-text (omoa-fulltext-search)
+
+- [x] Table virtuelle FTS5 `chunks_fts` (contenu + nom de fichier)
+- [x] Triggers sync insert/update/delete + backfill au démarrage
+- [x] RAG hybride : hits FTS prioritaires, complétés par similarité embeddings
+- [x] Requête « contrat 2024 » trouve le chunk sans similarité sémantique (tests unitaires)
 
 ## Index codebase Git (omoa-codebase-index)
 

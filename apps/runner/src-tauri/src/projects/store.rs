@@ -1,4 +1,4 @@
-use crate::context::store::with_context_db;
+use crate::context::with_context_db;
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use uuid::Uuid;
@@ -79,40 +79,19 @@ fn replace_kbase_ids(
 }
 
 pub fn list_projects(active_id: Option<&str>) -> Result<Vec<ProjectSummary>, String> {
-    with_context_db(|conn| {
+    let ids = with_context_db(|conn| {
         let mut stmt = conn
-            .prepare(
-                "SELECT id, name, description, system_instruction, created_at, updated_at
-                 FROM projects ORDER BY updated_at DESC",
-            )
+            .prepare("SELECT id FROM projects ORDER BY updated_at DESC")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([], |row| {
-                let id: String = row.get(0)?;
-                Ok(id)
-            })
+            .query_map([], |row| row.get::<_, String>(0))
             .map_err(|e| e.to_string())?;
-        let ids: Vec<String> = rows
-            .filter_map(|r| r.ok())
-            .collect();
-        let mut projects = Vec::new();
-        for id in ids {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, name, description, system_instruction, created_at, updated_at
-                     FROM projects WHERE id = ?1",
-                )
-                .map_err(|e| e.to_string())?;
-            let project = stmt
-                .query_row(params![id], |row| {
-                    let kbase_ids = load_kbase_ids(conn, &id).unwrap_or_default();
-                    row_to_project(row, kbase_ids, active_id)
-                })
-                .map_err(|e| e.to_string())?;
-            projects.push(project);
-        }
-        Ok(projects)
-    })
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())
+    })?;
+    ids.into_iter()
+        .map(|id| get_project(&id, active_id))
+        .collect()
 }
 
 pub fn get_project(id: &str, active_id: Option<&str>) -> Result<ProjectSummary, String> {
@@ -151,17 +130,7 @@ pub fn create_project(
         )
         .map_err(|e| e.to_string())?;
         replace_kbase_ids(conn, &id, knowledge_base_ids)?;
-        let kbase_ids = load_kbase_ids(conn, &id)?;
-        Ok(ProjectSummary {
-            id,
-            name: name.to_string(),
-            description: description.to_string(),
-            system_instruction: String::new(),
-            knowledge_base_ids: kbase_ids,
-            created_at: now.clone(),
-            updated_at: now,
-            is_active: false,
-        })
+        get_project(&id, None)
     })
 }
 
@@ -225,10 +194,11 @@ pub fn delete_project(id: &str) -> Result<(), String> {
 }
 
 pub fn open_project(id: &str) -> Result<(ProjectSummary, Vec<String>), String> {
-    let _ = get_project(id, None)?;
+    let project = get_project(id, None)?;
     crate::settings::set_active_project_id(Some(id.to_string()))?;
-    let project = get_project(id, Some(id))?;
-    Ok((project, project.knowledge_base_ids.clone()))
+    let kbase_ids = project.knowledge_base_ids.clone();
+    let active = get_project(id, Some(id))?;
+    Ok((active, kbase_ids))
 }
 
 pub fn get_active_project_id() -> Option<String> {
