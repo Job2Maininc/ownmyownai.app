@@ -69,7 +69,7 @@ $manifest = @{
 
 $manifestPath = Join-Path $staging "latest.json"
 Set-Content -Path $manifestPath -Value $manifest -Encoding UTF8
-Upload-File $manifestPath "latest.json" "application/json"
+Upload-File $manifestPath "latest.json" "application/octet-stream"
 
 Write-Host "Manifeste : $basePublic/latest.json"
 Write-Host "Installateur : $basePublic/OwnMyOwnAI-Host-setup.exe"
