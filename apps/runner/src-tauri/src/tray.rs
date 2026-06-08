@@ -1,4 +1,4 @@
-use tauri::{
+﻿use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     App, AppHandle, Manager, WindowEvent,
@@ -29,7 +29,7 @@ pub fn set_tooltip(app: &AppHandle, text: &str) {
 
 pub fn setup(app: &App) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "tray_show", "Afficher le host", true, None::<&str>)?;
-    let hide_item = MenuItem::with_id(app, "tray_hide", "Masquer la fenêtre", true, None::<&str>)?;
+    let hide_item = MenuItem::with_id(app, "tray_hide", "Masquer la fenÃªtre", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "tray_quit", "Quitter", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &hide_item, &separator, &quit_item])?;
@@ -37,7 +37,13 @@ pub fn setup(app: &App) -> tauri::Result<()> {
     let icon = app
         .default_window_icon()
         .cloned()
-        .ok_or_else(|| tauri::Error::Setup("icône tray introuvable".into()))?;
+        .ok_or_else(|| {
+            let err: Box<dyn std::error::Error> = Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "icone tray introuvable",
+            ));
+            tauri::Error::Setup(err.into())
+        })?;
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
@@ -74,3 +80,6 @@ pub fn setup(app: &App) -> tauri::Result<()> {
 
     Ok(())
 }
+
+
+

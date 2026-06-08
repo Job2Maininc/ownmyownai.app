@@ -5,8 +5,8 @@
 - [ ] Projet Supabase créé, migrations appliquées (`supabase db push`)
 - [ ] Secrets : `RELAY_JWT_SECRET`, `RELAY_URL`, `APP_URL`
 - [ ] Edge Functions déployées (5 fonctions)
-- [ ] Relay Cloudflare déployé avec même `RELAY_JWT_SECRET`
-- [ ] Web déployé sur Vercel avec variables `NEXT_PUBLIC_*`
+- [x] Relay Cloudflare deploye (smoke GET /health -> {"ok":true}, 2026-06-08)
+- [x] Web deploye sur Vercel avec `NEXT_PUBLIC_*` (Production HTTP 200, commit 3410634)
 
 ## Tests manuels
 
