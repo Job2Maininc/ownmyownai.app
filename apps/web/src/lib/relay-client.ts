@@ -186,7 +186,8 @@ export class RelayClient {
   }
 
   private isActiveRequest(envelope: WsEnvelope): boolean {
-    if (!envelope.requestId || !this.activeRequestId) return true;
+    if (!this.activeRequestId) return false;
+    if (!envelope.requestId) return false;
     return envelope.requestId === this.activeRequestId;
   }
 

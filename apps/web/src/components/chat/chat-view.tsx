@@ -90,6 +90,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const relayRef = useRef<RelayClient | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
+  const assistantMessageIndex = useRef<number | null>(null);
+  const pendingUserMessage = useRef<UiMessage | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const hydrated = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -98,6 +100,41 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const filteredModels = models.filter((m) =>
     m.toLowerCase().includes(modelSearch.toLowerCase()),
   );
+
+  const applyAssistantDelta = (prev: UiMessage[]): UiMessage[] => {
+    const next = [...prev];
+    const pending = pendingUserMessage.current;
+
+    if (pending) {
+      const last = next[next.length - 1];
+      if (last?.role !== "user" || last.content !== pending.content) {
+        next.push(pending);
+      }
+      pendingUserMessage.current = null;
+    }
+
+    const idx = assistantMessageIndex.current;
+    if (idx === null) return next;
+
+    const assistantMsg: UiMessage = {
+      role: "assistant",
+      content: assistantBuffer.current,
+    };
+
+    if (next.length <= idx) {
+      next.push(assistantMsg);
+    } else {
+      next[idx] = assistantMsg;
+    }
+
+    return next;
+  };
+
+  const clearAssistantTurn = () => {
+    assistantMessageIndex.current = null;
+    pendingUserMessage.current = null;
+    assistantBuffer.current = "";
+  };
 
   useEffect(() => {
     setModel(defaultModel);
@@ -181,26 +218,21 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       onHostStatus: (status) => setHostStatus(status),
       onDelta: (content) => {
         assistantBuffer.current += content;
-        setMessages((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.role === "assistant") {
-            next[next.length - 1] = { role: "assistant", content: assistantBuffer.current };
-          } else {
-            next.push({ role: "assistant", content: assistantBuffer.current });
-          }
-          return next;
-        });
+        setMessages((prev) => applyAssistantDelta(prev));
       },
       onDone: () => {
         setStreaming(false);
         activeRequestId.current = null;
-        assistantBuffer.current = "";
+        clearAssistantTurn();
       },
       onError: (msg) => {
         setError(msg);
         setStreaming(false);
         activeRequestId.current = null;
+        if (assistantBuffer.current) {
+          setMessages((prev) => applyAssistantDelta(prev));
+        }
+        clearAssistantTurn();
       },
     });
     relayRef.current = client;
@@ -252,7 +284,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setMessages([]);
     setError(null);
     setInput("");
-    assistantBuffer.current = "";
+    clearAssistantTurn();
     activeRequestId.current = null;
     setStreaming(false);
     sessionStorage.removeItem(storageKey(hostId));
@@ -272,6 +304,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
 
     const userMsg: UiMessage = { role: "user", content: input.trim() };
     const newMessages = [...messages, userMsg];
+    pendingUserMessage.current = userMsg;
+    assistantMessageIndex.current = newMessages.length;
     setMessages(newMessages);
     setInput("");
     setStreaming(true);
