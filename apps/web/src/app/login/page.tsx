@@ -1,25 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { formatAuthError } from "@/lib/auth-errors";
+import { sanitizeRedirectPath } from "@/lib/auth-redirect";
+import { getRememberedEmail, rememberEmail } from "@/lib/remembered-email";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
+  const [checkingSession, setCheckingSession] = useState(true);
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") ?? "/dashboard";
+  const redirect = sanitizeRedirectPath(searchParams.get("redirect"));
+
+  useEffect(() => {
+    if (searchParams.get("error") === "callback_failed") {
+      setError("Le lien de connexion est invalide ou a expiré. Demandez-en un nouveau.");
+    }
+
+    const supabase = createClient();
+
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        router.replace(redirect);
+        return;
+      }
+
+      const remembered = getRememberedEmail();
+      if (remembered) setEmail(remembered);
+      setCheckingSession(false);
+    });
+  }, [redirect, router, searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    rememberEmail(email);
 
     const supabase = createClient();
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
@@ -37,6 +61,14 @@ export default function LoginPage() {
       return;
     }
     setSent(true);
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-6">
+        <p className="text-sm text-[var(--muted)]">Vérification de la session…</p>
+      </main>
+    );
   }
 
   if (sent) {
