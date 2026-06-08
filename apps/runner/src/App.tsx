@@ -133,6 +133,13 @@ export default function App() {
     await open(`${appUrl}/host/link`);
   }
 
+  function handleUnpaired() {
+    setCredentials(null);
+    setPairingCode("");
+    setError(null);
+    setStep("pairing");
+  }
+
   const stepIndex = { welcome: 0, models: 1, ollama: 2, pairing: 3, online: 4 }[step];
   const showSteps = step !== "online";
 
@@ -232,7 +239,7 @@ export default function App() {
           </>
         )}
 
-        {step === "online" && <Dashboard appUrl={appUrl} />}
+        {step === "online" && <Dashboard appUrl={appUrl} onUnpaired={handleUnpaired} />}
 
         {error && step !== "online" && step !== "models" && (
           <p className="error-banner">{error}</p>

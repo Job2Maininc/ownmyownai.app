@@ -5,10 +5,10 @@ mod relay;
 mod settings;
 mod tray;
 
-use credentials::{get_credentials, save_credentials, StoredCredentials};
+use credentials::{delete_credentials, get_credentials, save_credentials, StoredCredentials};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
 use ollama::{check_ollama, ensure_ollama_running, pull_model, pull_models, OllamaStatus};
-use relay::start_background_services;
+use relay::{start_background_services, stop_background_services};
 use settings::{default_ollama_models_path, get_settings, save_settings, HostSettings};
 use serde::Deserialize;
 
@@ -110,6 +110,13 @@ fn get_host_status_cmd() -> Result<HostStatusSnapshot, String> {
     Ok(build_snapshot())
 }
 
+#[tauri::command(rename = "unpair_host")]
+async fn unpair_host_cmd() -> Result<(), String> {
+    stop_background_services();
+    delete_credentials()?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -127,6 +134,7 @@ pub fn run() {
             complete_pairing_cmd,
             start_background_services_cmd,
             get_host_status_cmd,
+            unpair_host_cmd,
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());

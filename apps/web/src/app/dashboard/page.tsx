@@ -3,13 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { HostCard } from "@/components/dashboard/host-card";
 import type { Host } from "@ownmyownai/supabase-types";
-
-function isOnline(host: Host): boolean {
-  if (!host.last_seen_at) return false;
-  const lastSeen = new Date(host.last_seen_at).getTime();
-  return Date.now() - lastSeen < 60_000;
-}
 
 export const dynamic = "force-dynamic";
 
@@ -50,29 +45,11 @@ export default async function DashboardPage() {
         </Card>
       ) : (
         <ul className="space-y-3">
-          {hosts.map((host) => {
-            const online = isOnline(host) || host.status === "online";
-            return (
-              <li key={host.id}>
-                <Card className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{host.name}</p>
-                    <p className="text-sm text-[var(--muted)]">
-                      {host.default_model} ·{" "}
-                      <span className={online ? "text-brand-500" : "text-red-400"}>
-                        {online ? "En ligne" : "Hors ligne"}
-                      </span>
-                    </p>
-                  </div>
-                  <Link href={`/chat/${host.id}`}>
-                    <Button variant={online ? "primary" : "secondary"} disabled={!online}>
-                      Chat
-                    </Button>
-                  </Link>
-                </Card>
-              </li>
-            );
-          })}
+          {hosts.map((host) => (
+            <li key={host.id}>
+              <HostCard host={host} />
+            </li>
+          ))}
         </ul>
       )}
 

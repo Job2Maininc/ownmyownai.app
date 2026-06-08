@@ -6,6 +6,7 @@ import type { HostStatusSnapshot } from "../types";
 
 interface DashboardProps {
   appUrl: string;
+  onUnpaired: () => void;
 }
 
 function formatRelativeTime(iso: string | null): string {
@@ -44,10 +45,11 @@ function StatusPill({
   );
 }
 
-export default function Dashboard({ appUrl }: DashboardProps) {
+export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [status, setStatus] = useState<HostStatusSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [unpairing, setUnpairing] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -81,6 +83,25 @@ export default function Dashboard({ appUrl }: DashboardProps) {
     await navigator.clipboard.writeText(status.hostId);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleUnpair() {
+    if (
+      !window.confirm(
+        "Délier ce PC ? Vous devrez refaire le pairing pour reconnecter le host.",
+      )
+    ) {
+      return;
+    }
+    setUnpairing(true);
+    try {
+      await invoke("unpair_host");
+      onUnpaired();
+    } catch {
+      /* ignore */
+    } finally {
+      setUnpairing(false);
+    }
   }
 
   const allOk =
@@ -222,6 +243,15 @@ export default function Dashboard({ appUrl }: DashboardProps) {
           disabled={!status?.hostId}
         >
           Nouveau chat
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          style={{ width: "100%" }}
+          onClick={handleUnpair}
+          disabled={unpairing}
+        >
+          {unpairing ? "Déliaison…" : "Délier ce PC"}
         </button>
       </div>
     </div>

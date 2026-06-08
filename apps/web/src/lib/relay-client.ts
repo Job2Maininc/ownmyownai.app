@@ -3,6 +3,7 @@ import {
   serializeEnvelope,
   WS_MESSAGE_TYPES,
   type ChatMessage,
+  type HostStatus,
   type WsEnvelope,
 } from "@ownmyownai/protocol";
 
@@ -16,7 +17,7 @@ export interface RelayToken {
 export interface RelayClientCallbacks {
   mintToken: () => Promise<RelayToken>;
   onStatus?: (status: RelayStatus) => void;
-  onHostStatus?: (online: boolean) => void;
+  onHostStatus?: (status: HostStatus) => void;
   onDelta?: (content: string) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -31,6 +32,7 @@ export class RelayClient {
   private intentionalDisconnect = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private activeRequestId: string | null = null;
 
   constructor(callbacks: RelayClientCallbacks) {
     this.callbacks = callbacks;
@@ -119,22 +121,38 @@ export class RelayClient {
     }, delay);
   }
 
+  private isActiveRequest(envelope: WsEnvelope): boolean {
+    if (!envelope.requestId || !this.activeRequestId) return true;
+    return envelope.requestId === this.activeRequestId;
+  }
+
   private handleMessage(envelope: WsEnvelope) {
     switch (envelope.type) {
       case WS_MESSAGE_TYPES.HOST_STATUS: {
-        const payload = envelope.payload as { status?: string };
-        this.callbacks.onHostStatus?.(payload.status === "online" || payload.status === "busy");
+        const payload = envelope.payload as { status?: HostStatus };
+        if (
+          payload.status === "online" ||
+          payload.status === "busy" ||
+          payload.status === "offline"
+        ) {
+          this.callbacks.onHostStatus?.(payload.status);
+        }
         break;
       }
       case WS_MESSAGE_TYPES.CHAT_DELTA: {
+        if (!this.isActiveRequest(envelope)) return;
         const payload = envelope.payload as { content?: string };
         if (payload.content) this.callbacks.onDelta?.(payload.content);
         break;
       }
       case WS_MESSAGE_TYPES.CHAT_DONE:
+        if (!this.isActiveRequest(envelope)) return;
+        this.activeRequestId = null;
         this.callbacks.onDone?.();
         break;
       case WS_MESSAGE_TYPES.CHAT_ERROR: {
+        if (!this.isActiveRequest(envelope)) return;
+        this.activeRequestId = null;
         const payload = envelope.payload as { message?: string };
         this.callbacks.onError?.(payload.message ?? "Unknown error");
         break;
@@ -147,16 +165,31 @@ export class RelayClient {
       this.callbacks.onError?.("Not connected to relay");
       return;
     }
+    const id = requestId ?? crypto.randomUUID();
+    this.activeRequestId = id;
     const envelope = {
       type: WS_MESSAGE_TYPES.CHAT_START,
       payload: { messages, model },
-      requestId,
+      requestId: id,
+    };
+    this.ws.send(serializeEnvelope(envelope));
+    return id;
+  }
+
+  sendCancel(requestId?: string) {
+    const id = requestId ?? this.activeRequestId;
+    if (!id || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const envelope = {
+      type: WS_MESSAGE_TYPES.CHAT_CANCEL,
+      payload: {},
+      requestId: id,
     };
     this.ws.send(serializeEnvelope(envelope));
   }
 
   disconnect() {
     this.intentionalDisconnect = true;
+    this.activeRequestId = null;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

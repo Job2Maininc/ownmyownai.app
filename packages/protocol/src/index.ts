@@ -50,6 +50,7 @@ export const WS_MESSAGE_TYPES = {
   CHAT_DELTA: "chat.delta",
   CHAT_DONE: "chat.done",
   CHAT_ERROR: "chat.error",
+  CHAT_CANCEL: "chat.cancel",
   HOST_STATUS: "host.status",
   PING: "ping",
   PONG: "pong",

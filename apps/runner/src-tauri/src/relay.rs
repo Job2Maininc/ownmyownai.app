@@ -4,16 +4,28 @@ use crate::host_status::{
     set_relay_connected, set_relay_error,
 };
 use crate::ollama::{default_model, ensure_ollama_running, stream_chat};
+use crate::settings::resolved_default_model;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 static SERVICES_RUNNING: AtomicBool = AtomicBool::new(false);
+static SERVICES_STOP: AtomicBool = AtomicBool::new(false);
+static CHAT_CANCEL: AtomicBool = AtomicBool::new(false);
+static ACTIVE_CHAT_REQUEST: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn services_running() -> bool {
     SERVICES_RUNNING.load(Ordering::SeqCst)
+}
+
+pub fn stop_background_services() {
+    SERVICES_STOP.store(true, Ordering::SeqCst);
+    SERVICES_RUNNING.store(false, Ordering::SeqCst);
+    set_relay_connected(false);
+    host_status::emit_status();
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,6 +45,8 @@ struct WsEnvelope {
 pub async fn start_background_services(
     creds_override: Option<StoredCredentials>,
 ) -> Result<(), String> {
+    SERVICES_STOP.store(false, Ordering::SeqCst);
+
     let creds = match creds_override {
         Some(creds) => creds,
         None => get_credentials()?.ok_or("Pas de credentials — pairing requis")?,
@@ -59,9 +73,18 @@ pub async fn start_background_services(
 
     tauri::async_runtime::spawn(async move {
         loop {
+            if SERVICES_STOP.load(Ordering::SeqCst) {
+                break;
+            }
+            if get_credentials().ok().flatten().is_none() {
+                break;
+            }
             if let Err(e) = run_relay_loop(&creds_relay, &supabase_url_relay).await {
                 eprintln!("Relay error: {e}");
                 set_relay_error(e);
+            }
+            if SERVICES_STOP.load(Ordering::SeqCst) {
+                break;
             }
             sleep(Duration::from_secs(5)).await;
         }
@@ -69,6 +92,9 @@ pub async fn start_background_services(
 
     tauri::async_runtime::spawn(async move {
         loop {
+            if SERVICES_STOP.load(Ordering::SeqCst) {
+                break;
+            }
             if let Some(creds) = get_credentials().ok().flatten() {
                 if let Ok(url) = resolve_supabase_url(&creds) {
                     match send_heartbeat(&creds, &url).await {
@@ -79,6 +105,8 @@ pub async fn start_background_services(
                         }
                     }
                 }
+            } else {
+                break;
             }
             sleep(Duration::from_secs(15)).await;
         }
@@ -133,7 +161,10 @@ async fn send_heartbeat(
         .header("X-Device-Secret", &creds.device_secret)
         .header("X-Host-Id", &creds.host_id)
         .header("Content-Type", "application/json")
-        .json(&serde_json::json!({ "status": status }))
+        .json(&serde_json::json!({
+            "status": status,
+            "default_model": resolved_default_model(),
+        }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -164,11 +195,20 @@ async fn run_relay_loop(
     set_relay_connected(true);
 
     while let Some(msg) = read.next().await {
+        if SERVICES_STOP.load(Ordering::SeqCst) {
+            break;
+        }
         let msg = msg.map_err(|e| e.to_string())?;
         if let Message::Text(text) = msg {
             if let Ok(envelope) = serde_json::from_str::<WsEnvelope>(&text) {
-                if envelope.msg_type == "chat.start" {
-                    let _ = handle_chat_start(&envelope, &mut write).await;
+                match envelope.msg_type.as_str() {
+                    "chat.start" => {
+                        let _ = handle_chat_start(&envelope, &mut write).await;
+                    }
+                    "chat.cancel" => {
+                        handle_chat_cancel(&envelope);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -176,6 +216,21 @@ async fn run_relay_loop(
 
     set_relay_connected(false);
     Ok(())
+}
+
+fn handle_chat_cancel(envelope: &WsEnvelope) {
+    let active = ACTIVE_CHAT_REQUEST
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
+    let matches = match (&envelope.requestId, active) {
+        (Some(cancel_id), Some(active_id)) => cancel_id == &active_id,
+        (None, Some(_)) => true,
+        _ => false,
+    };
+    if matches {
+        CHAT_CANCEL.store(true, Ordering::SeqCst);
+    }
 }
 
 async fn send_chat_error(
@@ -197,6 +252,24 @@ async fn send_chat_error(
         .map_err(|e| e.to_string())
 }
 
+async fn send_chat_done(
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+    request_id: &Option<String>,
+) -> Result<(), String> {
+    let done = WsEnvelope {
+        msg_type: "chat.done".into(),
+        payload: serde_json::json!({}),
+        requestId: request_id.clone(),
+    };
+    write
+        .send(Message::Text(serde_json::to_string(&done).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn handle_chat_start(
     envelope: &WsEnvelope,
     write: &mut futures_util::stream::SplitSink<
@@ -207,7 +280,18 @@ async fn handle_chat_start(
     if !session_started() {
         return send_chat_error(write, envelope, "Host occupé").await;
     }
+
+    CHAT_CANCEL.store(false, Ordering::SeqCst);
+    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
+        *active = envelope.requestId.clone();
+    }
+
     let result = handle_chat_start_inner(envelope, write).await;
+
+    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
+        *active = None;
+    }
+    CHAT_CANCEL.store(false, Ordering::SeqCst);
     session_ended();
     result
 }
@@ -239,25 +323,24 @@ async fn handle_chat_start_inner(
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
+        if CHAT_CANCEL.load(Ordering::SeqCst) {
+            return send_chat_done(write, &envelope.requestId).await;
+        }
+
         let chunk = chunk.map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&chunk);
 
         for line in text.lines() {
+            if CHAT_CANCEL.load(Ordering::SeqCst) {
+                return send_chat_done(write, &envelope.requestId).await;
+            }
+
             if !line.starts_with("data: ") {
                 continue;
             }
             let data = &line[6..];
             if data == "[DONE]" {
-                let done = WsEnvelope {
-                    msg_type: "chat.done".into(),
-                    payload: serde_json::json!({}),
-                    requestId: envelope.requestId.clone(),
-                };
-                write
-                    .send(Message::Text(serde_json::to_string(&done).unwrap()))
-                    .await
-                    .map_err(|e| e.to_string())?;
-                return Ok(());
+                return send_chat_done(write, &envelope.requestId).await;
             }
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                 if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {

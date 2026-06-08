@@ -34,13 +34,22 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid credentials" }, 401);
   }
 
-  const body = await req.json().catch(() => ({})) as { status?: string };
+  const body = await req.json().catch(() => ({})) as {
+    status?: string;
+    default_model?: string;
+  };
   const status = body.status === "busy" ? "busy" : "online";
 
-  const { error } = await supabase
-    .from("hosts")
-    .update({ status, last_seen_at: new Date().toISOString() })
-    .eq("id", hostId);
+  const update: { status: string; last_seen_at: string; default_model?: string } = {
+    status,
+    last_seen_at: new Date().toISOString(),
+  };
+
+  if (typeof body.default_model === "string" && body.default_model.trim()) {
+    update.default_model = body.default_model.trim();
+  }
+
+  const { error } = await supabase.from("hosts").update(update).eq("id", hostId);
 
   if (error) {
     return jsonResponse({ error: error.message }, 500);
