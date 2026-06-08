@@ -137,6 +137,13 @@
 - [x] Protocole WS `pr.review` / `pr.review.done` dans `packages/protocol`
 - [x] `cargo check` dans `apps/runner/src-tauri`
 
+## Branches de conversation (omoa-conversation-branches)
+
+- [x] Fork depuis le message N sans écraser le fil principal (Host SQLite + cache web)
+- [x] Protocole WS `history.fork` / `history.branches` dans `packages/protocol`
+- [x] UI web : bouton « Brancher ici » + sélecteur de branches
+- [x] Tests unitaires `conversation-store` (fork, switch, nouvelle racine)
+
 ## Build local
 
 ```bash
