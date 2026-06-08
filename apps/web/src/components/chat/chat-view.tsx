@@ -219,12 +219,19 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         ? cloudHost.status
         : hostStatus;
 
+  const relayHostReachable = hostStatus === "online" || hostStatus === "busy";
   const hostBusy = effectiveHostStatus === "busy";
   const hostOffline = effectiveHostStatus === "offline";
   const hostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
-  const canSend = hostReachable && !hostOffline && (!hostBusy || streaming);
+  const canSend =
+    connected &&
+    relayHostReachable &&
+    hostReachable &&
+    !hostOffline &&
+    (!hostBusy || streaming);
   const usingCloudFallback =
     hostStatus === "offline" && effectiveHostStatus !== "offline" && connected;
+  const relayOutOfSync = usingCloudFallback;
 
   function handleNewConversation() {
     if (messages.length > 0) {
@@ -399,6 +406,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
           )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+          {relayOutOfSync && (
+            <p className="mb-2 text-sm text-amber-400">
+              Le relay n&apos;est pas synchronisé avec votre PC. Ouvrez l&apos;app Host Windows et
+              attendez « Connecté » avant d&apos;envoyer un message.
+            </p>
+          )}
           {hostBusy && !streaming && (
             <p className="mb-2 text-sm text-amber-400">
               Ce PC est utilisé par une autre session. Attendez ou fermez l&apos;autre onglet.

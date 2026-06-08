@@ -31,6 +31,11 @@ export function loadActiveContextIds(hostId: string): string[] {
   }
 }
 
+function formatPanelError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^Error:\s*/i, "");
+}
+
 export function ContextPanel({
   relay,
   connected,
@@ -56,7 +61,7 @@ export function ContextPanel({
       const list = await relay.listContextBases();
       setBases(list);
     } catch (e) {
-      setError(String(e));
+      setError(formatPanelError(e));
     } finally {
       setLoading(false);
     }
@@ -86,7 +91,7 @@ export function ContextPanel({
       setNewName("");
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(formatPanelError(e));
     }
   }
 
@@ -97,7 +102,7 @@ export function ContextPanel({
       onActiveChange(activeIds.filter((x) => x !== id));
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(formatPanelError(e));
     }
   }
 
@@ -115,7 +120,7 @@ export function ContextPanel({
       setChunksDocId(documentId);
       setChunks(list);
     } catch (e) {
-      setError(String(e));
+      setError(formatPanelError(e));
     } finally {
       setChunksLoading(false);
     }
@@ -135,7 +140,7 @@ export function ContextPanel({
       }
       await refresh();
     } catch (e) {
-      setError(String(e));
+      setError(formatPanelError(e));
     } finally {
       setUploading(false);
     }

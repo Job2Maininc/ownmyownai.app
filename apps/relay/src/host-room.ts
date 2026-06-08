@@ -54,10 +54,18 @@ export class HostRoom implements DurableObject {
       } else if (this.runner && this.runner.readyState === WebSocket.OPEN) {
         this.runner.send(data);
       } else {
+        let requestId: string | undefined;
+        try {
+          const parsed = JSON.parse(data) as { requestId?: string };
+          requestId = parsed.requestId;
+        } catch {
+          /* ignore */
+        }
         ws.send(
           JSON.stringify({
             type: "chat.error",
-            payload: { message: "Le host est hors ligne" },
+            requestId,
+            payload: { message: "Le host est hors ligne — ouvrez l'app Host sur ce PC." },
           }),
         );
       }
