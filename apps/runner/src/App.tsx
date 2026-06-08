@@ -4,6 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import Dashboard from "./components/Dashboard";
 import InstallProgress from "./components/InstallProgress";
 import ModelSetup from "./components/ModelSetup";
+import { formatInvokeError } from "./lib/tauri-errors";
+import { ensureOllamaRunning } from "./lib/ollama-setup";
 import type { HostSettings, OllamaStatus, SetupProgress, StoredCredentials } from "./types";
 
 type Step = "welcome" | "models" | "ollama" | "pairing" | "online";
@@ -35,7 +37,7 @@ export default function App() {
       setOllamaStatus(status);
       return status;
     } catch (e) {
-      setError(String(e));
+      setError(formatInvokeError(e));
       return null;
     }
   }, []);
@@ -91,7 +93,7 @@ export default function App() {
     });
 
     try {
-      await invoke("ensure_ollama_running");
+      await ensureOllamaRunning(settings.selectedModels);
       let status = await checkOllama();
 
       const missing = settings.selectedModels.filter(
@@ -120,7 +122,7 @@ export default function App() {
       });
       setStep("pairing");
     } catch (e) {
-      setError(String(e));
+      setError(formatInvokeError(e));
     }
   }
 
@@ -135,7 +137,7 @@ export default function App() {
       setCredentials(result);
       setStep("online");
     } catch (e) {
-      setError(String(e));
+      setError(formatInvokeError(e));
     }
   }
 

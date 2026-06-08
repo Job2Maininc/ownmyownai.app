@@ -1,3 +1,33 @@
 fn main() {
-    tauri_build::build()
+    tauri_build::try_build(
+        tauri_build::Attributes::new().app_manifest(
+            tauri_build::AppManifest::new().commands(&[
+                "check_ollama",
+                "ensure_ollama_running",
+                "pull_model",
+                "pull_models",
+                "get_host_settings",
+                "save_host_settings",
+                "get_default_models_dir",
+                "get_credentials",
+                "complete_pairing",
+                "start_background_services",
+                "open_url",
+                "get_host_status",
+                "unpair_host",
+                "get_hardware_info",
+                "delete_ollama_model",
+                "get_disk_free_gb",
+                "list_installed_models",
+                "ensure_embedding_model",
+                "list_knowledge_bases",
+                "create_knowledge_base",
+                "delete_knowledge_base",
+                "list_context_documents",
+                "export_knowledge_base",
+                "import_knowledge_base",
+            ]),
+        ),
+    )
+    .expect("failed to run tauri build");
 }

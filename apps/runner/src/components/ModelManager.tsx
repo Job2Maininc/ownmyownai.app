@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { formatInvokeError } from "../lib/tauri-errors";
+import { ensureOllamaRunning } from "../lib/ollama-setup";
 import { listen } from "@tauri-apps/api/event";
 import {
   RECOMMENDED_MODELS,
@@ -86,11 +88,11 @@ export default function ModelManager({
     setError(null);
     setPulling(modelId);
     try {
-      await invoke("ensure_ollama_running");
+      await ensureOllamaRunning([modelId]);
       await invoke("pull_model", { model: modelId });
       onDefaultChanged();
     } catch (e) {
-      setError(String(e));
+      setError(formatInvokeError(e));
     } finally {
       setPulling(null);
       setProgress(null);
