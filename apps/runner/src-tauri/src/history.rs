@@ -18,6 +18,7 @@ pub struct ChatThreadDetail {
     pub title: String,
     pub model: Option<String>,
     pub context_ids: Vec<String>,
+    pub created_at: String,
     pub message_count: u32,
     pub updated_at: String,
     pub parent_thread_id: Option<String>,
@@ -123,7 +124,7 @@ pub fn get_thread(thread_id: &str) -> Result<(ChatThreadDetail, Vec<ChatMessageR
     with_db(|conn| {
         let detail: ChatThreadDetail = conn
             .query_row(
-                "SELECT id, title, model, context_ids, parent_thread_id, fork_at_index, root_thread_id, updated_at,
+                "SELECT id, title, model, context_ids, created_at, parent_thread_id, fork_at_index, root_thread_id, updated_at,
                         (SELECT COUNT(*) FROM messages m WHERE m.thread_id = threads.id) AS message_count
                  FROM threads WHERE id = ?1",
                 params![thread_id],
@@ -136,11 +137,12 @@ pub fn get_thread(thread_id: &str) -> Result<(ChatThreadDetail, Vec<ChatMessageR
                         title: row.get(1)?,
                         model: row.get(2)?,
                         context_ids,
-                        parent_thread_id: row.get(4)?,
-                        fork_at_index: row.get(5)?,
-                        root_thread_id: row.get(6)?,
-                        updated_at: row.get(7)?,
-                        message_count: row.get(8)?,
+                        created_at: row.get(4)?,
+                        parent_thread_id: row.get(5)?,
+                        fork_at_index: row.get(6)?,
+                        root_thread_id: row.get(7)?,
+                        updated_at: row.get(8)?,
+                        message_count: row.get(9)?,
                     })
                 },
             )
