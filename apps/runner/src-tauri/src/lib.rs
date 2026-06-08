@@ -1,11 +1,19 @@
+mod agent;
 mod context;
+mod dpapi;
+mod playbooks;
+mod projects;
 mod credentials;
 mod hardware;
+mod history;
+mod share;
 mod process;
 mod host_status;
+mod model_routing;
 mod ollama;
 mod relay;
 mod settings;
+mod sync_schedule;
 mod tray;
 mod updater;
 

@@ -29,6 +29,7 @@
 | 13 | Instruction système par base : éditable Host, visible web, appliquée au prochain message | |
 | 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
 | 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
+| 16 | Partage conversation : lien temporaire, contenu seul (pas RAG) | |
 
 ## Projets / espaces de travail (Host v0.3)
 
@@ -41,6 +42,12 @@
 
 - [x] `context.db` chiffré au repos via DPAPI Windows (`context.db.enc`)
 
+## Mode réflexion (omoa-thinking-mode)
+
+- [x] `thinkingMode` dans `chat.start` + `chat.thinking_delta` (protocole WS)
+- [x] Routage modèles thinking côté Host (`think: true`, `/api/chat`)
+- [x] Sélecteur Normal / Réflexion + panneau repliable chaîne de pensée (web)
+
 ## Contexte lié (Host v0.2.0)
 
 - [x] Table `context_links` + colonnes `documents` (source lié / upload)
@@ -49,6 +56,12 @@
 - [x] Sync planifiée (cron configurable, rapport `sync-schedule.log`, log par lien)
 - [x] UI Host : lier fichier / dossier / disque, sync manuel
 - [x] Web : statut liens, suppression document, progression upload
+
+## Outils locaux (omoa-local-tools)
+
+- [x] `read_file`, `search_chunks`, `list_dir`, `stat` — sandbox chemins liés
+- [x] Tool calling Ollama côté Host (`enableTools` dans `chat.start`)
+- [x] Schémas protocole `LocalToolNameSchema` dans `@ownmyownai/protocol`
 
 ## Fallback modèle (Host)
 

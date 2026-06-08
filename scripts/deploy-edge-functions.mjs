@@ -21,6 +21,8 @@ const functions = [
   { name: "runner-heartbeat", verify_jwt: false },
   { name: "mint-relay-token", verify_jwt: true },
   { name: "runner-mint-relay-token", verify_jwt: false },
+  { name: "create-conversation-share", verify_jwt: true },
+  { name: "get-conversation-share", verify_jwt: false },
 ];
 
 for (const fn of functions) {

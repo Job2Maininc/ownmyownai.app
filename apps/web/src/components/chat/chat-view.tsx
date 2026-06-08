@@ -44,6 +44,8 @@ import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { MarkdownMessage } from "./markdown-message";
 import { PlaybookPicker } from "./playbook-picker";
 import { RagCitationBadges } from "./rag-citation-badges";
+import { ShareDialog } from "./share-dialog";
+import { toShareMessages } from "@/lib/share";
 
 interface UiMessage {
   role: "user" | "assistant";
@@ -135,6 +137,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
   const [statusClock, setStatusClock] = useState(0);
   const [tabRole, setTabRole] = useState<TabSessionRole>("active");
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const relayRef = useRef<RelayClient | null>(null);
   const tabSessionRef = useRef<TabSessionManager | null>(null);
   const hasConnectedRef = useRef(false);
@@ -238,6 +241,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     const tree = migrateLegacySession(hostId, legacyMessages);
     applyTree(tree);
     setActiveContextIds(loadActiveContextIds(hostId));
+    setThinkingMode(loadThinkingMode(hostId));
     try {
       const raw = sessionStorage.getItem(projectKey(hostId));
       setActiveProjectId(raw ? (JSON.parse(raw) as string) : null);
@@ -261,6 +265,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   useEffect(() => {
     sessionStorage.setItem(contextKey(hostId), JSON.stringify(activeContextIds));
   }, [hostId, activeContextIds]);
+
+  useEffect(() => {
+    localStorage.setItem(thinkingModeKey(hostId), thinkingMode ? "1" : "0");
+  }, [hostId, thinkingMode]);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -372,15 +380,23 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       },
       onHostStatus: (status) => setHostStatus(status),
       onCitations: attachCitations,
+      onThinkingDelta: (thinking) => {
+        thinkingBuffer.current += thinking;
+        setMessages((prev) =>
+          commitAssistantTurn(prev, assistantBuffer.current, thinkingBuffer.current),
+        );
+      },
       onDelta: (content) => {
         assistantBuffer.current += content;
-        const snapshot = assistantBuffer.current;
-        setMessages((prev) => commitAssistantTurn(prev, snapshot));
+        setMessages((prev) =>
+          commitAssistantTurn(prev, assistantBuffer.current, thinkingBuffer.current),
+        );
       },
       onDone: () => {
-        const snapshot = assistantBuffer.current;
-        if (snapshot.trim() && assistantMessageIndex.current !== null) {
-          setMessages((prev) => commitAssistantTurn(prev, snapshot));
+        const content = assistantBuffer.current;
+        const thinking = thinkingBuffer.current;
+        if ((content.trim() || thinking.trim()) && assistantMessageIndex.current !== null) {
+          setMessages((prev) => commitAssistantTurn(prev, content, thinking));
         }
         setStreaming(false);
         activeRequestId.current = null;
@@ -390,9 +406,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         setError(msg);
         setStreaming(false);
         activeRequestId.current = null;
-        const snapshot = assistantBuffer.current;
-        if (snapshot.trim()) {
-          setMessages((prev) => commitAssistantTurn(prev, snapshot));
+        const content = assistantBuffer.current;
+        if (content.trim() || thinkingBuffer.current.trim()) {
+          setMessages((prev) =>
+            commitAssistantTurn(prev, content, thinkingBuffer.current),
+          );
         }
         clearAssistantTurn();
       },
@@ -710,6 +728,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setStreaming(true);
     setError(null);
     assistantBuffer.current = "";
+    thinkingBuffer.current = "";
     pendingCitations.current = undefined;
 
     const chatMessages: ChatMessage[] = newMessages.map((m) => ({
@@ -725,6 +744,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       undefined,
       activeProjectId ?? undefined,
       mentionScope,
+      thinkingMode,
     );
     activeRequestId.current = requestId ?? null;
   }
@@ -798,6 +818,15 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           >
             Exporter .md
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!isActiveTab || messages.length === 0 || streaming}
+            onClick={() => setShowShareDialog(true)}
+            title="Créer un lien temporaire en lecture seule (sans documents RAG)"
+          >
+            Partager
+          </Button>
           <span className={`text-sm ${headerStatus.className}`}>{headerStatus.label}</span>
         </div>
       </header>
@@ -830,6 +859,20 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   {m === defaultModel ? " (défaut)" : ""}
                 </option>
               ))}
+            </select>
+            <label htmlFor="thinking-mode" className="text-sm text-[var(--muted)]">
+              Mode
+            </label>
+            <select
+              id="thinking-mode"
+              value={thinkingMode ? "reflection" : "normal"}
+              onChange={(e) => setThinkingMode(e.target.value === "reflection")}
+              disabled={streaming || !isActiveTab}
+              className="rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+              title="Réflexion : modèles thinking Ollama (qwen3, deepseek-r1…)"
+            >
+              <option value="normal">Normal</option>
+              <option value="reflection">Réflexion</option>
             </select>
           </div>
 
@@ -868,7 +911,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               </Card>
             )}
             {messages.map((msg, i) => {
-              if (msg.role === "assistant" && !msg.content.trim()) {
+              if (msg.role === "assistant" && !msg.content.trim() && !msg.thinking?.trim()) {
                 return null;
               }
               return (
@@ -882,12 +925,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 >
                   {msg.role === "assistant" ? (
                     <>
-                      <MarkdownMessage
-                        content={msg.content}
-                        relay={relayRef.current}
-                        contextIds={activeContextIds}
-                        connected={connected}
-                      />
+                      {msg.thinking?.trim() && (
+                        <details
+                          className="mb-3 rounded border border-[var(--border)] bg-black/20 px-3 py-2 text-xs text-[var(--muted)]"
+                          open={streaming && i === messages.length - 1}
+                        >
+                          <summary className="cursor-pointer select-none font-medium text-brand-400">
+                            Chaîne de pensée
+                          </summary>
+                          <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap">
+                            {msg.thinking}
+                          </pre>
+                        </details>
+                      )}
+                      {msg.content.trim() && (
+                        <MarkdownMessage
+                          content={msg.content}
+                          relay={relayRef.current}
+                          contextIds={activeContextIds}
+                          connected={connected}
+                        />
+                      )}
                       {msg.citations && msg.citations.length > 0 && (
                         <RagCitationBadges citations={msg.citations} />
                       )}
@@ -909,7 +967,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               );
             })}
             {streaming && messages[messages.length - 1]?.role !== "assistant" && (
-              <p className="text-sm text-[var(--muted)]">Réflexion…</p>
+              <p className="text-sm text-[var(--muted)]">
+                {thinkingMode ? "Pensée en cours…" : "Réflexion…"}
+              </p>
             )}
             <div ref={messagesEndRef} />
           </div>
@@ -977,6 +1037,16 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           />
         )}
       </div>
+
+      {showShareDialog && (
+        <ShareDialog
+          hostId={hostId}
+          messages={toShareMessages(
+            messages.map((m) => ({ role: m.role, content: m.content })),
+          )}
+          onClose={() => setShowShareDialog(false)}
+        />
+      )}
     </main>
   );
 }
