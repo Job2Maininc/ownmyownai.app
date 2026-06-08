@@ -1,6 +1,6 @@
+use crate::process::command_hidden;
 use serde::Serialize;
 use std::path::Path;
-use std::process::Command;
 use sysinfo::{Disks, System};
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,9 +51,11 @@ fn detect_gpus() -> Vec<GpuInfo> {
 
 #[cfg(target_os = "windows")]
 fn detect_gpus_wmi() -> Option<Vec<GpuInfo>> {
-    let output = Command::new("powershell")
+    let output = command_hidden("powershell")
         .args([
             "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
             "-Command",
             "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json -Compress",
         ])

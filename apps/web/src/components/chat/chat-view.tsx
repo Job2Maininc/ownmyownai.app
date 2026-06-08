@@ -82,6 +82,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [activeContextIds, setActiveContextIds] = useState<string[]>([]);
   const [showContext, setShowContext] = useState(true);
   const [historyMeta, setHistoryMeta] = useState<ConversationMeta[]>([]);
+  const [conversationNotice, setConversationNotice] = useState<string | null>(null);
   const relayRef = useRef<RelayClient | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
@@ -183,7 +184,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     }
     setMessages([]);
     setError(null);
+    setInput("");
+    assistantBuffer.current = "";
+    activeRequestId.current = null;
+    setStreaming(false);
     sessionStorage.removeItem(storageKey(hostId));
+    setConversationNotice("Nouvelle conversation prête — posez votre première question.");
+    window.setTimeout(() => setConversationNotice(null), 4000);
   }
 
   function handleStop() {
@@ -329,6 +336,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <div ref={messagesEndRef} />
           </div>
 
+          {conversationNotice && (
+            <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
+          )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
           {hostBusy && !streaming && (
             <p className="mb-2 text-sm text-amber-400">

@@ -1,9 +1,11 @@
+use crate::process::command_hidden;
 use crate::settings::{resolved_default_model, resolved_models_dir, FALLBACK_DEFAULT_MODEL};
+use std::sync::Mutex;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
@@ -65,8 +67,28 @@ fn emit_progress_local(app: Option<&AppHandle>, progress: SetupProgress) {
     emit_progress(app, progress, None);
 }
 
+static OLLAMA_EXE_CACHE: Mutex<Option<Option<PathBuf>>> = Mutex::new(None);
+
+pub fn invalidate_ollama_exe_cache() {
+    *OLLAMA_EXE_CACHE.lock().unwrap() = None;
+}
+
 pub fn resolve_ollama_exe() -> Option<PathBuf> {
-    if Command::new("ollama")
+    let mut cache = OLLAMA_EXE_CACHE.lock().unwrap();
+    if cache.is_none() {
+        *cache = Some(resolve_ollama_exe_uncached());
+    }
+    cache.as_ref().unwrap().clone()
+}
+
+fn resolve_ollama_exe_uncached() -> Option<PathBuf> {
+    for path in ollama_install_paths() {
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    if command_hidden("ollama")
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -75,8 +97,7 @@ pub fn resolve_ollama_exe() -> Option<PathBuf> {
         return Some(PathBuf::from("ollama"));
     }
 
-    let candidates = ollama_install_paths();
-    candidates.into_iter().find(|p| p.is_file())
+    None
 }
 
 fn ollama_install_paths() -> Vec<PathBuf> {
@@ -95,17 +116,6 @@ fn ollama_install_paths() -> Vec<PathBuf> {
 
 fn models_dir_env() -> String {
     resolved_models_dir().to_string_lossy().into_owned()
-}
-
-fn command_hidden(program: impl AsRef<std::ffi::OsStr>) -> Command {
-    let mut cmd = Command::new(program);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd
 }
 
 fn run_ollama(args: &[&str]) -> Result<Output, String> {
@@ -423,6 +433,8 @@ async fn install_ollama_via_setup(setup_path: &Path, app: Option<&AppHandle>) ->
         return Err("L'installateur Ollama a échoué".into());
     }
 
+    invalidate_ollama_exe_cache();
+
     for i in 0..45 {
         if resolve_ollama_exe().is_some() {
             emit_progress_local(
@@ -503,6 +515,8 @@ async fn install_ollama_via_winget(app: Option<&AppHandle>) -> Result<(), String
     if !status.success() {
         return Err("winget n'a pas pu installer Ollama".into());
     }
+
+    invalidate_ollama_exe_cache();
 
     for i in 0..30 {
         if resolve_ollama_exe().is_some() {

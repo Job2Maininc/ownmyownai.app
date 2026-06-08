@@ -1,6 +1,7 @@
 mod context;
 mod credentials;
 mod hardware;
+mod process;
 mod host_status;
 mod ollama;
 mod relay;

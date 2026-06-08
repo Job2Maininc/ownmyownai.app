@@ -55,6 +55,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [copied, setCopied] = useState(false);
   const [unpairing, setUnpairing] = useState(false);
   const [tab, setTab] = useState<DashboardTab>("status");
+  const [openError, setOpenError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -88,6 +89,15 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
     await navigator.clipboard.writeText(status.hostId);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function openInBrowser(path: string) {
+    setOpenError(null);
+    try {
+      await open(path);
+    } catch (e) {
+      setOpenError(`Impossible d'ouvrir le navigateur : ${String(e)}`);
+    }
   }
 
   async function handleUnpair() {
@@ -271,11 +281,16 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
       )}
 
       <div className="dashboard__actions">
+        {openError ? (
+          <p className="error-banner" role="alert">
+            {openError}
+          </p>
+        ) : null}
         <button
           type="button"
           className="btn-primary"
           style={{ width: "100%" }}
-          onClick={() => open(`${appUrl}/dashboard`)}
+          onClick={() => void openInBrowser(`${appUrl}/dashboard`)}
         >
           Ouvrir le tableau de bord web
         </button>
@@ -283,7 +298,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
           type="button"
           className="btn-secondary"
           style={{ width: "100%" }}
-          onClick={() => open(`${appUrl}/chat/${status?.hostId ?? ""}`)}
+          onClick={() => void openInBrowser(`${appUrl}/chat/${status?.hostId ?? ""}`)}
           disabled={!status?.hostId}
         >
           Nouveau chat
