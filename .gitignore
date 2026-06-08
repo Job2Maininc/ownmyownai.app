@@ -6,7 +6,22 @@ dist
 .env
 .env.local
 *.local
-target
-apps/runner/src-tauri/target
 .DS_Store
 .vercel
+
+# Rust / Cargo
+target/
+**/target/
+**/target-*/
+.cargo-home-isolated/
+.cargo-isolated/
+**/.cargo-cache-notif/
+**/.cargo-home-diff/
+cargo-check-*.log
+cargo-check-out.txt
+cargo-um-check.log
+target-cargo-check.log
+ss-check.txt
+
+# TypeScript
+*.tsbuildinfo
