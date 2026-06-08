@@ -147,6 +147,14 @@
 - [x] Protocole WS `pr.review` / `pr.review.done` dans `packages/protocol`
 - [x] `cargo check` dans `apps/runner/src-tauri`
 
+## Historique complet Host (omoa-host-chat-history)
+
+- [x] SQLite local `%LOCALAPPDATA%\OwnMyOwnAI\chat_history.db` (threads + messages)
+- [x] Protocole WS `history.list` / `history.get` / `history.save` / `history.delete`
+- [x] Persistance auto à la fin du streaming (`threadId` dans `chat.start`)
+- [x] Web : fermer le navigateur puis rouvrir → fil rechargé depuis le Host
+- [x] `cargo check` dans `apps/runner/src-tauri`
+
 ## Branches de conversation (omoa-conversation-branches)
 
 - [x] Fork depuis le message N sans écraser le fil principal (Host SQLite + cache web)
