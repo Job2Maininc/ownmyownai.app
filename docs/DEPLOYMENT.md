@@ -71,9 +71,11 @@ Utilisez le **même** `RELAY_JWT_SECRET` que dans Supabase.
 
 ---
 
-## Runner Windows — téléchargement
+## Runner Windows — téléchargement et mises à jour auto
 
-Sur `/download`, le bouton appelle **`/api/download`** : le site envoie le ZIP portable (récupéré depuis la dernière release GitHub).
+Sur `/download`, le bouton principal appelle **`/api/download-installer`** (installateur NSIS avec mises à jour automatiques). Le ZIP portable reste disponible en lien secondaire.
+
+Voir [AUTO_UPDATE.md](./AUTO_UPDATE.md) pour les secrets `TAURI_SIGNING_PRIVATE_KEY` et le manifeste `latest.json`.
 
 La CI publie `OwnMyOwnAI-Host-portable-x64.zip` sur **GitHub Releases** (tag `v*`).
 

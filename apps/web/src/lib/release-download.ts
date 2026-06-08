@@ -1,6 +1,7 @@
 const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 
 export const PORTABLE_ZIP_FILENAME = "OwnMyOwnAI-Host-portable-x64.zip";
+export const INSTALLER_FILENAME = "OwnMyOwnAI-Host-setup.exe";
 
 export type PortableZipAsset = {
   name: string;
@@ -20,10 +21,56 @@ type Release = {
   }[];
 };
 
-function supabasePublicZipUrl(): string | null {
+function supabasePublicBase(): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base) return null;
-  return `${base}/storage/v1/object/public/host-releases/latest/${PORTABLE_ZIP_FILENAME}`;
+  return `${base}/storage/v1/object/public/host-releases/latest`;
+}
+
+function supabasePublicZipUrl(): string | null {
+  const root = supabasePublicBase();
+  if (!root) return null;
+  return `${root}/${PORTABLE_ZIP_FILENAME}`;
+}
+
+export function supabasePublicInstallerUrl(): string | null {
+  const root = supabasePublicBase();
+  if (!root) return null;
+  return `${root}/${INSTALLER_FILENAME}`;
+}
+
+export async function resolveInstallerUrl(): Promise<string | null> {
+  const envUrl = process.env.NEXT_PUBLIC_RUNNER_INSTALLER_URL;
+  if (envUrl?.endsWith(".exe")) return envUrl;
+
+  const supabase = supabasePublicInstallerUrl();
+  if (supabase) {
+    try {
+      const head = await fetch(supabase, { method: "HEAD", next: { revalidate: 60 } });
+      if (head.ok) return supabase;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
+      { headers: githubAuthHeaders(), next: { revalidate: 120 } },
+    );
+    if (!res.ok) return null;
+    const releases = (await res.json()) as Release[];
+    for (const release of releases) {
+      const setup = release.assets?.find(
+        (a) => a.name.endsWith("-setup.exe") && !a.name.includes("nsis"),
+      );
+      if (setup) return setup.browser_download_url;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export async function resolveSupabaseZipUrl(): Promise<string | null> {

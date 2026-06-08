@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OwnMyOwnAI Host",
-  "version": "0.1.0",
+  "version": "0.1.16",
   "identifier": "app.ownmyownai.runner",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "windows": {
       "webviewInstallMode": {
@@ -46,6 +47,16 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "active": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwOTAyNzkyRjI1QzM3MkYKUldRdk4xenlraWVROEtsUHNRZW8vQW9xWC9GZW9OcDB0eXMydUhTZFAxbTE1UTZ6ZDlMdFd2OUMK",
+      "endpoints": [
+        "https://jcknolulyrsvcwvttaed.supabase.co/storage/v1/object/public/host-releases/latest/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -18,7 +18,8 @@ export default async function DownloadPage({
       <Card>
         <h1 className="mb-2 text-2xl font-bold">Télécharger OwnMyOwnAI Host</h1>
         <p className="mb-6 text-[var(--muted)]">
-          Windows 10+, 8 Go RAM recommandés. Un fichier ZIP — extrayez-le, puis lancez l&apos;exe.
+          Windows 10+, 8 Go RAM recommandés. Installez via l&apos;installateur pour recevoir les
+          mises à jour automatiquement.
         </p>
 
         {error && (
@@ -30,8 +31,8 @@ export default async function DownloadPage({
         <DownloadButton />
 
         <ol className="mt-8 list-decimal space-y-2 pl-5 text-sm text-[var(--muted)]">
-          <li>Téléchargez et extrayez le ZIP</li>
-          <li>Lancez OwnMyOwnAI Host.exe</li>
+          <li>Téléchargez et lancez l&apos;installateur</li>
+          <li>Ouvrez OwnMyOwnAI Host depuis le menu Démarrer</li>
           <li>
             <Link href="/login" className="text-brand-500 hover:underline">
               Connectez-vous

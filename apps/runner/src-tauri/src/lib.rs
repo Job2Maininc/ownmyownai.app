@@ -7,6 +7,7 @@ mod ollama;
 mod relay;
 mod settings;
 mod tray;
+mod updater;
 
 use credentials::{delete_credentials, get_credentials, save_credentials, StoredCredentials};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
@@ -204,6 +205,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             open_url_cmd,
             check_ollama_cmd,
@@ -247,6 +249,7 @@ pub fn run() {
                     let _ = start_background_services(None).await;
                 }
             });
+            updater::start_auto_updater(&app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())
