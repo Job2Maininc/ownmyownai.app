@@ -3,7 +3,7 @@ use crate::host_status::{
     self, session_ended, session_started, set_heartbeat_error, set_heartbeat_ok,
     set_relay_connected, set_relay_error,
 };
-use crate::ollama::{ensure_ollama_running, stream_chat};
+use crate::ollama::{default_model, ensure_ollama_running, stream_chat};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -195,10 +195,11 @@ async fn handle_chat_start_inner(
     let _ = ensure_ollama_running(None).await;
 
     let payload = &envelope.payload;
+    let fallback_model = default_model();
     let model = payload
         .get("model")
         .and_then(|m| m.as_str())
-        .unwrap_or("llama3.2:3b");
+        .unwrap_or(fallback_model.as_str());
     let messages = payload
         .get("messages")
         .and_then(|m| m.as_array())

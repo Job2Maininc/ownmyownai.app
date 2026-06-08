@@ -2,12 +2,14 @@ mod credentials;
 mod host_status;
 mod ollama;
 mod relay;
+mod settings;
 mod tray;
 
 use credentials::{get_credentials, save_credentials, StoredCredentials};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
-use ollama::{check_ollama, ensure_ollama_running, pull_model, OllamaStatus};
+use ollama::{check_ollama, ensure_ollama_running, pull_model, pull_models, OllamaStatus};
 use relay::start_background_services;
+use settings::{default_ollama_models_path, get_settings, save_settings, HostSettings};
 use serde::Deserialize;
 
 #[tauri::command(rename = "check_ollama")]
@@ -23,6 +25,26 @@ async fn ensure_ollama_running_cmd(app: tauri::AppHandle) -> Result<(), String> 
 #[tauri::command(rename = "pull_model")]
 async fn pull_model_cmd(app: tauri::AppHandle, model: String) -> Result<(), String> {
     pull_model(&model, Some(&app)).await
+}
+
+#[tauri::command(rename = "pull_models")]
+async fn pull_models_cmd(app: tauri::AppHandle, models: Vec<String>) -> Result<(), String> {
+    pull_models(&models, Some(&app)).await
+}
+
+#[tauri::command(rename = "get_host_settings")]
+fn get_host_settings_cmd() -> Result<HostSettings, String> {
+    get_settings()
+}
+
+#[tauri::command(rename = "save_host_settings")]
+fn save_host_settings_cmd(settings: HostSettings) -> Result<(), String> {
+    save_settings(&settings)
+}
+
+#[tauri::command(rename = "get_default_models_dir")]
+fn get_default_models_dir_cmd() -> String {
+    default_ollama_models_path().to_string_lossy().into_owned()
 }
 
 #[tauri::command(rename = "get_credentials")]
@@ -92,10 +114,15 @@ fn get_host_status_cmd() -> Result<HostStatusSnapshot, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             check_ollama_cmd,
             ensure_ollama_running_cmd,
             pull_model_cmd,
+            pull_models_cmd,
+            get_host_settings_cmd,
+            save_host_settings_cmd,
+            get_default_models_dir_cmd,
             get_credentials_cmd,
             complete_pairing_cmd,
             start_background_services_cmd,

@@ -3,16 +3,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
 import Dashboard from "./components/Dashboard";
-import type { OllamaStatus, StoredCredentials } from "./types";
+import InstallProgress from "./components/InstallProgress";
+import ModelSetup from "./components/ModelSetup";
+import type { HostSettings, OllamaStatus, SetupProgress, StoredCredentials } from "./types";
 
-type Step = "welcome" | "ollama" | "pairing" | "online";
+type Step = "welcome" | "models" | "ollama" | "pairing" | "online";
 
-const DEFAULT_MODEL = "llama3.2:3b";
+function modelIsPresent(installed: string[], modelId: string): boolean {
+  const base = modelId.split(":")[0];
+  return installed.some(
+    (m) => m === modelId || m.startsWith(`${modelId}:`) || m.startsWith(`${base}:`),
+  );
+}
 
 export default function App() {
   const [step, setStep] = useState<Step>("welcome");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [pullProgress, setPullProgress] = useState("");
+  const [progress, setProgress] = useState<SetupProgress | null>(null);
+  const [hostSettings, setHostSettings] = useState<HostSettings | null>(null);
   const [pairingCode, setPairingCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [, setCredentials] = useState<StoredCredentials | null>(null);
@@ -50,30 +58,38 @@ export default function App() {
   }, [loadCredentials]);
 
   useEffect(() => {
-    const unlisten = listen<string>("ollama-setup-progress", (event) => {
-      setPullProgress(event.payload);
+    const unlisten = listen<SetupProgress>("ollama-progress", (event) => {
+      setProgress(event.payload);
     });
     return () => {
       unlisten.then((fn) => fn());
     };
   }, []);
 
-  async function handleWelcomeNext() {
+  async function runInstallation(settings: HostSettings) {
     setStep("ollama");
     setError(null);
-    setPullProgress("Préparation de l'IA locale…");
+    setProgress({
+      phase: "ollama_start",
+      message: "Préparation de l'IA locale…",
+      percent: null,
+      bytesDownloaded: null,
+      bytesTotal: null,
+      currentModel: null,
+      modelIndex: null,
+      modelCount: null,
+    });
 
     try {
       await invoke("ensure_ollama_running");
       let status = await checkOllama();
 
-      const hasModel =
-        status?.models?.some(
-          (m) => m === DEFAULT_MODEL || m.startsWith(`${DEFAULT_MODEL}:`),
-        ) ?? false;
+      const missing = settings.selectedModels.filter(
+        (model) => !modelIsPresent(status?.models ?? [], model),
+      );
 
-      if (!hasModel) {
-        await invoke("pull_model", { model: DEFAULT_MODEL });
+      if (missing.length > 0) {
+        await invoke("pull_models", { models: missing });
         status = await checkOllama();
       }
 
@@ -82,7 +98,16 @@ export default function App() {
         return;
       }
 
-      setPullProgress("Prêt !");
+      setProgress({
+        phase: "model_pull",
+        message: "Prêt !",
+        percent: 100,
+        bytesDownloaded: null,
+        bytesTotal: null,
+        currentModel: null,
+        modelIndex: null,
+        modelCount: null,
+      });
       setStep("pairing");
     } catch (e) {
       setError(String(e));
@@ -108,59 +133,53 @@ export default function App() {
     await open(`${appUrl}/host/link`);
   }
 
-  const stepIndex = { welcome: 0, ollama: 1, pairing: 2, online: 3 }[step];
-  const progressWidth = pullProgress.includes("Prêt")
-    ? "100%"
-    : pullProgress
-      ? "60%"
-      : "20%";
-
+  const stepIndex = { welcome: 0, models: 1, ollama: 2, pairing: 3, online: 4 }[step];
   const showSteps = step !== "online";
 
   return (
     <main className={`app ${step === "online" ? "app--dashboard" : ""}`}>
       {showSteps && (
         <div className="steps">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className={`step ${i <= stepIndex ? "active" : ""}`} />
           ))}
         </div>
       )}
 
-      <div className={step === "online" ? "card card--wide" : "card"}>
+      <div className={step === "online" ? "card card--wide" : "card card--setup"}>
         {step === "welcome" && (
           <>
             <h1>OwnMyOwnAI Host</h1>
             <p className="muted">
-              Tout s&apos;installe automatiquement : Ollama, le modèle IA, puis la liaison avec votre compte.
-              Prévoyez ~8 Go de RAM et ~10 Go d&apos;espace disque.
+              Installez Ollama, choisissez vos modèles IA et liez ce PC à votre compte.
+              Vous pourrez suivre la progression des téléchargements étape par étape.
             </p>
             <button
               type="button"
               className="btn-primary"
               style={{ width: "100%", marginTop: 16 }}
-              onClick={handleWelcomeNext}
+              onClick={() => {
+                setError(null);
+                setStep("models");
+              }}
             >
               Commencer
             </button>
           </>
         )}
 
+        {step === "models" && (
+          <ModelSetup
+            error={error}
+            onContinue={(settings) => {
+              setHostSettings(settings);
+              void runInstallation(settings);
+            }}
+          />
+        )}
+
         {step === "ollama" && (
-          <>
-            <h1>Préparation de l&apos;IA</h1>
-            {pullProgress && <p>{pullProgress}</p>}
-            {ollamaStatus && (
-              <p className="muted" style={{ fontSize: 14 }}>
-                {ollamaStatus.running ? "Moteur IA actif" : "Installation ou démarrage…"}
-                {ollamaStatus.models.length > 0 &&
-                  ` · ${ollamaStatus.models.length} modèle(s)`}
-              </p>
-            )}
-            <div className="progress">
-              <div className="progress-bar" style={{ width: progressWidth }} />
-            </div>
-          </>
+          <InstallProgress progress={progress} ollamaStatus={ollamaStatus} />
         )}
 
         {step === "pairing" && (
@@ -173,6 +192,12 @@ export default function App() {
               <br />
               3. Entrez le code ci-dessous
             </p>
+            {hostSettings && (
+              <p className="muted pairing-recap">
+                Modèle par défaut :{" "}
+                <code className="inline-code">{hostSettings.defaultModel}</code>
+              </p>
+            )}
             <button
               type="button"
               className="btn-secondary"
@@ -209,7 +234,7 @@ export default function App() {
 
         {step === "online" && <Dashboard appUrl={appUrl} />}
 
-        {error && step !== "online" && (
+        {error && step !== "online" && step !== "models" && (
           <p className="error-banner">{error}</p>
         )}
       </div>

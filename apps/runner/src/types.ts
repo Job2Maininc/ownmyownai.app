@@ -10,6 +10,23 @@ export interface StoredCredentials {
   supabase_url?: string;
 }
 
+export interface HostSettings {
+  modelsDir: string;
+  selectedModels: string[];
+  defaultModel: string;
+}
+
+export interface SetupProgress {
+  phase: string;
+  message: string;
+  percent: number | null;
+  bytesDownloaded: number | null;
+  bytesTotal: number | null;
+  currentModel: string | null;
+  modelIndex: number | null;
+  modelCount: number | null;
+}
+
 export interface HostStatusSnapshot {
   hostId: string | null;
   ollamaInstalled: boolean;
