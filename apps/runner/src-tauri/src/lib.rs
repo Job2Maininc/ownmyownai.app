@@ -74,12 +74,13 @@ async fn complete_pairing_cmd(
         supabase_url: Some(supabase_url.trim_end_matches('/').to_string()),
     };
     save_credentials(&creds)?;
+    start_background_services(Some(creds.clone())).await?;
     Ok(creds)
 }
 
 #[tauri::command(rename = "start_background_services")]
 async fn start_background_services_cmd() -> Result<(), String> {
-    start_background_services().await
+    start_background_services(None).await
 }
 
 #[tauri::command(rename = "get_host_status")]
@@ -106,7 +107,7 @@ pub fn run() {
             tray::set_tooltip(app.handle(), &host_status::tray_tooltip(&build_snapshot()));
             tauri::async_runtime::spawn(async move {
                 if get_credentials().ok().flatten().is_some() {
-                    let _ = start_background_services().await;
+                    let _ = start_background_services(None).await;
                 }
             });
             Ok(())

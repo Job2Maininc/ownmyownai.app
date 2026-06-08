@@ -1,8 +1,36 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 const SERVICE: &str = "app.ownmyownai.runner";
 const ACCOUNT: &str = "default";
+const APP_DIR: &str = "OwnMyOwnAI";
+const CREDENTIALS_FILE: &str = "credentials.json";
+
+fn credentials_file_path() -> Result<PathBuf, String> {
+    dirs::data_local_dir()
+        .map(|dir| dir.join(APP_DIR).join(CREDENTIALS_FILE))
+        .ok_or_else(|| "Impossible de résoudre le dossier de données local".into())
+}
+
+fn read_credentials_file() -> Result<Option<StoredCredentials>, String> {
+    let path = credentials_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let creds: StoredCredentials = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    Ok(Some(creds))
+}
+
+fn write_credentials_file(json: &str) -> Result<(), String> {
+    let path = credentials_file_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, json).map_err(|e| e.to_string())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredCredentials {
@@ -33,10 +61,17 @@ pub fn resolve_supabase_url(creds: &StoredCredentials) -> Result<String, String>
 
 pub fn save_credentials(creds: &StoredCredentials) -> Result<(), String> {
     let json = serde_json::to_string(creds).map_err(|e| e.to_string())?;
-    Entry::new(SERVICE, ACCOUNT)
+
+    let keyring_result = Entry::new(SERVICE, ACCOUNT)
         .map_err(|e| e.to_string())?
-        .set_password(&json)
-        .map_err(|e| e.to_string())
+        .set_password(&json);
+
+    if keyring_result.is_ok() {
+        let _ = write_credentials_file(&json);
+        return Ok(());
+    }
+
+    write_credentials_file(&json)
 }
 
 pub fn get_credentials() -> Result<Option<StoredCredentials>, String> {
@@ -44,18 +79,27 @@ pub fn get_credentials() -> Result<Option<StoredCredentials>, String> {
     match entry.get_password() {
         Ok(json) => {
             let creds: StoredCredentials = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-            Ok(Some(creds))
+            return Ok(Some(creds));
         }
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
+        Err(keyring::Error::NoEntry) => {}
+        Err(e) => eprintln!("Keyring indisponible, repli fichier: {e}"),
     }
+
+    read_credentials_file()
 }
 
 pub fn delete_credentials() -> Result<(), String> {
     let entry = Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())?;
     match entry.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
+        Ok(()) => {}
+        Err(keyring::Error::NoEntry) => {}
+        Err(e) => eprintln!("Keyring delete: {e}"),
     }
+
+    let path = credentials_file_path()?;
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

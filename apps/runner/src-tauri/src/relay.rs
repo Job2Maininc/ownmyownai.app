@@ -30,8 +30,13 @@ struct WsEnvelope {
     requestId: Option<String>,
 }
 
-pub async fn start_background_services() -> Result<(), String> {
-    let creds = get_credentials()?.ok_or("Pas de credentials — pairing requis")?;
+pub async fn start_background_services(
+    creds_override: Option<StoredCredentials>,
+) -> Result<(), String> {
+    let creds = match creds_override {
+        Some(creds) => creds,
+        None => get_credentials()?.ok_or("Pas de credentials — pairing requis")?,
+    };
     let supabase_url = resolve_supabase_url(&creds)?;
 
     if SERVICES_RUNNING.swap(true, Ordering::SeqCst) {

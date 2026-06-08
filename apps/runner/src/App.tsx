@@ -98,7 +98,6 @@ export default function App() {
         supabaseUrl,
       });
       setCredentials(result);
-      await invoke("start_background_services");
       setStep("online");
     } catch (e) {
       setError(String(e));
