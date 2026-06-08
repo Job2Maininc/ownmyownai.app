@@ -1,9 +1,51 @@
+use crate::context::ContextLimits;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 const APP_DIR: &str = "OwnMyOwnAI";
 const SETTINGS_FILE: &str = "settings.json";
 pub const FALLBACK_DEFAULT_MODEL: &str = "llama3.2:3b";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextLimitsSettings {
+    #[serde(default = "default_max_bases")]
+    pub max_bases: u32,
+    #[serde(default = "default_max_docs_per_base")]
+    pub max_docs_per_base: u32,
+    #[serde(default = "default_max_file_mb")]
+    pub max_file_mb: u32,
+}
+
+fn default_max_bases() -> u32 {
+    10
+}
+fn default_max_docs_per_base() -> u32 {
+    50
+}
+fn default_max_file_mb() -> u32 {
+    10
+}
+
+impl Default for ContextLimitsSettings {
+    fn default() -> Self {
+        Self {
+            max_bases: default_max_bases(),
+            max_docs_per_base: default_max_docs_per_base(),
+            max_file_mb: default_max_file_mb(),
+        }
+    }
+}
+
+impl From<&ContextLimitsSettings> for ContextLimits {
+    fn from(s: &ContextLimitsSettings) -> Self {
+        Self {
+            max_bases: s.max_bases,
+            max_docs_per_base: s.max_docs_per_base,
+            max_file_mb: s.max_file_mb,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +56,23 @@ pub struct HostSettings {
     pub selected_models: Vec<String>,
     #[serde(default = "default_model_id")]
     pub default_model: String,
+    #[serde(default)]
+    pub context_limits: ContextLimitsSettings,
+    /// Si true, plusieurs onglets web peuvent chatter en parallèle sur ce host.
+    #[serde(default)]
+    pub allow_multi_session: bool,
+    #[serde(default = "default_rag_top_k")]
+    pub rag_top_k: u32,
+    #[serde(default = "default_rag_chunk_tokens")]
+    pub rag_chunk_tokens: u32,
+}
+
+fn default_rag_top_k() -> u32 {
+    5
+}
+
+fn default_rag_chunk_tokens() -> u32 {
+    400
 }
 
 fn default_models_dir() -> String {
@@ -36,8 +95,36 @@ impl Default for HostSettings {
             models_dir: default_models_dir(),
             selected_models: default_selected_models(),
             default_model: default_model_id(),
+            context_limits: ContextLimitsSettings::default(),
+            allow_multi_session: false,
+            rag_top_k: default_rag_top_k(),
+            rag_chunk_tokens: default_rag_chunk_tokens(),
         }
     }
+}
+
+pub fn resolved_context_limits() -> ContextLimits {
+    get_settings()
+        .map(|s| ContextLimits::from(&s.context_limits))
+        .unwrap_or_default()
+}
+
+pub fn allow_multi_session() -> bool {
+    get_settings()
+        .map(|s| s.allow_multi_session)
+        .unwrap_or(false)
+}
+
+pub fn resolved_rag_top_k() -> usize {
+    get_settings()
+        .map(|s| s.rag_top_k.max(1) as usize)
+        .unwrap_or(5)
+}
+
+pub fn resolved_rag_chunk_tokens() -> usize {
+    get_settings()
+        .map(|s| s.rag_chunk_tokens.max(50) as usize)
+        .unwrap_or(400)
 }
 
 pub fn default_ollama_models_path() -> PathBuf {

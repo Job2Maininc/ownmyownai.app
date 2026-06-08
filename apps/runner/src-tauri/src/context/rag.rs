@@ -1,7 +1,6 @@
 use super::store::get_embeddings_for_bases;
 use crate::ollama::create_embedding;
-
-const TOP_K: usize = 5;
+use crate::settings::resolved_rag_top_k;
 
 pub async fn build_rag_context(kb_ids: &[String], query: &str) -> Result<Option<String>, String> {
     if kb_ids.is_empty() || query.trim().is_empty() {
@@ -22,9 +21,10 @@ pub async fn build_rag_context(kb_ids: &[String], query: &str) -> Result<Option<
 
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
+    let top_k = resolved_rag_top_k();
     let top: Vec<String> = scored
         .into_iter()
-        .take(TOP_K)
+        .take(top_k)
         .filter(|(score, _)| *score > 0.1)
         .map(|(_, c)| c)
         .collect();

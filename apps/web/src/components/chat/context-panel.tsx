@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ContextDocumentSummary, KnowledgeBaseSummary } from "@ownmyownai/protocol";
+import type {
+  ChunkPreview,
+  ContextDocumentSummary,
+  KnowledgeBaseSummary,
+} from "@ownmyownai/protocol";
 import type { RelayClient } from "@/lib/relay-client";
 import { Button } from "@/components/ui/button";
+import { ContextUploadSkeleton } from "./chat-skeleton";
 
 interface ContextPanelProps {
   relay: RelayClient | null;
@@ -38,6 +43,9 @@ export function ContextPanel({
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [chunksDocId, setChunksDocId] = useState<string | null>(null);
+  const [chunks, setChunks] = useState<ChunkPreview[]>([]);
+  const [chunksLoading, setChunksLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -90,6 +98,26 @@ export function ContextPanel({
       await refresh();
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  async function handleViewChunks(documentId: string) {
+    if (!relay) return;
+    if (chunksDocId === documentId) {
+      setChunksDocId(null);
+      setChunks([]);
+      return;
+    }
+    setChunksLoading(true);
+    setError(null);
+    try {
+      const list = await relay.getContextChunks(documentId);
+      setChunksDocId(documentId);
+      setChunks(list);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setChunksLoading(false);
     }
   }
 
@@ -163,25 +191,58 @@ export function ContextPanel({
             </p>
             {expandedId === kb.id && (
               <div className="mt-2">
-                <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] hover:border-brand-500">
-                  {uploading ? "Indexation…" : "Glisser-déposer ou cliquer (.txt, .md, .pdf)"}
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".txt,.md,.pdf"
-                    multiple
-                    disabled={uploading}
-                    onChange={(e) => void handleUpload(kb.id, e.target.files)}
-                  />
-                </label>
+                {uploading ? (
+                  <ContextUploadSkeleton />
+                ) : (
+                  <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] hover:border-brand-500">
+                    Glisser-déposer ou cliquer (.txt, .md, .pdf)
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".txt,.md,.pdf"
+                      multiple
+                      disabled={uploading}
+                      onChange={(e) => void handleUpload(kb.id, e.target.files)}
+                    />
+                  </label>
+                )}
                 <ul className="mt-2 space-y-1 text-xs">
                   {documents.map((d) => (
                     <li key={d.id}>
-                      {d.filename} — {d.status}
-                      {d.chunkCount > 0 && ` (${d.chunkCount} extraits)`}
+                      <div className="flex items-center gap-2">
+                        <span>
+                          {d.filename} — {d.status}
+                          {d.chunkCount > 0 && ` (${d.chunkCount} extraits)`}
+                        </span>
+                        {d.status === "ready" && d.chunkCount > 0 && (
+                          <button
+                            type="button"
+                            className="text-brand-400 hover:underline"
+                            onClick={() => void handleViewChunks(d.id)}
+                          >
+                            {chunksDocId === d.id ? "Masquer" : "Extraits"}
+                          </button>
+                        )}
+                      </div>
+                      {d.errorMessage && (
+                        <p className="text-red-400">{d.errorMessage}</p>
+                      )}
                     </li>
                   ))}
                 </ul>
+                {chunksLoading && (
+                  <p className="mt-2 text-xs text-[var(--muted)]">Chargement des extraits…</p>
+                )}
+                {chunksDocId && chunks.length > 0 && (
+                  <ol className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded border border-[var(--border)] p-2 text-xs">
+                    {chunks.map((c) => (
+                      <li key={c.id}>
+                        <span className="text-[var(--muted)]">#{c.index + 1}</span>{" "}
+                        {c.preview}
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
             )}
           </li>

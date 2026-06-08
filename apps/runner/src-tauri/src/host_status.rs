@@ -61,8 +61,13 @@ pub fn is_session_active() -> bool {
     ACTIVE_SESSIONS.load(Ordering::SeqCst) > 0
 }
 
-/// Returns false if a chat session is already active (V1: one chat at a time).
+/// Returns false if a chat session is already active (sauf si `allow_multi_session` dans settings).
 pub fn session_started() -> bool {
+    if crate::settings::allow_multi_session() {
+        ACTIVE_SESSIONS.fetch_add(1, Ordering::SeqCst);
+        emit_status();
+        return true;
+    }
     let prev = ACTIVE_SESSIONS.fetch_add(1, Ordering::SeqCst);
     if prev > 0 {
         ACTIVE_SESSIONS.fetch_sub(1, Ordering::SeqCst);

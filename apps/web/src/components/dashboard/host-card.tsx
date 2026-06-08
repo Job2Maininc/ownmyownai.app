@@ -12,6 +12,7 @@ import {
 } from "@/lib/host-status";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ModelPullPanel } from "./model-pull-panel";
 
 interface HostCardProps {
   host: Host;
@@ -26,6 +27,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [updatingModel, setUpdatingModel] = useState(false);
+  const [showPull, setShowPull] = useState(false);
 
   const installedModels = Array.isArray(host.installed_models) ? host.installed_models : [];
   const displayStatus = getHostDisplayStatus(host);
@@ -188,6 +190,24 @@ export function HostCard({ host: initialHost }: HostCardProps) {
               {m}
             </span>
           ))}
+        </div>
+      )}
+
+      {displayStatus === "online" && (
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-xs"
+            onClick={() => setShowPull((v) => !v)}
+          >
+            {showPull ? "Masquer téléchargement modèle" : "Télécharger un modèle"}
+          </Button>
+          {showPull && (
+            <div className="mt-2">
+              <ModelPullPanel hostId={host.id} onDone={() => router.refresh()} />
+            </div>
+          )}
         </div>
       )}
 

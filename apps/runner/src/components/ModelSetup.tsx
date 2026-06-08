@@ -19,6 +19,7 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const [defaultModel, setDefaultModel] = useState("llama3.2:3b");
   const [localError, setLocalError] = useState<string | null>(null);
   const [ramGb, setRamGb] = useState(8);
+  const [gpuLabel, setGpuLabel] = useState<string | null>(null);
   const [hideIncompatible, setHideIncompatible] = useState(false);
 
   const loadSettings = useCallback(async () => {
@@ -35,8 +36,20 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
 
   useEffect(() => {
     loadSettings();
-    void invoke<{ totalRamGb: number }>("get_hardware_info")
-      .then((h) => setRamGb(h.totalRamGb))
+    void invoke<{ totalRamGb: number; gpus?: { name: string; vramGb: number | null }[] }>(
+      "get_hardware_info",
+    )
+      .then((h) => {
+        setRamGb(h.totalRamGb);
+        const primary = h.gpus?.[0];
+        if (primary) {
+          setGpuLabel(
+            primary.vramGb != null
+              ? `${primary.name} (${primary.vramGb} Go VRAM)`
+              : primary.name,
+          );
+        }
+      })
       .catch(() => undefined);
   }, [loadSettings]);
 
@@ -107,6 +120,11 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         Sélectionnez les modèles à télécharger et l&apos;emplacement de stockage sur
         votre disque.
       </p>
+      {gpuLabel && (
+        <p className="muted" style={{ fontSize: 13 }}>
+          GPU détecté : <span className="gpu-badge gpu-badge--discrete">{gpuLabel}</span>
+        </p>
+      )}
 
       <label className="field-label" style={{ marginTop: 16 }}>
         Dossier des modèles

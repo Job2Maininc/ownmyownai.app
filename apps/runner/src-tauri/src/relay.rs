@@ -10,13 +10,14 @@ use crate::host_status::{
 };
 use crate::ollama::{
     default_model, disk_free_gb_for_models_dir, ensure_embedding_model, ensure_ollama_running,
-    list_installed_models, model_exists, pull_model, stream_chat,
+    list_installed_models, model_exists, pull_model, stream_chat, PullProgressCallback,
+    SetupProgress,
 };
-use crate::settings::resolved_default_model;
+use crate::settings::{resolved_context_limits, resolved_default_model};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -435,7 +436,7 @@ async fn handle_chat_start_inner(
 }
 
 fn context_limits() -> ContextLimits {
-    ContextLimits::default()
+    resolved_context_limits()
 }
 
 async fn send_ws_response(
@@ -482,7 +483,34 @@ async fn handle_model_pull(
     let _ = ensure_ollama_running(None).await;
     let model_owned = model.to_string();
     let request_id = envelope.requestId.clone();
-    match pull_model(&model_owned, None).await {
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SetupProgress>();
+    let progress_cb: PullProgressCallback = Arc::new(move |p| {
+        let _ = tx.send(p);
+    });
+
+    let pull_task = tokio::spawn(async move {
+        pull_model(&model_owned, None, Some(progress_cb)).await
+    });
+
+    while let Some(progress) = rx.recv().await {
+        let payload = serde_json::json!({
+            "model": progress.current_model,
+            "message": progress.message,
+            "percent": progress.percent,
+            "bytesDownloaded": progress.bytes_downloaded,
+            "bytesTotal": progress.bytes_total,
+        });
+        let _ = send_ws_response(
+            write,
+            "model.pull.progress",
+            payload,
+            &request_id,
+        )
+        .await;
+    }
+
+    match pull_task.await.map_err(|e| e.to_string())? {
         Ok(()) => {
             send_ws_response(
                 write,

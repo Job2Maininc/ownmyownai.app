@@ -3,9 +3,11 @@ import {
   serializeEnvelope,
   WS_MESSAGE_TYPES,
   type ChatMessage,
+  type ChunkPreview,
   type ContextDocumentSummary,
   type HostStatus,
   type KnowledgeBaseSummary,
+  type ModelPullProgressPayload,
   type WsEnvelope,
 } from "@ownmyownai/protocol";
 
@@ -311,16 +313,59 @@ export class RelayClient {
     });
   }
 
-  async pullModel(model: string): Promise<void> {
+  async pullModel(
+    model: string,
+    onProgress?: (progress: ModelPullProgressPayload) => void,
+  ): Promise<void> {
     const requestId = this.send(WS_MESSAGE_TYPES.MODEL_PULL, { model }) ?? "";
-    const env = await this.waitFor(
-      requestId,
-      [WS_MESSAGE_TYPES.MODEL_PULL_DONE, WS_MESSAGE_TYPES.MODEL_PULL_ERROR],
-      600_000,
-    );
-    if (env.type === WS_MESSAGE_TYPES.MODEL_PULL_ERROR) {
-      throw new Error((env.payload as { message?: string }).message ?? "Échec du téléchargement");
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error("Délai de téléchargement dépassé"));
+      }, 600_000);
+
+      this.pendingRequests.set(requestId, {
+        resolve: (env) => {
+          if (env.type === WS_MESSAGE_TYPES.MODEL_PULL_PROGRESS) {
+            onProgress?.(env.payload as ModelPullProgressPayload);
+            return;
+          }
+          clearTimeout(timer);
+          this.pendingRequests.delete(requestId);
+          if (env.type === WS_MESSAGE_TYPES.MODEL_PULL_DONE) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                (env.payload as { message?: string }).message ?? "Échec du téléchargement",
+              ),
+            );
+          }
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+        types: new Set([
+          WS_MESSAGE_TYPES.MODEL_PULL_PROGRESS,
+          WS_MESSAGE_TYPES.MODEL_PULL_DONE,
+          WS_MESSAGE_TYPES.MODEL_PULL_ERROR,
+        ]),
+      });
+    });
+  }
+
+  async getContextChunks(documentId: string): Promise<ChunkPreview[]> {
+    const requestId = this.send(WS_MESSAGE_TYPES.CONTEXT_CHUNKS, { documentId }) ?? "";
+    const env = await this.waitFor(requestId, [
+      WS_MESSAGE_TYPES.CONTEXT_CHUNKS,
+      WS_MESSAGE_TYPES.CONTEXT_ERROR,
+    ]);
+    if (env.type === WS_MESSAGE_TYPES.CONTEXT_ERROR) {
+      throw new Error((env.payload as { message?: string }).message ?? "Erreur");
     }
+    return ((env.payload as { chunks?: ChunkPreview[] }).chunks ?? []);
   }
 
   disconnect() {

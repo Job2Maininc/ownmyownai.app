@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
+
+pub type PullProgressCallback = Arc<dyn Fn(SetupProgress) + Send + Sync>;
 
 const OLLAMA_URL: &str = "http://127.0.0.1:11434";
 const OLLAMA_SETUP_URL: &str = "https://ollama.com/download/OllamaSetup.exe";
@@ -29,14 +32,21 @@ pub struct SetupProgress {
     pub model_count: Option<u32>,
 }
 
-fn emit_progress(app: Option<&AppHandle>, progress: SetupProgress) {
+fn emit_progress(
+    app: Option<&AppHandle>,
+    progress: SetupProgress,
+    extra: Option<&PullProgressCallback>,
+) {
     if let Some(handle) = app {
         let _ = handle.emit("ollama-progress", &progress);
+    }
+    if let Some(cb) = extra {
+        cb(progress);
     }
 }
 
 fn emit_message(app: Option<&AppHandle>, phase: &str, message: &str) {
-    emit_progress(
+    emit_progress_local(
         app,
         SetupProgress {
             phase: phase.into(),
@@ -49,6 +59,10 @@ fn emit_message(app: Option<&AppHandle>, phase: &str, message: &str) {
             model_count: None,
         },
     );
+}
+
+fn emit_progress_local(app: Option<&AppHandle>, progress: SetupProgress) {
+    emit_progress(app, progress, None);
 }
 
 pub fn resolve_ollama_exe() -> Option<PathBuf> {
@@ -206,7 +220,7 @@ async fn download_ollama_installer(dest: &Path, app: Option<&AppHandle>) -> Resu
             ),
         };
 
-        emit_progress(
+        emit_progress_local(
             app,
             SetupProgress {
                 phase: "ollama_download".into(),
@@ -223,7 +237,7 @@ async fn download_ollama_installer(dest: &Path, app: Option<&AppHandle>) -> Resu
 
     file.flush().await.map_err(|e| e.to_string())?;
 
-    emit_progress(
+    emit_progress_local(
         app,
         SetupProgress {
             phase: "ollama_download".into(),
@@ -445,11 +459,16 @@ fn parse_pull_progress_line(line: &str) -> Option<PullLineProgress> {
     }
 }
 
-pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), String> {
+pub async fn pull_model(
+    model: &str,
+    app: Option<&AppHandle>,
+    extra: Option<PullProgressCallback>,
+) -> Result<(), String> {
     ensure_ollama_running(app).await?;
 
     let exe = resolve_ollama_exe().ok_or_else(|| "Binaire Ollama introuvable".to_string())?;
     let models_dir = models_dir_env();
+    let extra_ref = extra.as_ref();
 
     emit_progress(
         app,
@@ -463,6 +482,7 @@ pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), Stri
             model_index: None,
             model_count: None,
         },
+        extra_ref,
     );
 
     let mut child = Command::new(&exe)
@@ -476,8 +496,10 @@ pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), Stri
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let model_name = model.to_string();
+    let extra_stdout = extra.clone();
+    let extra_stderr = extra.clone();
 
-    let read_progress = |stream: std::process::ChildStdout| {
+    let read_progress = |stream: std::process::ChildStdout, cb: Option<PullProgressCallback>| {
         let app_handle = app.cloned();
         let name = model_name.clone();
         std::thread::spawn(move || {
@@ -500,13 +522,14 @@ pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), Stri
                             model_index: None,
                             model_count: None,
                         },
+                        cb.as_ref(),
                     );
                 }
             }
         })
     };
 
-    let read_progress_stderr = |stream: std::process::ChildStderr| {
+    let read_progress_stderr = |stream: std::process::ChildStderr, cb: Option<PullProgressCallback>| {
         let app_handle = app.cloned();
         let name = model_name.clone();
         std::thread::spawn(move || {
@@ -529,14 +552,15 @@ pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), Stri
                             model_index: None,
                             model_count: None,
                         },
+                        cb.as_ref(),
                     );
                 }
             }
         })
     };
 
-    let stdout_handle = stdout.map(read_progress);
-    let stderr_handle = stderr.map(read_progress_stderr);
+    let stdout_handle = stdout.map(|s| read_progress(s, extra_stdout));
+    let stderr_handle = stderr.map(|s| read_progress_stderr(s, extra_stderr));
 
     let status = child.wait().map_err(|e| e.to_string())?;
 
@@ -562,6 +586,7 @@ pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), Stri
             model_index: None,
             model_count: None,
         },
+        extra_ref,
     );
     Ok(())
 }
@@ -569,7 +594,7 @@ pub async fn pull_model(model: &str, app: Option<&AppHandle>) -> Result<(), Stri
 pub async fn pull_models(models: &[String], app: Option<&AppHandle>) -> Result<(), String> {
     let total = models.len() as u32;
     for (index, model) in models.iter().enumerate() {
-        emit_progress(
+        emit_progress_local(
             app,
             SetupProgress {
                 phase: "model_pull".into(),
@@ -582,7 +607,7 @@ pub async fn pull_models(models: &[String], app: Option<&AppHandle>) -> Result<(
                 model_count: Some(total),
             },
         );
-        pull_model(model, app).await?;
+        pull_model(model, app, None).await?;
     }
     Ok(())
 }
@@ -640,7 +665,7 @@ pub async fn ensure_embedding_model(app: Option<&AppHandle>) -> Result<(), Strin
     if model_exists(EMBEDDING_MODEL) {
         return Ok(());
     }
-    pull_model(EMBEDDING_MODEL, app).await
+    pull_model(EMBEDDING_MODEL, app, None).await
 }
 
 pub fn default_model() -> String {

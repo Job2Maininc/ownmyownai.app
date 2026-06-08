@@ -9,11 +9,19 @@ import { RelayClient } from "@/lib/relay-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
+import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { MarkdownMessage } from "./markdown-message";
 
 interface UiMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+interface ConversationMeta {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
 }
 
 interface ChatViewProps {
@@ -28,6 +36,24 @@ function storageKey(hostId: string) {
 
 function contextKey(hostId: string) {
   return `context-active:${hostId}`;
+}
+
+function historyMetaKey(hostId: string) {
+  return `chat-history-meta:${hostId}`;
+}
+
+function loadHistoryMeta(hostId: string): ConversationMeta[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(historyMetaKey(hostId));
+    return raw ? (JSON.parse(raw) as ConversationMeta[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryMeta(hostId: string, items: ConversationMeta[]) {
+  localStorage.setItem(historyMetaKey(hostId), JSON.stringify(items.slice(0, 20)));
 }
 
 function loadMessages(hostId: string): UiMessage[] {
@@ -55,6 +81,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   );
   const [activeContextIds, setActiveContextIds] = useState<string[]>([]);
   const [showContext, setShowContext] = useState(true);
+  const [historyMeta, setHistoryMeta] = useState<ConversationMeta[]>([]);
   const relayRef = useRef<RelayClient | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
@@ -76,6 +103,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     hydrated.current = true;
     setMessages(loadMessages(hostId));
     setActiveContextIds(loadActiveContextIds(hostId));
+    setHistoryMeta(loadHistoryMeta(hostId));
   }, [hostId]);
 
   useEffect(() => {
@@ -141,6 +169,18 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const canSend = hostReachable && !hostOffline && (!hostBusy || streaming);
 
   function handleNewConversation() {
+    if (messages.length > 0) {
+      const firstUser = messages.find((m) => m.role === "user");
+      const entry: ConversationMeta = {
+        id: crypto.randomUUID(),
+        title: (firstUser?.content ?? "Conversation").slice(0, 60),
+        updatedAt: new Date().toISOString(),
+        messageCount: messages.length,
+      };
+      const next = [entry, ...historyMeta];
+      setHistoryMeta(next);
+      saveHistoryMeta(hostId, next);
+    }
     setMessages([]);
     setError(null);
     sessionStorage.removeItem(storageKey(hostId));
@@ -246,7 +286,21 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           )}
 
           <div className="flex-1 space-y-4 overflow-y-auto pb-4">
-            {messages.length === 0 && (
+            {relayStatus === "connecting" && <ChatConnectingSkeleton />}
+            {historyMeta.length > 0 && messages.length === 0 && (
+              <Card>
+                <p className="mb-2 text-sm font-medium">Conversations récentes (métadonnées locales)</p>
+                <ul className="space-y-1 text-xs text-[var(--muted)]">
+                  {historyMeta.slice(0, 5).map((h) => (
+                    <li key={h.id}>
+                      {h.title} — {h.messageCount} msg(s) —{" "}
+                      {new Date(h.updatedAt).toLocaleString("fr-FR")}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+            {messages.length === 0 && relayStatus === "connected" && (
               <Card>
                 <p className="text-center text-[var(--muted)]">
                   Posez une question — la réponse est générée sur votre PC.

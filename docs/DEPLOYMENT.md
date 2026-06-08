@@ -10,6 +10,8 @@
 
 Tables déployées : `profiles`, `hosts`, `host_credentials`, `pairing_requests`
 
+Voir aussi [SECURITY.md](./SECURITY.md) pour RLS, `host_credentials` et leaked password protection.
+
 Edge Functions déployées :
 - `create-pairing-code` (JWT requis)
 - `complete-pairing`

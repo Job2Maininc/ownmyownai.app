@@ -11,7 +11,7 @@ use credentials::{delete_credentials, get_credentials, save_credentials, StoredC
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
 use context::{
     create_knowledge_base, delete_knowledge_base, export_knowledge_base, import_knowledge_base,
-    init_context_db, list_documents, list_knowledge_bases, ContextLimits,
+    init_context_db, list_documents, list_knowledge_bases,
 };
 use hardware::get_hardware_info;
 use ollama::{
@@ -19,7 +19,9 @@ use ollama::{
     ensure_ollama_running, list_installed_models, pull_model, pull_models, OllamaStatus,
 };
 use relay::{start_background_services, stop_background_services};
-use settings::{default_ollama_models_path, get_settings, save_settings, HostSettings};
+use settings::{
+    default_ollama_models_path, get_settings, resolved_context_limits, save_settings, HostSettings,
+};
 use serde::Deserialize;
 
 #[tauri::command(rename = "check_ollama")]
@@ -34,7 +36,7 @@ async fn ensure_ollama_running_cmd(app: tauri::AppHandle) -> Result<(), String> 
 
 #[tauri::command(rename = "pull_model")]
 async fn pull_model_cmd(app: tauri::AppHandle, model: String) -> Result<(), String> {
-    pull_model(&model, Some(&app)).await
+    pull_model(&model, Some(&app), None).await
 }
 
 #[tauri::command(rename = "pull_models")]
@@ -163,7 +165,7 @@ fn list_knowledge_bases_cmd() -> Result<Vec<context::KnowledgeBase>, String> {
 #[tauri::command(rename = "create_knowledge_base")]
 fn create_knowledge_base_cmd(name: String, description: String) -> Result<context::KnowledgeBase, String> {
     init_context_db()?;
-    create_knowledge_base(&name, &description, &ContextLimits::default())
+    create_knowledge_base(&name, &description, &resolved_context_limits())
 }
 
 #[tauri::command(rename = "delete_knowledge_base")]
@@ -184,7 +186,7 @@ fn export_knowledge_base_cmd(kb_id: String, dest_path: String) -> Result<(), Str
 #[tauri::command(rename = "import_knowledge_base")]
 fn import_knowledge_base_cmd(zip_path: String) -> Result<context::KnowledgeBase, String> {
     init_context_db()?;
-    import_knowledge_base(&std::path::PathBuf::from(zip_path), &ContextLimits::default())
+    import_knowledge_base(&std::path::PathBuf::from(zip_path), &resolved_context_limits())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

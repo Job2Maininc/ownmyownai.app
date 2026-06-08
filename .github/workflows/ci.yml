@@ -33,6 +33,9 @@ jobs:
       - run: npm run build --workspace=@ownmyownai/web
       - run: npm run typecheck --workspace=@ownmyownai/relay
 
+      - name: Tests Vitest (protocol + web)
+        run: npm test
+
       - name: Check runner (Rust)
         working-directory: apps/runner/src-tauri
         run: cargo check

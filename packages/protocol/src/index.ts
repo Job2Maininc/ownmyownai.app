@@ -54,6 +54,7 @@ export const WS_MESSAGE_TYPES = {
   CHAT_CANCEL: "chat.cancel",
   HOST_STATUS: "host.status",
   MODEL_PULL: "model.pull",
+  MODEL_PULL_PROGRESS: "model.pull.progress",
   MODEL_PULL_DONE: "model.pull.done",
   MODEL_PULL_ERROR: "model.pull.error",
   CONTEXT_LIST: "context.list",
@@ -85,6 +86,21 @@ export interface ContextDocumentSummary {
   status: string;
   chunkCount: number;
   errorMessage?: string | null;
+}
+
+export interface ChunkPreview {
+  id: string;
+  documentId: string;
+  index: number;
+  preview: string;
+}
+
+export interface ModelPullProgressPayload {
+  model?: string;
+  message?: string;
+  percent?: number;
+  bytesDownloaded?: number;
+  bytesTotal?: number;
 }
 
 export function createEnvelope(

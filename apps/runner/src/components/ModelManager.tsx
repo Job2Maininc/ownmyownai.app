@@ -10,10 +10,18 @@ import {
 import { fetchOllamaRegistry, searchRegistry, type RegistryModel } from "../data/ollama-registry";
 import type { HostSettings, SetupProgress } from "../types";
 
+interface GpuInfo {
+  name: string;
+  vramGb: number | null;
+  kind: string;
+}
+
 interface HardwareInfo {
   totalRamGb: number;
   availableRamGb: number;
   cpuCores: number;
+  gpus: GpuInfo[];
+  hasDiscreteGpu: boolean;
 }
 
 interface ModelManagerProps {
@@ -123,7 +131,25 @@ export default function ModelManager({
       </div>
       {hardware && (
         <p className="muted panel__meta">
-          RAM système : {hardware.totalRamGb} Go · {hardware.cpuCores} cœurs
+          RAM : {hardware.totalRamGb} Go · {hardware.cpuCores} cœurs
+          {hardware.gpus.length > 0 && (
+            <>
+              {" · "}
+              {hardware.gpus.map((g) => (
+                <span
+                  key={g.name}
+                  className={`gpu-badge gpu-badge--${g.kind}`}
+                  title={g.vramGb != null ? `${g.vramGb} Go VRAM` : undefined}
+                >
+                  {g.name}
+                  {g.vramGb != null ? ` (${g.vramGb} Go)` : ""}
+                </span>
+              ))}
+            </>
+          )}
+          {hardware.hasDiscreteGpu && (
+            <span className="gpu-badge gpu-badge--discrete"> GPU dédié</span>
+          )}
         </p>
       )}
       <div className="model-filters">
