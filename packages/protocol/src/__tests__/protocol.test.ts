@@ -10,8 +10,12 @@ import {
   parseEnvelope,
   HistoryForkPayloadSchema,
   InlineEditPreviewRequestSchema,
+  McpCallPayloadSchema,
+  McpServerSummarySchema,
+  McpToolDescriptorSchema,
   PatchPreviewRequestSchema,
   PatchPreviewResponseSchema,
+  PlaybookRunPayloadSchema,
   RelayWebClientsPayloadSchema,
   ShareMessageSchema,
   TerminalExecPayloadSchema,
@@ -126,7 +130,6 @@ describe("protocol", () => {
   });
 
   it("parse playbook.run payload", () => {
-    const { PlaybookRunPayloadSchema } = require("../index");
     const payload = PlaybookRunPayloadSchema.parse({
       playbookId: "summarize-folder",
       contextIds: ["kb-1"],
@@ -223,8 +226,6 @@ describe("protocol", () => {
   });
 
   it("valide MCP list/call via relay", () => {
-    const { McpCallPayloadSchema, McpServerSummarySchema, McpToolDescriptorSchema } =
-      require("../index");
     const server = McpServerSummarySchema.parse({
       id: "builtin-fs",
       name: "Fichiers locaux",

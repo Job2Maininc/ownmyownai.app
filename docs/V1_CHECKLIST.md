@@ -25,8 +25,8 @@
 | 10 | Redémarrer Host → resync complet au lancement | |
 | 11 | Chat avec base active utilise le contenu à jour | |
 | 12 | Web affiche statut des sources liées (lecture seule) | |
-| 13 | Chat RAG affiche badges sources cliquables (fichier + extrait + score) | |
-| 13 | Instruction système par base : éditable Host, visible web, appliquée au prochain message | |
+| 13 | Chat RAG affiche badges sources cliquables (fichier + extrait + score) | `chat.citations` WS + `RagCitationBadges` web |
+| 13b | Instruction système par base : éditable Host, visible web, appliquée au prochain message | |
 | 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
 | 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
 | 16 | Partage conversation : lien temporaire, contenu seul (pas RAG) | |
@@ -161,6 +161,58 @@
 - [x] Protocole WS `history.fork` / `history.branches` dans `packages/protocol`
 - [x] UI web : bouton « Brancher ici » + sélecteur de branches
 - [x] Tests unitaires `conversation-store` (fork, switch, nouvelle racine)
+
+## Citations RAG (omoa-rag-citations)
+
+- [x] `chat.citations` WS avec source, extrait, score, chunkId
+- [x] Host : `build_rag_bundle_scoped` + émission avant streaming
+- [x] Web : badges cliquables `RagCitationBadges`
+
+## @mentions chat (omoa-chat-mentions)
+
+- [x] Parser `@base`, `@fichier`, `@dossier` côté web (`chat-mentions.ts`)
+- [x] `mentionScope` dans `chat.start` + résolution Host (`mentions.rs`)
+- [x] Tests unitaires web
+
+## Diff / apply patch (omoa-diff-apply)
+
+- [x] Preview unified diff sandboxé (`patch.preview` / `patch.previewed`)
+- [x] Application confirmée (`patch.apply` / `patch.applied`)
+- [x] Web : `DiffPatchPanel` + jamais d'écriture silencieuse
+
+## Playbooks (omoa-playbooks)
+
+- [x] Host : `playbook.list` / `playbook.run` (ex. summarize-folder)
+- [x] Protocole WS `PlaybookRunPayloadSchema`
+- [x] Web : `playbook-picker.tsx`
+
+## MCP servers (omoa-mcp-servers)
+
+- [x] Host : builtin-fs + serveurs stdio configurables
+- [x] WS `mcp.list` / `mcp.tools` / `mcp.call` / `mcp.result`
+- [x] Protocole `McpServerSummarySchema`, `McpCallPayloadSchema`
+
+## Résumé conversations (omoa-conversation-summary)
+
+- [x] Compaction auto si tokens > seuil (`conversation_summary.rs`)
+- [x] Réglages `chatTokenThreshold` / `chatRecentMessages` dans settings Host
+- [x] Injection résumé en message system avant chat relay
+
+## Mode air-gapped (omoa-air-gapped)
+
+- [x] `airGapped` dans settings Host — relay/heartbeat désactivés
+- [x] Chat local Host (`local_chat` Tauri + onglet Dashboard)
+- [x] Statut `airGapped` exposé dans `get_host_status`
+
+## Journal audit (omoa-audit-trail)
+
+- [x] Table audit + `list_audit_log` Tauri
+- [x] UI Host `AuditTrail.tsx`
+
+## Inline edit (omoa-inline-edit)
+
+- [x] WS `inline_edit.preview` / `inline_edit.apply` sur documents .md liés
+- [x] Web : `inline-edit-panel.tsx`
 
 ## Build local
 
