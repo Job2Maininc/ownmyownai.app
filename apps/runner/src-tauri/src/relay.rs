@@ -1,5 +1,5 @@
 use crate::context::{
-    apply_inline_edit, build_codebase_context, build_rag_context_scoped, create_knowledge_base,
+    apply_inline_edit, build_codebase_context, build_rag_bundle_scoped, create_knowledge_base,
     delete_document,
     delete_knowledge_base, extract_mentions_from_chat, find_relevant_image_paths, get_context_summary,
     ingest_document,
@@ -19,7 +19,7 @@ use crate::host_status::{
     self, session_ended, session_started, set_heartbeat_error, set_heartbeat_ok,
     set_relay_connected, set_relay_error,
 };
-use crate::agent::{review_git_diff, run_agent_loop, AgentConfig, PrReviewInput};
+use crate::agent::{review_git_diff, run_agent_loop, AgentConfig, PrReviewInput, apply_patch, preview_patch};
 use crate::model_routing::{resolve_chat_model, ChatTaskIntent};
 use crate::ollama::{
     default_model, disk_free_gb_for_models_dir, ensure_embedding_model, ensure_ollama_running,
@@ -37,7 +37,7 @@ use crate::user_memory::{add_fact, build_memory_context, delete_fact, memory_sta
 use crate::process::{
     clamp_timeout_secs, run_allowlisted_command, AllowlistedCommand, OutputStream,
 };
-use crate::settings::{resolved_context_limits, resolved_default_model};
+use crate::settings::{resolved_context_limits, resolved_default_model, air_gapped_enabled};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -114,6 +114,24 @@ pub async fn start_background_services(
 ) -> Result<(), String> {
     SERVICES_STOP.store(false, Ordering::SeqCst);
 
+    let _ = init_context_db();
+    let _ = init_history_db();
+    start_context_watcher();
+
+    tauri::async_runtime::spawn(async {
+        if let Err(e) = ensure_ollama_running(None).await {
+            eprintln!("Ollama auto-start au lancement : {e}");
+        }
+        host_status::emit_status();
+    });
+
+    if air_gapped_enabled() {
+        if !SERVICES_RUNNING.swap(true, Ordering::SeqCst) {
+            host_status::emit_status();
+        }
+        return Ok(());
+    }
+
     let creds = match creds_override {
         Some(creds) => creds,
         None => get_credentials()?.ok_or("Pas de credentials — pairing requis")?,
@@ -137,17 +155,6 @@ pub async fn start_background_services(
         Err(e) => set_heartbeat_error(e),
     }
     host_status::emit_status();
-
-    let _ = init_context_db();
-    let _ = init_history_db();
-    start_context_watcher();
-
-    tauri::async_runtime::spawn(async {
-        if let Err(e) = ensure_ollama_running(None).await {
-            eprintln!("Ollama auto-start au lancement : {e}");
-        }
-        host_status::emit_status();
-    });
 
     tauri::async_runtime::spawn(async move {
         loop {
@@ -430,6 +437,20 @@ async fn run_relay_loop(
                                 let envelope = envelope.clone();
                                 tokio::spawn(async move {
                                     let _ = handle_inline_edit_apply(&envelope, &write_task).await;
+                                });
+                            }
+                            "patch.preview" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_patch_preview(&envelope, &write_task).await;
+                                });
+                            }
+                            "patch.apply" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_patch_apply(&envelope, &write_task).await;
                                 });
                             }
                             "history.list" => {
@@ -750,14 +771,7 @@ async fn handle_chat_start_inner(
         .cloned()
         .unwrap_or_default();
 
-    let mut messages: Vec<serde_json::Value> = messages.into_iter().take(20).collect();
-
-    let last_user = messages
-        .iter()
-        .rev()
-        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
-        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
-        .unwrap_or("");
+    let mut messages: Vec<serde_json::Value> = messages.into_iter().collect();
 
     let explicit_model = payload
         .get("model")
@@ -774,7 +788,15 @@ async fn handle_chat_start_inner(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let resolved = resolve_chat_model(explicit_model, task_intent, last_user);
+    let last_user = messages
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+        .unwrap_or("")
+        .to_string();
+
+    let resolved = resolve_chat_model(explicit_model, task_intent, &last_user);
     let model = if thinking_mode && !is_cloud_model(&resolved.model) {
         resolve_thinking_model(&resolved.model)?
     } else {
@@ -793,7 +815,20 @@ async fn handle_chat_start_inner(
 
     if !is_cloud {
         ensure_ollama_running(None).await?;
+        messages =
+            crate::conversation_summary::compact_messages_for_chat(&model, messages).await?;
     }
+    if messages.len() > 20 {
+        messages = messages.split_off(messages.len().saturating_sub(20));
+    }
+
+    let last_user = messages
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+        .unwrap_or("")
+        .to_string();
 
     let loading_msg = if is_cloud {
         format!("Modèle cloud → {model}\nConnexion au fournisseur…\n\n")
@@ -874,6 +909,11 @@ async fn handle_chat_start_inner(
     }
 
     let mut prepend_system: Vec<serde_json::Value> = Vec::new();
+    if crate::settings::user_memory_enabled() {
+        if let Some(mem) = build_memory_context(&last_user) {
+            prepend_system.push(serde_json::json!({ "role": "system", "content": mem }));
+        }
+    }
     if let Some(ref pid) = project_id {
         if let Ok(project) = get_project(pid, project_id.as_deref()) {
             let instr = project.system_instruction.trim();
@@ -882,10 +922,10 @@ async fn handle_chat_start_inner(
             }
         }
     }
-    let mentions = extract_mentions_from_chat(payload, last_user);
+    let mentions = extract_mentions_from_chat(payload, &last_user);
     let rag_kb_ids = resolve_rag_kb_ids(&mentions, &context_ids).unwrap_or_default();
     let rag_query = if mentions.has_any() {
-        strip_mentions(last_user)
+        strip_mentions(&last_user)
     } else {
         last_user.to_string()
     };
@@ -914,9 +954,12 @@ async fn handle_chat_start_inner(
             file_hints: mentions.file_hints.clone(),
             folder_hints: mentions.folder_hints.clone(),
         };
-        if let Ok(Some(rag)) = build_rag_context_scoped(&scope, &rag_query).await {
-            prepend_system.push(serde_json::json!({ "role": "system", "content": rag }));
+        if let Ok(Some(bundle)) = build_rag_bundle_scoped(&scope, &rag_query).await {
+            prepend_system.push(serde_json::json!({ "role": "system", "content": bundle.context }));
             rag_injected = true;
+            if !bundle.citations.is_empty() {
+                let _ = send_chat_citations(write, &envelope.requestId, &bundle.citations).await;
+            }
         }
         if let Ok(Some(code_ctx)) = build_codebase_context(&rag_kb_ids, &rag_query).await {
             prepend_system.push(serde_json::json!({ "role": "system", "content": code_ctx }));
@@ -2177,6 +2220,102 @@ async fn handle_inline_edit_apply(
             send_ws_response(
                 write,
                 "inline_edit.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_patch_preview(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let payload = &envelope.payload;
+    let patch = payload
+        .get("patch")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let path = payload
+        .get("path")
+        .and_then(|v| v.as_str())
+        .filter(|p| !p.is_empty());
+    let context_ids: Vec<String> = payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    match preview_patch(path, patch, &context_ids) {
+        Ok(preview) => {
+            send_ws_response(
+                write,
+                "patch.previewed",
+                serde_json::to_value(preview).unwrap_or_default(),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "patch.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_patch_apply(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let payload = &envelope.payload;
+    let patch = payload
+        .get("patch")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let path = payload
+        .get("path")
+        .and_then(|v| v.as_str())
+        .filter(|p| !p.is_empty());
+    let context_ids: Vec<String> = payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    match apply_patch(path, patch, &context_ids) {
+        Ok(()) => {
+            log_audit(
+                AuditAction::AgentAccess,
+                Some("patch.apply"),
+                envelope.requestId.as_deref(),
+                path.map(|p| serde_json::json!({ "path": p })),
+            );
+            send_ws_response(
+                write,
+                "patch.applied",
+                serde_json::json!({ "path": path.unwrap_or("") }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "patch.error",
                 serde_json::json!({ "message": e }),
                 &envelope.requestId,
             )

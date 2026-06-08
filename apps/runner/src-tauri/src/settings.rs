@@ -248,6 +248,26 @@ pub struct HostSettings {
     /// Modèle Ollama vision pour décrire les images liées et les questions multimodales.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vision_model: Option<String>,
+    /// Modèle secours si le modèle demandé est absent ou trop lent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_model: Option<String>,
+    /// Mode air-gapped : pas de relay, heartbeat ni cloud — chat local Host uniquement.
+    #[serde(default)]
+    pub air_gapped: bool,
+    /// Seuil de tokens estimés avant compaction automatique de l'historique chat.
+    #[serde(default = "default_chat_token_threshold")]
+    pub chat_token_threshold: u32,
+    /// Nombre de messages récents conservés verbatim après compaction.
+    #[serde(default = "default_chat_recent_messages")]
+    pub chat_recent_messages: u32,
+}
+
+fn default_chat_token_threshold() -> u32 {
+    6_000
+}
+
+fn default_chat_recent_messages() -> u32 {
+    12
 }
 
 fn default_desktop_notifications() -> bool {
@@ -295,6 +315,10 @@ impl Default for HostSettings {
             desktop_notifications: default_desktop_notifications(),
             mcp_servers: Vec::new(),
             vision_model: None,
+            fallback_model: None,
+            air_gapped: false,
+            chat_token_threshold: default_chat_token_threshold(),
+            chat_recent_messages: default_chat_recent_messages(),
         }
     }
 }
@@ -312,6 +336,12 @@ pub fn desktop_notifications_enabled() -> bool {
 pub fn user_memory_enabled() -> bool {
     get_settings()
         .map(|s| s.user_memory_enabled)
+        .unwrap_or(false)
+}
+
+pub fn air_gapped_enabled() -> bool {
+    get_settings()
+        .map(|s| s.air_gapped)
         .unwrap_or(false)
 }
 

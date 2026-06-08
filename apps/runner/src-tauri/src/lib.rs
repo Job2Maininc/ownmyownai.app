@@ -1,6 +1,7 @@
 mod agent;
 mod cloud_keys;
 mod context;
+mod conversation_summary;
 mod mcp;
 mod dpapi;
 mod playbooks;
@@ -9,6 +10,7 @@ mod credentials;
 mod hardware;
 mod history;
 mod jobs;
+mod local_chat;
 mod providers;
 mod share;
 mod process;
@@ -54,6 +56,7 @@ use settings::{
 };
 use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemoryState};
 use jobs::{cancel_job, list_jobs, submit_job, JobKind, JobSnapshot};
+use local_chat::{cancel_local_chat, run_local_chat};
 use serde::Deserialize;
 
 #[tauri::command(rename = "check_ollama")]
@@ -485,6 +488,28 @@ fn list_audit_log_cmd(
     list_audit_log(limit.unwrap_or(100), action_filter.as_deref())
 }
 
+#[tauri::command(rename = "restart_background_services")]
+async fn restart_background_services_cmd() -> Result<(), String> {
+    stop_background_services();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    start_background_services(None).await
+}
+
+#[tauri::command(rename = "local_chat")]
+async fn local_chat_cmd(
+    app: tauri::AppHandle,
+    model: String,
+    messages: Vec<serde_json::Value>,
+    context_ids: Vec<String>,
+) -> Result<(), String> {
+    run_local_chat(app, model, messages, context_ids).await
+}
+
+#[tauri::command(rename = "cancel_local_chat")]
+fn cancel_local_chat_cmd() {
+    cancel_local_chat();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -550,6 +575,9 @@ pub fn run() {
             delete_user_memory_fact_cmd,
             set_user_memory_enabled_cmd,
             list_audit_log_cmd,
+            restart_background_services_cmd,
+            local_chat_cmd,
+            cancel_local_chat_cmd,
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());

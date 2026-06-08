@@ -612,6 +612,187 @@ pub fn search_chunks_fts_scoped(
     })
 }
 
+#[derive(Debug, Clone)]
+pub struct RagChunkHit {
+    pub chunk_id: String,
+    pub document_id: String,
+    pub content: String,
+    pub source: String,
+    pub source_full: String,
+    pub score: f32,
+}
+
+fn truncate_source_label(label: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = label.chars().collect();
+    if chars.len() <= max_chars {
+        return label.to_string();
+    }
+    let tail: String = chars[chars.len().saturating_sub(max_chars - 1)..].iter().collect();
+    format!("…{tail}")
+}
+
+fn display_source(_filepath: &str, filename: &str, relative_path: &Option<String>) -> (String, String) {
+    let full = relative_path
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .cloned()
+        .unwrap_or_else(|| filename.to_string());
+    let short = truncate_source_label(&full, 48);
+    (short, full)
+}
+
+pub fn search_rag_hits_scoped(
+    kb_ids: &[String],
+    query: &str,
+    limit: usize,
+    file_hints: &[String],
+    folder_hints: &[String],
+) -> Result<Vec<RagChunkHit>, String> {
+    with_db(|conn| {
+        if kb_ids.is_empty() || query.trim().is_empty() || limit == 0 {
+            return Ok(vec![]);
+        }
+        let fts_query = match build_fts_query(query) {
+            Some(q) => q,
+            None => return Ok(vec![]),
+        };
+
+        let placeholders = kb_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT cf.content, cf.chunk_id, cf.document_id, d.filepath, d.filename, d.relative_path
+             FROM chunks_fts cf
+             JOIN documents d ON d.id = cf.document_id
+             WHERE cf.knowledge_base_id IN ({placeholders})
+             AND cf MATCH ?
+             ORDER BY bm25(cf)
+             LIMIT ?"
+        );
+
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let fetch_limit = (limit * 4).max(limit) as i64;
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = kb_ids
+            .iter()
+            .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::ToSql>)
+            .collect();
+        params.push(Box::new(fts_query));
+        params.push(Box::new(fetch_limit));
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut out = Vec::new();
+        for (rank, row) in rows.enumerate() {
+            let (content, chunk_id, document_id, filepath, filename, relative_path) =
+                row.map_err(|e| e.to_string())?;
+            let (source, source_full) =
+                display_source(&filepath, &filename, &relative_path);
+            if !document_matches_mention_scope(&filepath, &source_full, file_hints, folder_hints) {
+                continue;
+            }
+            let score = 1.0 - (rank as f32 / fetch_limit as f32).min(0.95);
+            out.push(RagChunkHit {
+                chunk_id,
+                document_id,
+                content,
+                source,
+                source_full,
+                score,
+            });
+            if out.len() >= limit {
+                break;
+            }
+        }
+        Ok(out)
+    })
+}
+
+pub fn get_embedding_hits_for_scope(
+    kb_ids: &[String],
+    file_hints: &[String],
+    folder_hints: &[String],
+) -> Result<Vec<(RagChunkHit, Vec<f32>)>, String> {
+    if kb_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut all = Vec::new();
+    for kb_id in kb_ids {
+        let batch = with_db(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT c.id, c.document_id, c.content, e.vector, d.filepath, d.filename, d.relative_path
+                     FROM chunks c
+                     JOIN embeddings e ON e.chunk_id = c.id
+                     JOIN documents d ON d.id = c.document_id
+                     WHERE d.knowledge_base_id = ?1 AND d.status = 'ready'
+                       AND d.canonical_document_id IS NULL",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![kb_id], |row| {
+                    let chunk_id: String = row.get(0)?;
+                    let document_id: String = row.get(1)?;
+                    let content: String = row.get(2)?;
+                    let blob: Vec<u8> = row.get(3)?;
+                    let filepath: String = row.get(4)?;
+                    let filename: String = row.get(5)?;
+                    let relative_path: Option<String> = row.get(6)?;
+                    let vector: Vec<f32> = blob
+                        .chunks_exact(4)
+                        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                        .collect();
+                    let (source, source_full) =
+                        display_source(&filepath, &filename, &relative_path);
+                    Ok((
+                        RagChunkHit {
+                            chunk_id,
+                            document_id,
+                            content,
+                            source,
+                            source_full,
+                            score: 0.0,
+                        },
+                        vector,
+                    ))
+                })
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        })?;
+
+        for (hit, vector) in batch {
+            let matches = if file_hints.is_empty() && folder_hints.is_empty() {
+                true
+            } else {
+                document_matches_mention_scope(
+                    &hit.source_full,
+                    &hit.source,
+                    file_hints,
+                    folder_hints,
+                )
+            };
+            if matches {
+                all.push((hit, vector));
+            }
+        }
+    }
+    Ok(all)
+}
+
 pub fn search_chunks_fts(
     kb_ids: &[String],
     query: &str,

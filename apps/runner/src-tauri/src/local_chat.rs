@@ -50,11 +50,10 @@ pub async fn run_local_chat(
             .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
             .and_then(|m| m.get("content").and_then(|c| c.as_str()))
             .unwrap_or("");
-        let _ = crate::context::prepend_system_instructions(&mut messages, &context_ids);
         if let Ok(Some(rag)) = build_rag_context(&context_ids, last_user).await {
             messages.insert(
                 0,
-                serde_json::json!({ "role": "system", "content": rag.system_prompt }),
+                serde_json::json!({ "role": "system", "content": rag }),
             );
         }
     }

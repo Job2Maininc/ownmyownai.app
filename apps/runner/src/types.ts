@@ -16,6 +16,8 @@ export interface HostSettings {
   defaultModel: string;
   /** Modèle secours si le modèle demandé est absent ou trop lent. */
   fallbackModel?: string;
+  /** Mode air-gapped : relay et cloud désactivés. */
+  airGapped?: boolean;
 }
 
 export interface SetupProgress {
@@ -39,6 +41,16 @@ export interface QuantizationAdvice {
   reason: string;
 }
 
+export interface LastRequestMetrics {
+  model: string;
+  tokensPerSecond: number;
+  latencyMs: number;
+  ramUsedGb: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  completedAt: string;
+}
+
 export interface HostStatusSnapshot {
   hostId: string | null;
   ollamaInstalled: boolean;
@@ -54,4 +66,6 @@ export interface HostStatusSnapshot {
   webViewers: number;
   servicesRunning: boolean;
   diskFreeGb: number | null;
+  airGapped?: boolean;
+  lastRequestMetrics?: LastRequestMetrics;
 }

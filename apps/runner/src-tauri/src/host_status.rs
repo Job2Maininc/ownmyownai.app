@@ -120,6 +120,7 @@ pub struct HostStatusSnapshot {
     pub last_request_metrics: Option<LastRequestMetrics>,
     pub cloud_providers: Vec<CloudProviderStatus>,
     pub background_jobs: u32,
+    pub air_gapped: bool,
 }
 
 pub fn build_snapshot() -> HostStatusSnapshot {
@@ -165,6 +166,7 @@ pub fn build_snapshot() -> HostStatusSnapshot {
             .into_iter()
             .filter(|j| j.status == "running" || j.status == "queued")
             .count() as u32,
+        air_gapped: crate::settings::air_gapped_enabled(),
     }
 }
 

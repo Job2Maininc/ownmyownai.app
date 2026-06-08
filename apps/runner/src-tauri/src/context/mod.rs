@@ -27,7 +27,7 @@ pub use mentions::{
 pub use project_rules::load_project_rules;
 pub use instructions::{collect_kb_system_instructions, prepend_kb_system_instructions};
 pub use codebase_index::{build_codebase_context, is_code_file, is_git_repo};
-pub use rag::{build_rag_context, build_rag_context_scoped, find_relevant_image_paths, RagScope};
+pub use rag::{build_rag_bundle_scoped, build_rag_context, build_rag_context_scoped, find_relevant_image_paths, RagScope};
 pub use vision::{document_media_type, image_mime_type, is_image_filename};
 pub use store::{
     clear_document_index, create_context_link, create_knowledge_base, delete_context_link,
