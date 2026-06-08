@@ -17,7 +17,7 @@
 | 2 | Pairing Supabase → host visible dashboard < 2 min | |
 | 3 | Host éteint → web affiche « Hors ligne » | |
 | 4 | Chat web → streaming < 60s (8 Go RAM, 3B) | |
-| 5 | 2 onglets : second onglet reçoit erreur ou partage session | UX message « autre onglet actif » |
+| 5 | 2 onglets : second onglet reçoit erreur ou partage session | UX « autre onglet actif » — Web Locks + BroadcastChannel (`tab-session.ts`) |
 | 6 | Aucun message chat en base Supabase | |
 | 7 | Relais redémarre → reconnexion auto runner/web | |
 | 8 | Lier un dossier Google Drive local depuis l'app Host | |
@@ -30,11 +30,23 @@
 | 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
 | 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
 
+## Projets / espaces de travail (Host v0.3)
+
+- [x] Tables `projects` + `project_knowledge_bases` dans `context.db`
+- [x] Créer / ouvrir / supprimer un projet (Host + WS `project.*`)
+- [x] Ouvrir un projet active ses bases en un clic (persistance `active_project_id`)
+- [x] Web : liste projets lecture seule + activation des bases
+
+## Sécurité locale (Host)
+
+- [x] `context.db` chiffré au repos via DPAPI Windows (`context.db.enc`)
+
 ## Contexte lié (Host v0.2.0)
 
 - [x] Table `context_links` + colonnes `documents` (source lié / upload)
 - [x] Ingestion depuis chemin (`ingest_from_path`, `reindex_document`)
 - [x] Sync au lancement + watcher `notify` avec debounce
+- [x] Sync planifiée (cron configurable, rapport `sync-schedule.log`, log par lien)
 - [x] UI Host : lier fichier / dossier / disque, sync manuel
 - [x] Web : statut liens, suppression document, progression upload
 

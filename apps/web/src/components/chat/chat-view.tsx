@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   ChatMessage,
+  ChatThreadSummary,
   HostStatus,
   KnowledgeBaseSummary,
+  PlaybookSummary,
   RagCitation,
 } from "@ownmyownai/protocol";
 import type { Host } from "@ownmyownai/supabase-types";
@@ -17,38 +19,43 @@ import {
   stripChatMentions,
   toMentionScope,
 } from "@/lib/chat-mentions";
+import {
+  forkFromMessage,
+  getActiveMessages,
+  listBranchMeta,
+  loadConversationTree,
+  migrateLegacySession,
+  saveConversationTree,
+  startNewRootConversation,
+  switchBranch,
+  updateActiveBranchMessages,
+  type ConversationBranchMeta,
+  type ConversationTree,
+} from "@/lib/conversation-store";
 import { downloadConversation } from "@/lib/export-conversation";
 import { hostStatusClassName, hostStatusLabel, resolveChatHostStatus } from "@/lib/host-status";
 import { RelayClient } from "@/lib/relay-client";
+import { TabSessionManager, type TabSessionRole } from "@/lib/tab-session";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { MarkdownMessage } from "./markdown-message";
+import { PlaybookPicker } from "./playbook-picker";
 import { RagCitationBadges } from "./rag-citation-badges";
 
 interface UiMessage {
   role: "user" | "assistant";
   content: string;
+  thinking?: string;
   citations?: RagCitation[];
-}
-
-interface ConversationMeta {
-  id: string;
-  title: string;
-  updatedAt: string;
-  messageCount: number;
 }
 
 interface ChatViewProps {
   hostId: string;
   defaultModel: string;
   installedModels?: string[];
-}
-
-function storageKey(hostId: string) {
-  return `chat:${hostId}`;
 }
 
 function contextKey(hostId: string) {
@@ -59,28 +66,31 @@ function projectKey(hostId: string) {
   return `project-active:${hostId}`;
 }
 
-function historyMetaKey(hostId: string) {
-  return `chat-history-meta:${hostId}`;
+function thinkingModeKey(hostId: string) {
+  return `thinking-mode:${hostId}`;
 }
 
-function loadHistoryMeta(hostId: string): ConversationMeta[] {
-  if (typeof window === "undefined") return [];
+function loadThinkingMode(hostId: string): boolean {
+  if (typeof window === "undefined") return false;
   try {
-    const raw = localStorage.getItem(historyMetaKey(hostId));
-    return raw ? (JSON.parse(raw) as ConversationMeta[]) : [];
+    return localStorage.getItem(thinkingModeKey(hostId)) === "1";
   } catch {
-    return [];
+    return false;
   }
 }
 
-function saveHistoryMeta(hostId: string, items: ConversationMeta[]) {
-  localStorage.setItem(historyMetaKey(hostId), JSON.stringify(items.slice(0, 20)));
+function legacySessionKey(hostId: string) {
+  return `chat:${hostId}`;
 }
 
-function loadMessages(hostId: string): UiMessage[] {
+function activeThreadKey(hostId: string) {
+  return `chat-active-thread:${hostId}`;
+}
+
+function loadLegacySessionMessages(hostId: string): UiMessage[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = sessionStorage.getItem(storageKey(hostId));
+    const raw = sessionStorage.getItem(legacySessionKey(hostId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as UiMessage[];
     return Array.isArray(parsed) ? parsed : [];
@@ -89,11 +99,23 @@ function loadMessages(hostId: string): UiMessage[] {
   }
 }
 
+function toUiMessages(messages: ChatMessage[]): UiMessage[] {
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
+}
+
+function branchLabelFromSummary(thread: ChatThreadSummary): string {
+  if (!thread.parentThreadId) return thread.title || "Fil principal";
+  return `${thread.title} (fork msg ${(thread.forkAtIndex ?? 0) + 1})`;
+}
+
 export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatViewProps) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState(defaultModel);
   const [modelSearch, setModelSearch] = useState("");
+  const [thinkingMode, setThinkingMode] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [hostStatus, setHostStatus] = useState<HostStatus>("offline");
   const [error, setError] = useState<string | null>(null);
@@ -104,18 +126,26 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [contextBases, setContextBases] = useState<KnowledgeBaseSummary[]>([]);
   const [showContext, setShowContext] = useState(true);
-  const [historyMeta, setHistoryMeta] = useState<ConversationMeta[]>([]);
+  const [conversationTree, setConversationTree] = useState<ConversationTree | null>(null);
+  const [branchMeta, setBranchMeta] = useState<ConversationBranchMeta[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [rootThreadId, setRootThreadId] = useState<string | null>(null);
+  const [hostBranches, setHostBranches] = useState<ChatThreadSummary[]>([]);
   const [conversationNotice, setConversationNotice] = useState<string | null>(null);
   const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
   const [statusClock, setStatusClock] = useState(0);
+  const [tabRole, setTabRole] = useState<TabSessionRole>("active");
   const relayRef = useRef<RelayClient | null>(null);
+  const tabSessionRef = useRef<TabSessionManager | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
+  const thinkingBuffer = useRef("");
   const assistantMessageIndex = useRef<number | null>(null);
   const pendingUserMessage = useRef<UiMessage | null>(null);
   const pendingCitations = useRef<RagCitation[] | undefined>(undefined);
   const activeRequestId = useRef<string | null>(null);
   const hydrated = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const models = installedModels.length > 0 ? installedModels : [defaultModel];
@@ -128,44 +158,49 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     [input],
   );
 
-  const commitAssistantTurn = useCallback((prev: UiMessage[], content: string): UiMessage[] => {
-    if (!content.trim()) return prev;
+  const commitAssistantTurn = useCallback(
+    (prev: UiMessage[], content: string, thinking?: string): UiMessage[] => {
+      if (!content.trim() && !thinking?.trim()) return prev;
 
-    const next = [...prev];
-    const pending = pendingUserMessage.current;
+      const next = [...prev];
+      const pending = pendingUserMessage.current;
 
-    if (pending) {
-      const last = next[next.length - 1];
-      if (last?.role !== "user" || last.content !== pending.content) {
-        next.push(pending);
+      if (pending) {
+        const last = next[next.length - 1];
+        if (last?.role !== "user" || last.content !== pending.content) {
+          next.push(pending);
+        }
+        pendingUserMessage.current = null;
       }
-      pendingUserMessage.current = null;
-    }
 
-    const idx = assistantMessageIndex.current;
-    if (idx === null) return next;
+      const idx = assistantMessageIndex.current;
+      if (idx === null) return next;
 
-    const existing = next[idx];
-    const assistantMsg: UiMessage = {
-      role: "assistant",
-      content,
-      citations: pendingCitations.current ?? existing?.citations,
-    };
+      const existing = next[idx];
+      const assistantMsg: UiMessage = {
+        role: "assistant",
+        content,
+        thinking: thinking ?? existing?.thinking,
+        citations: pendingCitations.current ?? existing?.citations,
+      };
 
-    if (next.length <= idx) {
-      next.push(assistantMsg);
-    } else {
-      next[idx] = assistantMsg;
-    }
+      if (next.length <= idx) {
+        next.push(assistantMsg);
+      } else {
+        next[idx] = assistantMsg;
+      }
 
-    return next;
-  }, []);
+      return next;
+    },
+    [],
+  );
 
   const clearAssistantTurn = useCallback(() => {
     assistantMessageIndex.current = null;
     pendingUserMessage.current = null;
     pendingCitations.current = undefined;
     assistantBuffer.current = "";
+    thinkingBuffer.current = "";
   }, []);
 
   const attachCitations = useCallback((citations: RagCitation[]) => {
@@ -186,10 +221,22 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setModel(defaultModel);
   }, [defaultModel]);
 
+  const applyTree = useCallback(
+    (tree: ConversationTree) => {
+      setConversationTree(tree);
+      setMessages(getActiveMessages(tree));
+      setBranchMeta(listBranchMeta(tree));
+      saveConversationTree(hostId, tree);
+    },
+    [hostId],
+  );
+
   useEffect(() => {
     if (hydrated.current) return;
     hydrated.current = true;
-    setMessages(loadMessages(hostId));
+    const legacyMessages = loadLegacySessionMessages(hostId);
+    const tree = migrateLegacySession(hostId, legacyMessages);
+    applyTree(tree);
     setActiveContextIds(loadActiveContextIds(hostId));
     try {
       const raw = sessionStorage.getItem(projectKey(hostId));
@@ -197,13 +244,19 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     } catch {
       setActiveProjectId(null);
     }
-    setHistoryMeta(loadHistoryMeta(hostId));
-  }, [hostId]);
+    if (legacyMessages.length > 0) {
+      sessionStorage.removeItem(legacySessionKey(hostId));
+    }
+  }, [hostId, applyTree]);
 
   useEffect(() => {
-    if (!hydrated.current) return;
-    sessionStorage.setItem(storageKey(hostId), JSON.stringify(messages));
-  }, [hostId, messages]);
+    if (!hydrated.current || !conversationTree) return;
+    const nextTree = updateActiveBranchMessages(conversationTree, messages);
+    if (nextTree === conversationTree) return;
+    setConversationTree(nextTree);
+    setBranchMeta(listBranchMeta(nextTree));
+    saveConversationTree(hostId, nextTree);
+  }, [hostId, messages, conversationTree]);
 
   useEffect(() => {
     sessionStorage.setItem(contextKey(hostId), JSON.stringify(activeContextIds));
@@ -262,7 +315,49 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     return () => window.clearInterval(id);
   }, []);
 
+  const isActiveTab = tabRole === "active";
+
   useEffect(() => {
+    const manager = new TabSessionManager(hostId, {
+      onRoleChange: (role) => {
+        setTabRole(role);
+        if (role === "passive") {
+          setRelayStatus("offline");
+          hasConnectedRef.current = false;
+        }
+      },
+      onSnapshot: (snapshot) => {
+        setMessages(snapshot.messages);
+        setStreaming(snapshot.streaming);
+        setModel(snapshot.model);
+        setActiveContextIds(snapshot.activeContextIds);
+      },
+    });
+    tabSessionRef.current = manager;
+    manager.start();
+    return () => {
+      manager.dispose();
+      tabSessionRef.current = null;
+    };
+  }, [hostId]);
+
+  useEffect(() => {
+    if (!isActiveTab) return;
+    tabSessionRef.current?.broadcast({
+      messages,
+      streaming,
+      model,
+      activeContextIds,
+    });
+  }, [isActiveTab, messages, streaming, model, activeContextIds]);
+
+  useEffect(() => {
+    if (!isActiveTab) {
+      relayRef.current?.disconnect();
+      relayRef.current = null;
+      return;
+    }
+
     hasConnectedRef.current = false;
     const client = new RelayClient({
       mintToken: () => mintRelayToken(hostId),
@@ -309,17 +404,124 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       client.disconnect();
       relayRef.current = null;
     };
-  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn]);
+  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn, isActiveTab]);
+
+  const connected = relayStatus === "connected";
+
+  const refreshHostBranches = useCallback(
+    async (rootId: string) => {
+      if (!relayRef.current || !connected) return;
+      try {
+        const branches = await relayRef.current.listChatThreadBranches(rootId);
+        setHostBranches(branches);
+      } catch {
+        /* ignore */
+      }
+    },
+    [connected],
+  );
 
   useEffect(() => {
-    if (relayStatus !== "connected" || !relayRef.current) return;
+    if (!connected || !isActiveTab || !relayRef.current) return;
+
+    let cancelled = false;
+
+    async function initHostThread() {
+      const client = relayRef.current;
+      if (!client) return;
+
+      const stored = localStorage.getItem(activeThreadKey(hostId));
+      if (stored) {
+        try {
+          const { thread, messages: hostMessages } = await client.getChatThread(stored);
+          if (cancelled) return;
+          setActiveThreadId(thread.id);
+          setRootThreadId(thread.rootThreadId);
+          setMessages(toUiMessages(hostMessages));
+          await refreshHostBranches(thread.rootThreadId);
+          return;
+        } catch {
+          /* fallback local */
+        }
+      }
+    }
+
+    void initHostThread();
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, isActiveTab, hostId, refreshHostBranches]);
+
+  useEffect(() => {
+    if (!connected || !isActiveTab || !relayRef.current || messages.length === 0 || activeThreadId) {
+      return;
+    }
+    void relayRef.current
+      .saveChatThread(
+        messages.map((m) => ({ role: m.role, content: m.content })),
+        { model, contextIds: activeContextIds },
+      )
+      .then(async (id) => {
+        const { thread } = await relayRef.current!.getChatThread(id);
+        setActiveThreadId(id);
+        setRootThreadId(thread.rootThreadId);
+        localStorage.setItem(activeThreadKey(hostId), id);
+        await refreshHostBranches(thread.rootThreadId);
+      })
+      .catch(() => undefined);
+  }, [
+    messages,
+    activeThreadId,
+    model,
+    activeContextIds,
+    connected,
+    isActiveTab,
+    hostId,
+    refreshHostBranches,
+  ]);
+
+  useEffect(() => {
+    if (!connected || !isActiveTab || !activeThreadId || !relayRef.current || messages.length === 0) {
+      return;
+    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void relayRef.current
+        ?.saveChatThread(
+          messages.map((m) => ({ role: m.role, content: m.content })),
+          {
+            threadId: activeThreadId,
+            model,
+            contextIds: activeContextIds,
+          },
+        )
+        .then(() => {
+          if (rootThreadId) void refreshHostBranches(rootThreadId);
+        })
+        .catch(() => undefined);
+    }, 800);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [
+    messages,
+    activeThreadId,
+    model,
+    activeContextIds,
+    connected,
+    isActiveTab,
+    rootThreadId,
+    refreshHostBranches,
+  ]);
+
+  useEffect(() => {
+    if (!isActiveTab || relayStatus !== "connected" || !relayRef.current) return;
     void relayRef.current
       .listContextBases()
       .then(setContextBases)
       .catch(() => undefined);
-  }, [relayStatus]);
+  }, [relayStatus, isActiveTab]);
 
-  const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
 
   const effectiveHostStatus = useMemo(
@@ -337,6 +539,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const hostOffline = effectiveHostStatus === "offline";
   const hostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
   const canSend =
+    isActiveTab &&
     connected &&
     relayHostReachable &&
     hostReachable &&
@@ -344,28 +547,112 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     (!hostBusy || streaming);
 
   function handleNewConversation() {
-    if (messages.length > 0) {
-      const firstUser = messages.find((m) => m.role === "user");
-      const entry: ConversationMeta = {
-        id: crypto.randomUUID(),
-        title: (firstUser?.content ?? "Conversation").slice(0, 60),
-        updatedAt: new Date().toISOString(),
-        messageCount: messages.length,
-      };
-      const next = [entry, ...historyMeta];
-      setHistoryMeta(next);
-      saveHistoryMeta(hostId, next);
+    if (conversationTree) {
+      applyTree(startNewRootConversation(conversationTree));
+    } else {
+      setMessages([]);
     }
-    setMessages([]);
+    setActiveThreadId(null);
+    setRootThreadId(null);
+    setHostBranches([]);
+    localStorage.removeItem(activeThreadKey(hostId));
     setError(null);
     setInput("");
     clearAssistantTurn();
     activeRequestId.current = null;
     setStreaming(false);
-    sessionStorage.removeItem(storageKey(hostId));
     setConversationNotice("Nouvelle conversation prête — posez votre première question.");
     window.setTimeout(() => setConversationNotice(null), 4000);
   }
+
+  async function handleForkAt(messageIndex: number) {
+    if (streaming || !isActiveTab) return;
+
+    if (connected && relayRef.current && activeThreadId) {
+      try {
+        await relayRef.current.saveChatThread(
+          messages.map((m) => ({ role: m.role, content: m.content })),
+          { threadId: activeThreadId, model, contextIds: activeContextIds },
+        );
+        const newId = await relayRef.current.forkChatThread(activeThreadId, messageIndex, {
+          model,
+          contextIds: activeContextIds,
+        });
+        const { thread, messages: forked } = await relayRef.current.getChatThread(newId);
+        setActiveThreadId(newId);
+        setRootThreadId(thread.rootThreadId);
+        localStorage.setItem(activeThreadKey(hostId), newId);
+        setMessages(toUiMessages(forked));
+        await refreshHostBranches(thread.rootThreadId);
+        setError(null);
+        setInput("");
+        clearAssistantTurn();
+        activeRequestId.current = null;
+        setConversationNotice(
+          `Branche créée à partir du message ${messageIndex + 1} — le fil principal est conservé.`,
+        );
+        window.setTimeout(() => setConversationNotice(null), 5000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Impossible de créer la branche");
+      }
+      return;
+    }
+
+    if (!conversationTree) return;
+    applyTree(forkFromMessage(conversationTree, messageIndex));
+    setError(null);
+    setInput("");
+    clearAssistantTurn();
+    activeRequestId.current = null;
+    setConversationNotice(
+      `Branche locale créée à partir du message ${messageIndex + 1} — le fil principal est conservé.`,
+    );
+    window.setTimeout(() => setConversationNotice(null), 5000);
+  }
+
+  async function handleSwitchBranch(branchId: string) {
+    if (streaming || !isActiveTab) return;
+
+    if (connected && relayRef.current && hostBranches.some((b) => b.id === branchId)) {
+      try {
+        const { thread, messages: branchMessages } = await relayRef.current.getChatThread(branchId);
+        setActiveThreadId(thread.id);
+        setRootThreadId(thread.rootThreadId);
+        localStorage.setItem(activeThreadKey(hostId), thread.id);
+        setMessages(toUiMessages(branchMessages));
+        setError(null);
+        clearAssistantTurn();
+        activeRequestId.current = null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Impossible de charger la branche");
+      }
+      return;
+    }
+
+    if (!conversationTree || branchId === conversationTree.activeBranchId) return;
+    applyTree(switchBranch(conversationTree, branchId));
+    setError(null);
+    clearAssistantTurn();
+    activeRequestId.current = null;
+  }
+
+  const branchOptions =
+    connected && hostBranches.length > 1
+      ? hostBranches.map((b) => ({
+          id: b.id,
+          label: branchLabelFromSummary(b),
+          count: b.messageCount,
+        }))
+      : branchMeta.length > 1
+        ? branchMeta.map((b) => ({
+            id: b.id,
+            label: b.label,
+            count: b.messageCount,
+          }))
+        : [];
+
+  const activeBranchId =
+    connected && activeThreadId ? activeThreadId : conversationTree?.activeBranchId ?? "";
 
   function handleStop() {
     relayRef.current?.sendCancel(activeRequestId.current ?? undefined);
@@ -381,6 +668,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     downloadConversation(exportMessages, {
       model: model.trim() || defaultModel,
     });
+  }
+
+  function handlePlaybookRun(playbook: PlaybookSummary) {
+    if (streaming || !relayRef.current || !canSend) return;
+
+    const label = `Playbook : ${playbook.name}`;
+    const userMsg: UiMessage = { role: "user", content: label };
+    const newMessages = [...messages, userMsg];
+    pendingUserMessage.current = userMsg;
+    assistantMessageIndex.current = newMessages.length;
+    setMessages(newMessages);
+    setStreaming(true);
+    setError(null);
+    assistantBuffer.current = "";
+    pendingCitations.current = undefined;
+
+    const requestId = relayRef.current.sendPlaybookRun(playbook.id, {
+      model: model.trim() || defaultModel,
+      contextIds: activeContextIds,
+    });
+    activeRequestId.current = requestId ?? null;
   }
 
   async function handleSend(e: React.FormEvent) {
@@ -415,25 +723,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       ragContextIds,
       undefined,
       undefined,
-      undefined,
+      activeProjectId ?? undefined,
       mentionScope,
     );
     activeRequestId.current = requestId ?? null;
   }
 
-  const headerStatus = reconnecting
-    ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
-    : !connected
-      ? { label: "Connexion…", className: "text-[var(--muted)]" }
-      : hostBusy && !streaming
-        ? {
-            label: "PC occupé — autre onglet actif",
-            className: "text-amber-400",
-          }
-        : {
-            label: `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
-            className: hostStatusClassName(effectiveHostStatus),
-          };
+  const headerStatus = !isActiveTab
+    ? { label: "Lecture seule — autre onglet actif", className: "text-amber-400" }
+    : reconnecting
+      ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
+      : !connected
+        ? { label: "Connexion…", className: "text-[var(--muted)]" }
+        : hostBusy && !streaming
+          ? {
+              label: "PC occupé — autre onglet actif",
+              className: "text-amber-400",
+            }
+          : {
+              label: `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
+              className: hostStatusClassName(effectiveHostStatus),
+            };
 
   return (
     <main className="mx-auto flex h-screen max-w-5xl flex-col px-4 py-4">
@@ -442,16 +752,47 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           ← Mes PCs
         </Link>
         <div className="flex items-center gap-3">
+          <PlaybookPicker
+            relay={relayRef.current}
+            connected={connected && isActiveTab}
+            model={model}
+            contextIds={activeContextIds}
+            disabled={!canSend || streaming}
+            onRun={handlePlaybookRun}
+          />
           <Button type="button" variant="ghost" onClick={() => setShowContext((v) => !v)}>
             {showContext ? "Masquer contexte" : "Bases de contexte"}
-          </Button>
-          <Button type="button" variant="ghost" onClick={handleNewConversation}>
-            Nouvelle conversation
           </Button>
           <Button
             type="button"
             variant="ghost"
-            disabled={messages.length === 0 || streaming}
+            onClick={handleNewConversation}
+            disabled={!isActiveTab || streaming}
+          >
+            Nouvelle conversation
+          </Button>
+          {branchOptions.length > 1 && (
+            <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              Branche
+              <select
+                value={activeBranchId}
+                onChange={(e) => void handleSwitchBranch(e.target.value)}
+                disabled={streaming || !isActiveTab}
+                className="max-w-[220px] rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+                aria-label="Choisir une branche de conversation"
+              >
+                {branchOptions.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.label} ({branch.count} msg)
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!isActiveTab || messages.length === 0 || streaming}
             onClick={handleExportConversation}
             title="Télécharger le fil actuel en Markdown (.md) — export local uniquement"
           >
@@ -474,13 +815,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               value={modelSearch}
               onChange={(e) => setModelSearch(e.target.value)}
               className="w-24 rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm"
-              disabled={streaming}
+              disabled={streaming || !isActiveTab}
             />
             <select
               id="model-select"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              disabled={streaming}
+              disabled={streaming || !isActiveTab}
               className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
             >
               {filteredModels.map((m) => (
@@ -499,21 +840,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           )}
 
           <div className="flex-1 space-y-4 overflow-y-auto pb-4">
-            {relayStatus === "connecting" && <ChatConnectingSkeleton />}
-            {historyMeta.length > 0 && messages.length === 0 && (
+            {isActiveTab && relayStatus === "connecting" && <ChatConnectingSkeleton />}
+            {branchOptions.length > 1 && messages.length === 0 && (
               <Card>
-                <p className="mb-2 text-sm font-medium">Conversations récentes (métadonnées locales)</p>
+                <p className="mb-2 text-sm font-medium">Branches enregistrées</p>
                 <ul className="space-y-1 text-xs text-[var(--muted)]">
-                  {historyMeta.slice(0, 5).map((h) => (
-                    <li key={h.id}>
-                      {h.title} — {h.messageCount} msg(s) —{" "}
-                      {new Date(h.updatedAt).toLocaleString("fr-FR")}
+                  {branchOptions.slice(0, 8).map((branch) => (
+                    <li key={branch.id}>
+                      <button
+                        type="button"
+                        className="text-left hover:text-brand-400"
+                        onClick={() => void handleSwitchBranch(branch.id)}
+                        disabled={streaming || !isActiveTab}
+                      >
+                        {branch.label} — {branch.count} msg(s)
+                      </button>
                     </li>
                   ))}
                 </ul>
               </Card>
             )}
-            {messages.length === 0 && relayStatus === "connected" && (
+            {messages.length === 0 && isActiveTab && relayStatus === "connected" && (
               <Card>
                 <p className="text-center text-[var(--muted)]">
                   Posez une question — la réponse est générée sur votre PC.
@@ -527,7 +874,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               return (
                 <div
                   key={`${msg.role}-${i}`}
-                  className={`rounded-lg px-4 py-3 ${
+                  className={`group relative rounded-lg px-4 py-3 ${
                     msg.role === "user"
                       ? "ml-8 bg-brand-600/20"
                       : "mr-8 border border-[var(--border)] bg-[var(--card)]"
@@ -548,6 +895,16 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   ) : (
                     <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
                   )}
+                  {isActiveTab && !streaming && messages.length > 1 && i < messages.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleForkAt(i)}
+                      className="absolute -bottom-2 right-2 hidden rounded border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)] hover:border-brand-500 hover:text-brand-400 group-hover:block"
+                      title="Créer une branche à partir de ce message"
+                    >
+                      Brancher ici
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -559,6 +916,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
 
           {conversationNotice && (
             <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
+          )}
+          {!isActiveTab && (
+            <p className="mb-2 text-sm text-amber-400">
+              Ce chat est actif dans un autre onglet. Vous pouvez suivre la conversation en
+              lecture seule — fermez l&apos;autre onglet pour reprendre la main.
+            </p>
           )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
           {hostOffline && connected && (
@@ -580,7 +943,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Votre message… (@base:Nom, @fichier:…, @dossier:…)"
+              placeholder={
+                isActiveTab
+                  ? "Votre message… (@base:Nom, @fichier:…, @dossier:…)"
+                  : "Lecture seule — autre onglet actif"
+              }
               disabled={streaming || !canSend}
               className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
             />
@@ -599,7 +966,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         {showContext && (
           <ContextPanel
             relay={relayRef.current}
-            connected={connected}
+            connected={connected && isActiveTab}
             activeIds={activeContextIds}
             onActiveChange={setActiveContextIds}
             activeProjectId={activeProjectId}
