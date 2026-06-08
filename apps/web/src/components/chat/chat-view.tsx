@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { ChatMessage, HostStatus } from "@ownmyownai/protocol";
 import type { Host } from "@ownmyownai/supabase-types";
@@ -101,7 +101,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     m.toLowerCase().includes(modelSearch.toLowerCase()),
   );
 
-  const applyAssistantDelta = (prev: UiMessage[]): UiMessage[] => {
+  const commitAssistantTurn = useCallback((prev: UiMessage[], content: string): UiMessage[] => {
+    if (!content.trim()) return prev;
+
     const next = [...prev];
     const pending = pendingUserMessage.current;
 
@@ -116,10 +118,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     const idx = assistantMessageIndex.current;
     if (idx === null) return next;
 
-    const assistantMsg: UiMessage = {
-      role: "assistant",
-      content: assistantBuffer.current,
-    };
+    const assistantMsg: UiMessage = { role: "assistant", content };
 
     if (next.length <= idx) {
       next.push(assistantMsg);
@@ -128,13 +127,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     }
 
     return next;
-  };
+  }, []);
 
-  const clearAssistantTurn = () => {
+  const clearAssistantTurn = useCallback(() => {
     assistantMessageIndex.current = null;
     pendingUserMessage.current = null;
     assistantBuffer.current = "";
-  };
+  }, []);
 
   useEffect(() => {
     setModel(defaultModel);
@@ -218,9 +217,14 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       onHostStatus: (status) => setHostStatus(status),
       onDelta: (content) => {
         assistantBuffer.current += content;
-        setMessages((prev) => applyAssistantDelta(prev));
+        const snapshot = assistantBuffer.current;
+        setMessages((prev) => commitAssistantTurn(prev, snapshot));
       },
       onDone: () => {
+        const snapshot = assistantBuffer.current;
+        if (snapshot.trim() && assistantMessageIndex.current !== null) {
+          setMessages((prev) => commitAssistantTurn(prev, snapshot));
+        }
         setStreaming(false);
         activeRequestId.current = null;
         clearAssistantTurn();
@@ -229,8 +233,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         setError(msg);
         setStreaming(false);
         activeRequestId.current = null;
-        if (assistantBuffer.current) {
-          setMessages((prev) => applyAssistantDelta(prev));
+        const snapshot = assistantBuffer.current;
+        if (snapshot.trim()) {
+          setMessages((prev) => commitAssistantTurn(prev, snapshot));
         }
         clearAssistantTurn();
       },
@@ -242,7 +247,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       client.disconnect();
       relayRef.current = null;
     };
-  }, [hostId]);
+  }, [hostId, clearAssistantTurn, commitAssistantTurn]);
 
   const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
@@ -415,22 +420,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 </p>
               </Card>
             )}
-            {messages.map((msg, i) => (
-              <div
-                key={`${msg.role}-${i}`}
-                className={`rounded-lg px-4 py-3 ${
-                  msg.role === "user"
-                    ? "ml-8 bg-brand-600/20"
-                    : "mr-8 border border-[var(--border)] bg-[var(--card)]"
-                }`}
-              >
-                {msg.role === "assistant" ? (
-                  <MarkdownMessage content={msg.content} />
-                ) : (
-                  <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
-                )}
-              </div>
-            ))}
+            {messages.map((msg, i) => {
+              if (msg.role === "assistant" && !msg.content.trim()) {
+                return null;
+              }
+              return (
+                <div
+                  key={`${msg.role}-${i}`}
+                  className={`rounded-lg px-4 py-3 ${
+                    msg.role === "user"
+                      ? "ml-8 bg-brand-600/20"
+                      : "mr-8 border border-[var(--border)] bg-[var(--card)]"
+                  }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <MarkdownMessage content={msg.content} />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                  )}
+                </div>
+              );
+            })}
             {streaming && messages[messages.length - 1]?.role !== "assistant" && (
               <p className="text-sm text-[var(--muted)]">Réflexion…</p>
             )}
