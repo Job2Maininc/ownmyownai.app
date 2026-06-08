@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-context-documents"
+description = "Enables the list_context_documents command without any pre-configured scope."
+commands.allow = ["list_context_documents"]
+
+[[permission]]
+identifier = "deny-list-context-documents"
+description = "Denies the list_context_documents command without any pre-configured scope."
+commands.deny = ["list_context_documents"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-import-knowledge-base"
+description = "Enables the import_knowledge_base command without any pre-configured scope."
+commands.allow = ["import_knowledge_base"]
+
+[[permission]]
+identifier = "deny-import-knowledge-base"
+description = "Denies the import_knowledge_base command without any pre-configured scope."
+commands.deny = ["import_knowledge_base"]

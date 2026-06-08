@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-knowledge-bases"
+description = "Enables the list_knowledge_bases command without any pre-configured scope."
+commands.allow = ["list_knowledge_bases"]
+
+[[permission]]
+identifier = "deny-list-knowledge-bases"
+description = "Denies the list_knowledge_bases command without any pre-configured scope."
+commands.deny = ["list_knowledge_bases"]

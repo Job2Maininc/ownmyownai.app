@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ensure-embedding-model"
+description = "Enables the ensure_embedding_model command without any pre-configured scope."
+commands.allow = ["ensure_embedding_model"]
+
+[[permission]]
+identifier = "deny-ensure-embedding-model"
+description = "Denies the ensure_embedding_model command without any pre-configured scope."
+commands.deny = ["ensure_embedding_model"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-host-settings"
+description = "Enables the get_host_settings command without any pre-configured scope."
+commands.allow = ["get_host_settings"]
+
+[[permission]]
+identifier = "deny-get-host-settings"
+description = "Denies the get_host_settings command without any pre-configured scope."
+commands.deny = ["get_host_settings"]

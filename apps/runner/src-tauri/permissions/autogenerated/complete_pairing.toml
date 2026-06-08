@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-complete-pairing"
+description = "Enables the complete_pairing command without any pre-configured scope."
+commands.allow = ["complete_pairing"]
+
+[[permission]]
+identifier = "deny-complete-pairing"
+description = "Denies the complete_pairing command without any pre-configured scope."
+commands.deny = ["complete_pairing"]

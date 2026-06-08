@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-host-settings"
+description = "Enables the save_host_settings command without any pre-configured scope."
+commands.allow = ["save_host_settings"]
+
+[[permission]]
+identifier = "deny-save-host-settings"
+description = "Denies the save_host_settings command without any pre-configured scope."
+commands.deny = ["save_host_settings"]

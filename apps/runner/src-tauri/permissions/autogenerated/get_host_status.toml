@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-host-status"
+description = "Enables the get_host_status command without any pre-configured scope."
+commands.allow = ["get_host_status"]
+
+[[permission]]
+identifier = "deny-get-host-status"
+description = "Denies the get_host_status command without any pre-configured scope."
+commands.deny = ["get_host_status"]

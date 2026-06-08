@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-background-services"
+description = "Enables the start_background_services command without any pre-configured scope."
+commands.allow = ["start_background_services"]
+
+[[permission]]
+identifier = "deny-start-background-services"
+description = "Denies the start_background_services command without any pre-configured scope."
+commands.deny = ["start_background_services"]

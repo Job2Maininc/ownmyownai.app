@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-knowledge-base"
+description = "Enables the export_knowledge_base command without any pre-configured scope."
+commands.allow = ["export_knowledge_base"]
+
+[[permission]]
+identifier = "deny-export-knowledge-base"
+description = "Denies the export_knowledge_base command without any pre-configured scope."
+commands.deny = ["export_knowledge_base"]

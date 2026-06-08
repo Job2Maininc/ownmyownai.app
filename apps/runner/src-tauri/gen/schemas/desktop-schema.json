@@ -387,6 +387,300 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Expose les commandes IPC de l'application Host au frontend.",
+          "type": "string",
+          "const": "allow-app-commands",
+          "markdownDescription": "Expose les commandes IPC de l'application Host au frontend."
+        },
+        {
+          "description": "Enables the check_ollama command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-ollama",
+          "markdownDescription": "Enables the check_ollama command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the complete_pairing command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-complete-pairing",
+          "markdownDescription": "Enables the complete_pairing command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the create_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-create-knowledge-base",
+          "markdownDescription": "Enables the create_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-knowledge-base",
+          "markdownDescription": "Enables the delete_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_ollama_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-ollama-model",
+          "markdownDescription": "Enables the delete_ollama_model command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the ensure_embedding_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ensure-embedding-model",
+          "markdownDescription": "Enables the ensure_embedding_model command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the ensure_ollama_running command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-ensure-ollama-running",
+          "markdownDescription": "Enables the ensure_ollama_running command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the export_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-knowledge-base",
+          "markdownDescription": "Enables the export_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_credentials command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-credentials",
+          "markdownDescription": "Enables the get_credentials command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_default_models_dir command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-default-models-dir",
+          "markdownDescription": "Enables the get_default_models_dir command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_disk_free_gb command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-disk-free-gb",
+          "markdownDescription": "Enables the get_disk_free_gb command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_hardware_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-hardware-info",
+          "markdownDescription": "Enables the get_hardware_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_host_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-host-settings",
+          "markdownDescription": "Enables the get_host_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_host_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-host-status",
+          "markdownDescription": "Enables the get_host_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the import_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-import-knowledge-base",
+          "markdownDescription": "Enables the import_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_context_documents command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-context-documents",
+          "markdownDescription": "Enables the list_context_documents command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_installed_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-installed-models",
+          "markdownDescription": "Enables the list_installed_models command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_knowledge_bases command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-knowledge-bases",
+          "markdownDescription": "Enables the list_knowledge_bases command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-url",
+          "markdownDescription": "Enables the open_url command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the pull_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pull-model",
+          "markdownDescription": "Enables the pull_model command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the pull_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pull-models",
+          "markdownDescription": "Enables the pull_models command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_host_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-host-settings",
+          "markdownDescription": "Enables the save_host_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_background_services command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-background-services",
+          "markdownDescription": "Enables the start_background_services command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the unpair_host command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-unpair-host",
+          "markdownDescription": "Enables the unpair_host command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_ollama command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-ollama",
+          "markdownDescription": "Denies the check_ollama command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the complete_pairing command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-complete-pairing",
+          "markdownDescription": "Denies the complete_pairing command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the create_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-create-knowledge-base",
+          "markdownDescription": "Denies the create_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-knowledge-base",
+          "markdownDescription": "Denies the delete_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_ollama_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-ollama-model",
+          "markdownDescription": "Denies the delete_ollama_model command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ensure_embedding_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ensure-embedding-model",
+          "markdownDescription": "Denies the ensure_embedding_model command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ensure_ollama_running command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-ensure-ollama-running",
+          "markdownDescription": "Denies the ensure_ollama_running command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-knowledge-base",
+          "markdownDescription": "Denies the export_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_credentials command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-credentials",
+          "markdownDescription": "Denies the get_credentials command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_default_models_dir command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-default-models-dir",
+          "markdownDescription": "Denies the get_default_models_dir command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_disk_free_gb command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-disk-free-gb",
+          "markdownDescription": "Denies the get_disk_free_gb command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_hardware_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-hardware-info",
+          "markdownDescription": "Denies the get_hardware_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_host_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-host-settings",
+          "markdownDescription": "Denies the get_host_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_host_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-host-status",
+          "markdownDescription": "Denies the get_host_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the import_knowledge_base command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-import-knowledge-base",
+          "markdownDescription": "Denies the import_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_context_documents command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-context-documents",
+          "markdownDescription": "Denies the list_context_documents command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_installed_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-installed-models",
+          "markdownDescription": "Denies the list_installed_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_knowledge_bases command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-knowledge-bases",
+          "markdownDescription": "Denies the list_knowledge_bases command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-url",
+          "markdownDescription": "Denies the open_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pull_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pull-model",
+          "markdownDescription": "Denies the pull_model command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pull_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pull-models",
+          "markdownDescription": "Denies the pull_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_host_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-host-settings",
+          "markdownDescription": "Denies the save_host_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_background_services command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-background-services",
+          "markdownDescription": "Denies the start_background_services command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the unpair_host command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-unpair-host",
+          "markdownDescription": "Denies the unpair_host command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

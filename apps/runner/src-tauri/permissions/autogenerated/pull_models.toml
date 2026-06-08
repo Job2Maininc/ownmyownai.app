@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pull-models"
+description = "Enables the pull_models command without any pre-configured scope."
+commands.allow = ["pull_models"]
+
+[[permission]]
+identifier = "deny-pull-models"
+description = "Denies the pull_models command without any pre-configured scope."
+commands.deny = ["pull_models"]

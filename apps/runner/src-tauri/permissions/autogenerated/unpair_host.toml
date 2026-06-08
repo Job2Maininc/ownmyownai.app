@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unpair-host"
+description = "Enables the unpair_host command without any pre-configured scope."
+commands.allow = ["unpair_host"]
+
+[[permission]]
+identifier = "deny-unpair-host"
+description = "Denies the unpair_host command without any pre-configured scope."
+commands.deny = ["unpair_host"]
