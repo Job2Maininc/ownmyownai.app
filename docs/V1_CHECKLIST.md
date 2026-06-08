@@ -2,9 +2,9 @@
 
 ## Prérequis cloud
 
-- [ ] Projet Supabase créé, migrations appliquées (`supabase db push`)
+- [x] Projet Supabase créé, migrations appliquées (incl. `host_models_context` via MCP, 2026-06-08)
 - [ ] Secrets : `RELAY_JWT_SECRET`, `RELAY_URL`, `APP_URL`
-- [ ] Edge Functions déployées (5 fonctions)
+- [x] Edge Functions déployées (5 fonctions, `runner-heartbeat` v4 avec sync modèles)
 - [x] Relay Cloudflare deploye (smoke GET /health -> {"ok":true}, 2026-06-08)
 - [x] Web deploye sur Vercel avec `NEXT_PUBLIC_*` (Production HTTP 200, commit 3410634)
 
