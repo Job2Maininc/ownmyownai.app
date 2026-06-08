@@ -1,4 +1,4 @@
-use super::ingest::{file_mtime, ingest_from_path, is_supported_extension, reindex_document};
+use super::ingest::{file_mtime, ingest_from_path, is_allowed_extension, reindex_document};
 use super::store::{
     get_context_link, list_all_context_links, list_documents_for_link, remove_stale_linked_documents,
     update_context_link_sync, ContextLimits, ContextLink,
@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 static SYNC_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static SYNC_QUEUE: LazyLock<Mutex<HashSet<String>>> =
@@ -44,7 +44,7 @@ pub fn scan_link(link: &ContextLink, scan: &SyncScanSettings, limits: &ContextLi
 
     match link.link_type.as_str() {
         "file" => {
-            if root.is_file() && is_supported_extension(&root) {
+            if root.is_file() && is_allowed_extension(&root, &link.allowed_extensions) {
                 let mtime = file_mtime(&root)?;
                 let size = fs::metadata(&root).map_err(|e| e.to_string())?.len();
                 files.push(ScannedFile {
@@ -59,10 +59,12 @@ pub fn scan_link(link: &ContextLink, scan: &SyncScanSettings, limits: &ContextLi
                 });
             }
         }
-        "folder" | "drive" => {
+        "folder" | "drive" | "repo" => {
             scan_directory(
                 &root,
                 &root,
+                &link.link_type,
+                &link.allowed_extensions,
                 link.recursive,
                 0,
                 scan,
@@ -77,9 +79,19 @@ pub fn scan_link(link: &ContextLink, scan: &SyncScanSettings, limits: &ContextLi
     Ok(files)
 }
 
+fn is_scannable_file(path: &Path, link_type: &str, allowed: &[String]) -> bool {
+    if link_type == "repo" {
+        super::codebase_index::is_code_file(path) || is_allowed_extension(path, allowed)
+    } else {
+        is_allowed_extension(path, allowed)
+    }
+}
+
 fn scan_directory(
     root: &Path,
     current: &Path,
+    link_type: &str,
+    allowed: &[String],
     recursive: bool,
     depth: u32,
     scan: &SyncScanSettings,
@@ -108,12 +120,12 @@ fn scan_directory(
                 continue;
             }
             if recursive {
-                scan_directory(root, &path, recursive, depth + 1, scan, limits, out, count)?;
+                scan_directory(root, &path, link_type, allowed, recursive, depth + 1, scan, limits, out, count)?;
             }
             continue;
         }
 
-        if !is_supported_extension(&path) {
+        if !is_scannable_file(&path, link_type, allowed) {
             continue;
         }
 
@@ -142,6 +154,25 @@ fn scan_directory(
 
 fn is_excluded_dir(name: &str) -> bool {
     EXCLUDED_DIR_NAMES.contains(&name)
+}
+
+pub async fn sync_link_with_cancel<F>(
+    link_id: &str,
+    cancel: Option<Arc<AtomicBool>>,
+    mut on_progress: F,
+) -> Result<(), String>
+where
+    F: FnMut(u8, &str) + Send,
+{
+    if cancel
+        .as_ref()
+        .map(|c| c.load(Ordering::SeqCst))
+        .unwrap_or(false)
+    {
+        return Err("Annulé".into());
+    }
+    on_progress(10, "Indexation en cours…");
+    sync_link(link_id).await
 }
 
 pub async fn sync_link(link_id: &str) -> Result<(), String> {
@@ -242,19 +273,32 @@ pub async fn sync_all_links() {
     }
 
     let links = list_all_context_links().unwrap_or_default();
+    let mut errors = 0u32;
     for link in links {
         if link.enabled {
-            let _ = sync_link(&link.id).await;
+            if sync_link(&link.id).await.is_err() {
+                errors += 1;
+            }
         }
     }
 
     SYNC_IN_PROGRESS.store(false, Ordering::SeqCst);
+
+    let message = if errors == 0 {
+        "Toutes les sources liées sont à jour.".to_string()
+    } else {
+        format!("Synchronisation terminée avec {errors} erreur(s).")
+    };
+    crate::notifications::notify_task_done(
+        crate::notifications::TaskDoneKind::SyncAll,
+        &message,
+    );
 }
 
 pub async fn link_context_file(kb_id: &str, paths: Vec<String>) -> Result<Vec<ContextLink>, String> {
     let mut created = Vec::new();
     for path in paths {
-        let link = super::store::create_context_link(kb_id, "file", &path, false)?;
+        let link = super::store::create_context_link(kb_id, "file", &path, false, None)?;
         let _ = sync_link(&link.id).await;
         created.push(get_context_link(&link.id)?);
     }
@@ -270,9 +314,23 @@ pub async fn link_context_folder(
     if !PathBuf::from(&path).exists() {
         return Err(format!("Chemin introuvable : {path}"));
     }
-    let link = super::store::create_context_link(kb_id, link_type, &path, recursive)?;
+    let link = super::store::create_context_link(kb_id, link_type, &path, recursive, None)?;
     sync_link(&link.id).await?;
     get_context_link(&link.id)
+}
+
+pub async fn link_context_repo(kb_id: &str, path: String) -> Result<ContextLink, String> {
+    let root = PathBuf::from(&path);
+    if !root.exists() {
+        return Err(format!("Chemin introuvable : {path}"));
+    }
+    if !super::codebase_index::is_git_repo(&root) {
+        return Err(
+            "Ce dossier n'est pas un dépôt Git (.git introuvable). Choisissez la racine du repo."
+                .into(),
+        );
+    }
+    link_context_folder(kb_id, path, true, "repo").await
 }
 
 pub fn unlink_context_link(link_id: &str) -> Result<(), String> {
@@ -311,6 +369,8 @@ mod tests {
             last_sync_status: "pending".into(),
             last_sync_error: None,
             doc_count: 0,
+            symbol_count: 0,
+            allowed_extensions: vec!["txt".into(), "md".into(), "pdf".into(), "docx".into()],
         };
         let scan = SyncScanSettings {
             max_scan_files: 50,
@@ -321,6 +381,34 @@ mod tests {
         let files = scan_link(&link, &scan, &limits).unwrap();
         assert_eq!(files.len(), 1);
         assert!(files[0].relative_path.contains("readme.md"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn scan_folder_respects_allowed_extensions() {
+        let base = std::env::temp_dir().join(format!("omoa-ext-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&base).unwrap();
+        fs::write(base.join("notes.txt"), "texte").unwrap();
+        fs::write(base.join("readme.md"), "# md").unwrap();
+
+        let link = ContextLink {
+            id: "test".into(),
+            knowledge_base_id: "kb".into(),
+            link_type: "folder".into(),
+            path: base.to_string_lossy().into_owned(),
+            recursive: true,
+            enabled: true,
+            last_sync_at: None,
+            last_sync_status: "pending".into(),
+            last_sync_error: None,
+            doc_count: 0,
+            symbol_count: 0,
+            allowed_extensions: vec!["txt".into()],
+        };
+        let files = scan_link(&link, &SyncScanSettings::default(), &ContextLimits::default()).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].relative_path.ends_with("notes.txt"));
 
         let _ = fs::remove_dir_all(&base);
     }

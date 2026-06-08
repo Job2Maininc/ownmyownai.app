@@ -35,7 +35,7 @@ use context::{
     init_context_db, link_context_file, link_context_folder, link_context_repo, list_audit_log,
     list_context_links, list_documents, list_knowledge_bases, reindex_uploaded_documents,
     set_context_link_enabled, set_knowledge_base_system_instruction, update_context_link_extensions,
-    sync_all_links, sync_link, unlink_context_link, AuditEntry, ContextLink,
+    sync_all_links, sync_link, unlink_context_link, get_context_link, AuditEntry, ContextLink,
 };
 use projects::{
     create_project, delete_project, list_projects, open_project, update_project, ProjectSummary,

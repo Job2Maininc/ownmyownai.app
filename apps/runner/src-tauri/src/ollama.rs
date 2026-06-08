@@ -2,7 +2,7 @@ use crate::credentials::get_credentials;
 use crate::process::command_hidden;
 use crate::settings::{
     get_settings, resolved_default_model, resolved_models_dir, resolved_thinking_model,
-    FALLBACK_DEFAULT_MODEL,
+    resolved_vision_model_setting, FALLBACK_DEFAULT_MODEL, FALLBACK_VISION_MODEL,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -1340,4 +1340,130 @@ pub async fn chat_with_tools(
         content,
         tool_calls,
     })
+}
+
+pub const KNOWN_VISION_MODELS: &[&str] =
+    &["moondream:1.8b", "llava:7b", "bakllava:7b", "llava:13b"];
+
+pub fn is_vision_model(model: &str) -> bool {
+    let lower = model.to_lowercase();
+    let base = lower.split(':').next().unwrap_or(&lower);
+    matches!(
+        base,
+        "llava" | "bakllava" | "moondream" | "llama3.2-vision" | "gemma3" | "minicpm-v"
+    ) || KNOWN_VISION_MODELS
+        .iter()
+        .any(|m| lower.starts_with(&m.to_lowercase()))
+}
+
+pub fn resolved_vision_model() -> String {
+    if let Some(m) = resolved_vision_model_setting() {
+        if model_exists(&m) {
+            return m;
+        }
+    }
+    for m in KNOWN_VISION_MODELS {
+        if model_exists(m) {
+            return (*m).to_string();
+        }
+    }
+    FALLBACK_VISION_MODEL.to_string()
+}
+
+pub async fn describe_image(model: &str, image_data: &[u8], prompt: &str) -> Result<String, String> {
+    if !model_exists(model) {
+        return Err(format!(
+            "Le modèle vision « {model} » n'est pas installé. Installez moondream ou llava depuis le gestionnaire de modèles."
+        ));
+    }
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(image_data);
+    let client = ollama_http_client()?;
+    let body = serde_json::json!({
+        "model": model,
+        "stream": false,
+        "messages": [{
+            "role": "user",
+            "content": prompt,
+            "images": [b64]
+        }]
+    });
+
+    let response = client
+        .post(format!("{OLLAMA_URL}/api/chat"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Échec description image : {}",
+            response.text().await.unwrap_or_default()
+        ));
+    }
+
+    #[derive(Deserialize)]
+    struct ChatResponse {
+        message: VisionMessage,
+    }
+    #[derive(Deserialize)]
+    struct VisionMessage {
+        content: String,
+    }
+
+    let data: ChatResponse = response.json().await.map_err(|e| e.to_string())?;
+    let text = data.message.content.trim();
+    if text.is_empty() {
+        return Err("Le modèle vision n'a pas renvoyé de description.".into());
+    }
+    Ok(text.to_string())
+}
+
+pub fn attach_images_to_last_user_message(
+    messages: &mut Vec<serde_json::Value>,
+    image_paths: &[String],
+) -> Result<(), String> {
+    use base64::Engine;
+    use std::fs;
+
+    if image_paths.is_empty() {
+        return Ok(());
+    }
+
+    let last_idx = messages
+        .iter()
+        .rposition(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
+    let Some(idx) = last_idx else {
+        return Ok(());
+    };
+
+    let text = messages[idx]
+        .get("content")
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let mut parts = vec![serde_json::json!({ "type": "text", "text": text })];
+
+    for path in image_paths {
+        let data = fs::read(path).map_err(|e| format!("Image introuvable ({path}) : {e}"))?;
+        let filename = path
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or("image.png");
+        let mime = crate::context::image_mime_type(filename);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+        let url = format!("data:{mime};base64,{b64}");
+        parts.push(serde_json::json!({
+            "type": "image_url",
+            "image_url": { "url": url }
+        }));
+    }
+
+    messages[idx] = serde_json::json!({
+        "role": "user",
+        "content": parts
+    });
+    Ok(())
 }

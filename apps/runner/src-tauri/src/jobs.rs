@@ -193,17 +193,18 @@ async fn run_job(id: String) {
 
     set_job_state(&id, "running", "Démarrage…", 0);
     host_status::emit_status();
-    if let Ok(jobs) = jobs_map().lock() {
-        if let Some(record) = jobs.get(&id) {
-            let snap = snapshot(&id, record);
-            emit_job_event("background-job-update", &snap);
-            broadcast_job_progress(&snap, None).await;
-        }
+    let snap = jobs_map()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(&id).map(|record| snapshot(&id, record)));
+    if let Some(snap) = snap {
+        emit_job_event("background-job-update", &snap);
+        broadcast_job_progress(&snap, None).await;
     }
 
     let result = match kind {
         JobKind::ContextSync { link_id } => run_context_sync(&id, link_id, &cancel).await,
-        JobKind::ContextSyncAll => run_context_sync_all(&id, &cancel).await,
+        JobKind::ContextSyncAll => run_context_sync_all(id.clone(), &cancel).await,
         JobKind::AgentRun {
             prompt,
             context_ids,
@@ -224,34 +225,31 @@ async fn run_context_sync(
     link_id: Option<String>,
     cancel: &Arc<AtomicBool>,
 ) -> Result<String, String> {
+    let job_id = id.to_string();
     let _ = init_context_db();
     let _ = ensure_embedding_model(None).await;
 
     if let Some(link_id) = link_id {
-        set_job_state(id, "running", "Indexation du lien…", 10);
+        set_job_state(&job_id, "running", "Indexation du lien…", 10);
         host_status::emit_status();
-        sync_link_with_cancel(&link_id, Some(cancel.clone()), |progress, msg| {
-            set_job_state(id, "running", msg, progress);
+        sync_link_with_cancel(&link_id, Some(cancel.clone()), move |progress, msg| {
+            set_job_state(&job_id, "running", msg, progress);
             host_status::emit_status();
         })
         .await?;
         Ok("Indexation terminée".into())
     } else {
-        run_context_sync_all(id, cancel).await
+        run_context_sync_all(job_id, cancel).await
     }
 }
 
-async fn run_context_sync_all(id: &str, cancel: &Arc<AtomicBool>) -> Result<String, String> {
+async fn run_context_sync_all(job_id: String, cancel: &Arc<AtomicBool>) -> Result<String, String> {
     let _ = init_context_db();
     let _ = ensure_embedding_model(None).await;
-    set_job_state(id, "running", "Synchronisation des sources liées…", 5);
+    set_job_state(&job_id, "running", "Synchronisation des sources liées…", 5);
     host_status::emit_status();
 
-    sync_all_links_with_cancel(cancel, |progress, msg| {
-        set_job_state(id, "running", msg, progress);
-        host_status::emit_status();
-    })
-    .await;
+    sync_all_links_with_cancel(job_id, cancel.clone()).await;
 
     if cancel.load(Ordering::SeqCst) {
         return Err("__cancelled__".into());
@@ -273,6 +271,7 @@ async fn run_agent_job(
     set_job_state(id, "running", "Agent en cours…", 10);
     host_status::emit_status();
 
+    let job_id = id.to_string();
     let result = run_agent(
         JobAgentConfig {
             model: resolved_default_model(),
@@ -282,13 +281,13 @@ async fn run_agent_job(
             user_task: prompt.to_string(),
         },
         cancel.clone(),
-        |msg| {
+        move |msg| {
             let pct = msg
                 .split('/')
                 .nth(1)
                 .and_then(|s| s.chars().take(2).collect::<String>().parse::<u8>().ok())
                 .unwrap_or(50);
-            set_job_state(id, "running", msg.trim(), pct.min(99));
+            set_job_state(&job_id, "running", msg.trim(), pct.min(99));
             host_status::emit_status();
         },
     )
@@ -300,12 +299,7 @@ async fn run_agent_job(
     }
 }
 
-async fn sync_all_links_with_cancel<F>(
-    cancel: &Arc<AtomicBool>,
-    mut on_progress: F,
-) where
-    F: FnMut(u8, &str),
-{
+async fn sync_all_links_with_cancel(job_id: String, cancel: Arc<AtomicBool>) {
     use crate::context::list_all_context_links;
 
     let links = list_all_context_links().unwrap_or_default();
@@ -317,11 +311,19 @@ async fn sync_all_links_with_cancel<F>(
             return;
         }
         let base = ((idx as u32 * 100) / total as u32) as u8;
-        on_progress(base, &format!("Indexation : {}", link.path));
-        let _ = sync_link_with_cancel(&link.id, Some(cancel.clone()), |p, msg| {
-            let blended = base + (p / total as u8).min(99 - base);
-            on_progress(blended, msg);
-        })
+        let msg = format!("Indexation : {}", link.path);
+        set_job_state(&job_id, "running", &msg, base);
+        host_status::emit_status();
+        let progress_job = job_id.clone();
+        let _ = sync_link_with_cancel(
+            &link.id,
+            Some(cancel.clone()),
+            move |p, detail| {
+                let blended = base + (p / total as u8).min(99 - base);
+                set_job_state(&progress_job, "running", detail, blended);
+                host_status::emit_status();
+            },
+        )
         .await;
     }
 }

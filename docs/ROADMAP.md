@@ -24,6 +24,7 @@ OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 
 ## Pistes futures
 
+- MCP servers côté Host (`mcp.*` WS + builtin filesystem + serveurs externes via stdio) — implémenté v0.3
 - Terminal intégré (allowlist Host + streaming WS `terminal.*`) — implémenté v0.3
 - Historique complet runner (SQLite optionnel)
 - Extraction PDF robuste (crate dédiée ou OCR)

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-link-context-repo"
+description = "Enables the link_context_repo command without any pre-configured scope."
+commands.allow = ["link_context_repo"]
+
+[[permission]]
+identifier = "deny-link-context-repo"
+description = "Denies the link_context_repo command without any pre-configured scope."
+commands.deny = ["link_context_repo"]

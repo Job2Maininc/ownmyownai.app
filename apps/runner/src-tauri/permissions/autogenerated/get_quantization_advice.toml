@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-quantization-advice"
+description = "Enables the get_quantization_advice command without any pre-configured scope."
+commands.allow = ["get_quantization_advice"]
+
+[[permission]]
+identifier = "deny-get-quantization-advice"
+description = "Denies the get_quantization_advice command without any pre-configured scope."
+commands.deny = ["get_quantization_advice"]

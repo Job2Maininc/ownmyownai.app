@@ -1,5 +1,6 @@
+use super::scheduled_sync::start_scheduled_sync;
 use super::store::list_all_context_links;
-use super::sync::{sync_all_links, sync_link};
+use crate::jobs::{submit_job, JobKind};
 use crate::settings::resolved_sync_scan_settings;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
@@ -24,8 +25,10 @@ pub fn start_context_watcher() {
     }
 
     tauri::async_runtime::spawn(async {
-        sync_all_links().await;
+        submit_job(JobKind::ContextSyncAll);
     });
+
+    start_scheduled_sync();
 
     std::thread::spawn(|| {
         let (notify_tx, notify_rx) = mpsc::channel();
@@ -61,8 +64,11 @@ pub fn start_context_watcher() {
 
             for link_id in ready {
                 last_event.remove(&link_id);
+                let id = link_id.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = sync_link(&link_id).await;
+                    submit_job(JobKind::ContextSync {
+                        link_id: Some(id),
+                    });
                 });
             }
 

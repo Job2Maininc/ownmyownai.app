@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 interface KnowledgeBase {
@@ -33,7 +34,10 @@ interface ContextLink {
   lastSyncError?: string | null;
   docCount: number;
   symbolCount?: number;
+  allowedExtensions: string[];
 }
+
+const EXTRACTABLE_EXTENSIONS = ["txt", "md", "pdf", "docx", "png", "jpg", "jpeg"] as const;
 
 const SUPPORTED_FILTERS = [
   { name: "Documents", extensions: ["txt", "md", "pdf", "docx"] },
@@ -42,6 +46,51 @@ const SUPPORTED_FILTERS = [
 function truncatePath(path: string, max = 48) {
   if (path.length <= max) return path;
   return `…${path.slice(-max + 1)}`;
+}
+
+async function waitForBackgroundJob(jobId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let unlistenDone: (() => void) | undefined;
+    let unlistenUpdate: (() => void) | undefined;
+    const timeout = setTimeout(() => {
+      unlistenDone?.();
+      unlistenUpdate?.();
+      reject(new Error("Délai d'indexation dépassé"));
+    }, 600_000);
+
+    const finish = (ok: () => void, err?: Error) => {
+      clearTimeout(timeout);
+      unlistenDone?.();
+      unlistenUpdate?.();
+      if (err) reject(err);
+      else ok();
+    };
+
+    void listen<{ id: string; status: string; message: string }>(
+      "background-job-done",
+      (event) => {
+        if (event.payload.id !== jobId) return;
+        finish(resolve);
+      },
+    ).then((fn) => {
+      unlistenDone = fn;
+    });
+
+    void listen<{ id: string; status: string; message: string }>(
+      "background-job-update",
+      (event) => {
+        if (event.payload.id !== jobId) return;
+        if (event.payload.status === "error") {
+          finish(resolve, new Error(event.payload.message));
+        }
+        if (event.payload.status === "cancelled") {
+          finish(resolve, new Error("Indexation annulée"));
+        }
+      },
+    ).then((fn) => {
+      unlistenUpdate = fn;
+    });
+  });
 }
 
 function syncStatusLabel(link: ContextLink) {
@@ -277,7 +326,8 @@ export default function ContextManager() {
     setError(null);
     try {
       await invoke("ensure_embedding_model");
-      await invoke("sync_context_link", { linkId });
+      const jobId = await invoke<string>("sync_context_link", { linkId });
+      await waitForBackgroundJob(jobId);
       await refreshLinks(selectedId);
       await refreshDocs(selectedId);
     } catch (e) {
@@ -293,6 +343,36 @@ export default function ContextManager() {
       if (selectedId) await refreshLinks(selectedId);
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  async function toggleExtension(link: ContextLink, ext: string) {
+    const current = new Set(link.allowedExtensions ?? [...EXTRACTABLE_EXTENSIONS]);
+    if (current.has(ext)) {
+      if (current.size <= 1) {
+        setError("Au moins une extension doit rester active.");
+        return;
+      }
+      current.delete(ext);
+    } else {
+      current.add(ext);
+    }
+    setSyncing(true);
+    setError(null);
+    try {
+      await invoke("ensure_embedding_model");
+      await invoke("set_context_link_extensions", {
+        linkId: link.id,
+        allowedExtensions: [...current],
+      });
+      if (selectedId) {
+        await refreshLinks(selectedId);
+        await refreshDocs(selectedId);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -426,6 +506,21 @@ export default function ContextManager() {
                 </span>
                 {link.lastSyncError && (
                   <span className="error-line"> — {link.lastSyncError}</span>
+                )}
+                {link.linkType !== "repo" && (
+                  <div className="context-create" role="group" aria-label="Extensions indexées">
+                    {EXTRACTABLE_EXTENSIONS.map((ext) => (
+                      <label key={ext} className="muted" style={{ marginRight: "0.5rem" }}>
+                        <input
+                          type="checkbox"
+                          checked={(link.allowedExtensions ?? [...EXTRACTABLE_EXTENSIONS]).includes(ext)}
+                          disabled={syncing}
+                          onChange={() => void toggleExtension(link, ext)}
+                        />{" "}
+                        .{ext}
+                      </label>
+                    ))}
+                  </div>
                 )}
                 <div className="context-create">
                   <button type="button" className="btn-ghost" onClick={() => void syncLink(link.id)}>

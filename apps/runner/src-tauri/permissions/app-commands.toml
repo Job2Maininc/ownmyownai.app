@@ -45,6 +45,7 @@ commands.allow = [
   "sync_context_link",
   "sync_all_context_links",
   "set_context_link_enabled",
+  "set_context_link_extensions",
   "list_git_repos",
   "collect_git_diff",
   "collect_gh_pr_diff",

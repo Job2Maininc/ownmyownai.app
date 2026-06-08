@@ -6,6 +6,8 @@ import {
   compatibilityLabel,
   getCompatibility,
 } from "../data/models";
+import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
+import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
 import type { HostSettings } from "../types";
 
 interface ModelSetupProps {
@@ -21,6 +23,8 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const [ramGb, setRamGb] = useState(8);
   const [gpuLabel, setGpuLabel] = useState<string | null>(null);
   const [hideIncompatible, setHideIncompatible] = useState(false);
+  const [adviceModel, setAdviceModel] = useState<string | null>(null);
+  const { advice, loading: adviceLoading } = useQuantizationAdvice(adviceModel);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -60,8 +64,12 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         if (defaultModel === id && next.length > 0) {
           setDefaultModel(next[0]);
         }
+        if (adviceModel === id) {
+          setAdviceModel(next[0] ?? null);
+        }
         return next;
       }
+      setAdviceModel(id);
       return [...prev, id];
     });
   }
@@ -206,6 +214,9 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
                 <span className="model-card__best-label">Idéal pour :</span>{" "}
                 {model.bestFor.join(" · ")}
               </p>
+              {checked && adviceModel === model.id && (
+                <QuantizationAdviceBanner advice={advice} loading={adviceLoading} />
+              )}
             </label>
           );
         })}

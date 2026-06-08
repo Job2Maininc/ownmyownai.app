@@ -945,7 +945,7 @@ async fn handle_chat_start_inner(
         messages.insert(i, sys);
     }
 
-    if is_vision_model(model) && !rag_kb_ids.is_empty() {
+    if is_vision_model(&model) && !rag_kb_ids.is_empty() {
         if let Ok(paths) = find_relevant_image_paths(&rag_kb_ids, &rag_query, 3).await {
             let _ = attach_images_to_last_user_message(&mut messages, &paths);
         }

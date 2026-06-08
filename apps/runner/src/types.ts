@@ -14,6 +14,8 @@ export interface HostSettings {
   modelsDir: string;
   selectedModels: string[];
   defaultModel: string;
+  /** Modèle secours si le modèle demandé est absent ou trop lent. */
+  fallbackModel?: string;
 }
 
 export interface SetupProgress {
@@ -25,6 +27,16 @@ export interface SetupProgress {
   currentModel: string | null;
   modelIndex: number | null;
   modelCount: number | null;
+}
+
+export interface QuantizationAdvice {
+  quantization: "q4" | "q8";
+  ollamaTag: string;
+  estimatedSizeGb: number;
+  estimatedRamGb: number;
+  diskFreeGb: number | null;
+  message: string;
+  reason: string;
 }
 
 export interface HostStatusSnapshot {
