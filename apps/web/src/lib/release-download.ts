@@ -3,6 +3,20 @@ const GITHUB_REPO = "Job2Maininc/ownmyownai.app";
 export const PORTABLE_ZIP_FILENAME = "OwnMyOwnAI-Host-portable-x64.zip";
 export const INSTALLER_FILENAME = "OwnMyOwnAI-Host-setup.exe";
 
+export type HostReleaseSource = "supabase" | "github" | "config";
+
+export type HostReleaseInfo = {
+  version: string;
+  pubDate: Date | null;
+  source: HostReleaseSource;
+};
+
+type LatestManifest = {
+  version?: string;
+  pub_date?: string;
+  notes?: string;
+};
+
 export type PortableZipAsset = {
   name: string;
   browser_download_url: string;
@@ -37,6 +51,69 @@ export function supabasePublicInstallerUrl(): string | null {
   const root = supabasePublicBase();
   if (!root) return null;
   return `${root}/${INSTALLER_FILENAME}`;
+}
+
+function supabasePublicManifestUrl(): string | null {
+  const root = supabasePublicBase();
+  if (!root) return null;
+  return `${root}/latest.json`;
+}
+
+function normalizeVersion(raw: string | undefined | null): string | null {
+  if (!raw?.trim()) return null;
+  return raw.trim().replace(/^v/i, "");
+}
+
+export async function resolveHostReleaseInfo(): Promise<HostReleaseInfo | null> {
+  const manifestUrl = supabasePublicManifestUrl();
+  if (manifestUrl) {
+    try {
+      const res = await fetch(manifestUrl, { next: { revalidate: 300 } });
+      if (res.ok) {
+        const manifest = (await res.json()) as LatestManifest;
+        const version = normalizeVersion(manifest.version);
+        if (version) {
+          return {
+            version,
+            pubDate: manifest.pub_date ? new Date(manifest.pub_date) : null,
+            source: "supabase",
+          };
+        }
+      }
+    } catch {
+      /* try fallbacks */
+    }
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`,
+      { headers: githubAuthHeaders(), next: { revalidate: 300 } },
+    );
+    if (res.ok) {
+      const releases = (await res.json()) as Release[];
+      const tag = releases[0]?.tag_name;
+      const version = normalizeVersion(tag);
+      if (version) {
+        return {
+          version,
+          pubDate: releases[0]?.published_at
+            ? new Date(releases[0].published_at)
+            : null,
+          source: "github",
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const configVersion = normalizeVersion(process.env.NEXT_PUBLIC_HOST_APP_VERSION);
+  if (configVersion) {
+    return { version: configVersion, pubDate: null, source: "config" };
+  }
+
+  return null;
 }
 
 export async function resolveInstallerUrl(): Promise<string | null> {
