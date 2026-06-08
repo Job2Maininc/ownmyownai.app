@@ -20,6 +20,7 @@ export default function App() {
   const [step, setStep] = useState<Step>("welcome");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [progress, setProgress] = useState<SetupProgress | null>(null);
+  const [activityLog, setActivityLog] = useState<string[]>([]);
   const [hostSettings, setHostSettings] = useState<HostSettings | null>(null);
   const [pairingCode, setPairingCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,16 @@ export default function App() {
 
   useEffect(() => {
     const unlisten = listen<SetupProgress>("ollama-progress", (event) => {
-      setProgress(event.payload);
+      const payload = event.payload;
+      setProgress(payload);
+      if (payload.message) {
+        setActivityLog((prev) => {
+          const last = prev[prev.length - 1];
+          if (last === payload.message) return prev;
+          const next = [...prev, payload.message];
+          return next.length > 80 ? next.slice(-80) : next;
+        });
+      }
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -69,6 +79,7 @@ export default function App() {
   async function runInstallation(settings: HostSettings) {
     setStep("ollama");
     setError(null);
+    setActivityLog([]);
     setProgress({
       phase: "ollama_start",
       message: "Préparation de l'IA locale…",
@@ -186,7 +197,11 @@ export default function App() {
         )}
 
         {step === "ollama" && (
-          <InstallProgress progress={progress} ollamaStatus={ollamaStatus} />
+          <InstallProgress
+            progress={progress}
+            ollamaStatus={ollamaStatus}
+            activityLog={activityLog}
+          />
         )}
 
         {step === "pairing" && (

@@ -97,13 +97,165 @@ fn models_dir_env() -> String {
     resolved_models_dir().to_string_lossy().into_owned()
 }
 
+fn command_hidden(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 fn run_ollama(args: &[&str]) -> Result<Output, String> {
     let exe = resolve_ollama_exe().ok_or_else(|| "Binaire Ollama introuvable".to_string())?;
-    Command::new(&exe)
+    command_hidden(&exe)
         .args(args)
         .env("OLLAMA_MODELS", models_dir_env())
         .output()
         .map_err(|e| e.to_string())
+}
+
+fn strip_ansi(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            if chars.next_if_eq(&'[').is_some() {
+                for ch in chars.by_ref() {
+                    if ch.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out.trim().to_string()
+}
+
+/// Parse winget / installer progress lines (e.g. "512 MB / 1.2 GB" or "45%").
+fn parse_size_progress_line(line: &str) -> Option<(u64, u64, f64)> {
+    let clean = strip_ansi(line);
+    if clean.is_empty() {
+        return None;
+    }
+
+    if let Some(idx) = clean.find('%') {
+        let before = &clean[..idx];
+        if let Ok(pct) = before
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
+            .parse::<f64>()
+        {
+            return Some((0, 0, pct.clamp(0.0, 100.0)));
+        }
+    }
+
+    let lower = clean.to_lowercase();
+    let parts: Vec<&str> = lower.split('/').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let done = parse_byte_size(parts[0])?;
+    let total = parse_byte_size(parts[1])?;
+    if total == 0 {
+        return None;
+    }
+    let percent = (done as f64 / total as f64) * 100.0;
+    Some((done, total, percent))
+}
+
+fn parse_byte_size(s: &str) -> Option<u64> {
+    let s = s.trim();
+    let mut num_str = String::new();
+    let mut unit = String::new();
+    for ch in s.chars() {
+        if ch.is_ascii_digit() || ch == '.' {
+            num_str.push(ch);
+        } else if !ch.is_whitespace() {
+            unit.push(ch);
+        }
+    }
+    let value: f64 = num_str.parse().ok()?;
+    let mult = match unit.as_str() {
+        "b" | "o" => 1.0,
+        "kb" | "ko" => 1024.0,
+        "mb" | "mo" => 1024.0 * 1024.0,
+        "gb" | "go" => 1024.0 * 1024.0 * 1024.0,
+        _ => return None,
+    };
+    Some((value * mult) as u64)
+}
+
+fn emit_stream_line(app: Option<&AppHandle>, phase: &str, line: &str) {
+    let clean = strip_ansi(line);
+    if clean.is_empty() {
+        return;
+    }
+
+    if let Some((done, total, percent)) = parse_size_progress_line(&clean) {
+        let remaining = total.saturating_sub(done);
+        let message = if total > 0 {
+            format!(
+                "{} / {} · reste {} ({percent:.0} %)",
+                format_bytes(done),
+                format_bytes(total),
+                format_bytes(remaining)
+            )
+        } else {
+            format!("Progression : {percent:.0} %")
+        };
+        emit_progress_local(
+            app,
+            SetupProgress {
+                phase: phase.into(),
+                message,
+                percent: Some(percent),
+                bytes_downloaded: if total > 0 { Some(done) } else { None },
+                bytes_total: if total > 0 { Some(total) } else { None },
+                current_model: None,
+                model_index: None,
+                model_count: None,
+            },
+        );
+        return;
+    }
+
+    emit_progress_local(
+        app,
+        SetupProgress {
+            phase: phase.into(),
+            message: clean,
+            percent: None,
+            bytes_downloaded: None,
+            bytes_total: None,
+            current_model: None,
+            model_index: None,
+            model_count: None,
+        },
+    );
+}
+
+fn spawn_stream_reader(
+    stream: impl std::io::Read + Send + 'static,
+    app: Option<AppHandle>,
+    phase: &'static str,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stream);
+        for line in reader.lines().flatten() {
+            emit_stream_line(app.as_ref(), phase, &line);
+        }
+    })
 }
 
 pub fn check_ollama() -> Result<OllamaStatus, String> {
@@ -209,9 +361,10 @@ async fn download_ollama_installer(dest: &Path, app: Option<&AppHandle>) -> Resu
 
         let message = match total {
             Some(t) => format!(
-                "Téléchargement d'Ollama : {} / {} ({:.0} %)",
+                "Téléchargement d'Ollama : {} / {} · reste {} ({:.0} %)",
                 format_bytes(downloaded),
                 format_bytes(t),
+                format_bytes(t.saturating_sub(downloaded)),
                 percent.unwrap_or(0.0)
             ),
             None => format!(
@@ -255,9 +408,13 @@ async fn download_ollama_installer(dest: &Path, app: Option<&AppHandle>) -> Resu
 
 #[cfg(target_os = "windows")]
 async fn install_ollama_via_setup(setup_path: &Path, app: Option<&AppHandle>) -> Result<(), String> {
-    emit_message(app, "ollama_install", "Installation d'Ollama en cours…");
+    emit_message(
+        app,
+        "ollama_install",
+        "Lancement de l'installateur Ollama (fenêtre masquée)…",
+    );
 
-    let status = Command::new(setup_path)
+    let status = command_hidden(setup_path)
         .args(["/SP-", "/VERYSILENT", "/NORESTART"])
         .status()
         .map_err(|e| e.to_string())?;
@@ -268,12 +425,35 @@ async fn install_ollama_via_setup(setup_path: &Path, app: Option<&AppHandle>) ->
 
     for i in 0..45 {
         if resolve_ollama_exe().is_some() {
-            emit_message(app, "ollama_install", "Ollama installé.");
+            emit_progress_local(
+                app,
+                SetupProgress {
+                    phase: "ollama_install".into(),
+                    message: "Ollama installé.".into(),
+                    percent: Some(100.0),
+                    bytes_downloaded: None,
+                    bytes_total: None,
+                    current_model: None,
+                    model_index: None,
+                    model_count: None,
+                },
+            );
             return Ok(());
         }
-        if i % 5 == 0 {
-            emit_message(app, "ollama_install", "Finalisation de l'installation…");
-        }
+        let percent = Some((i as f64 / 45.0) * 100.0);
+        emit_progress_local(
+            app,
+            SetupProgress {
+                phase: "ollama_install".into(),
+                message: format!("Finalisation de l'installation… ({i}/45 s)"),
+                percent,
+                bytes_downloaded: None,
+                bytes_total: None,
+                current_model: None,
+                model_index: None,
+                model_count: None,
+            },
+        );
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 
@@ -282,9 +462,13 @@ async fn install_ollama_via_setup(setup_path: &Path, app: Option<&AppHandle>) ->
 
 #[cfg(target_os = "windows")]
 async fn install_ollama_via_winget(app: Option<&AppHandle>) -> Result<(), String> {
-    emit_message(app, "ollama_install", "Installation via winget…");
+    emit_message(
+        app,
+        "ollama_install",
+        "Installation via winget (progression ci-dessous)…",
+    );
 
-    let output = Command::new("winget")
+    let mut child = command_hidden("winget")
         .args([
             "install",
             "--id",
@@ -292,21 +476,52 @@ async fn install_ollama_via_winget(app: Option<&AppHandle>) -> Result<(), String
             "-e",
             "--accept-package-agreements",
             "--accept-source-agreements",
-            "--silent",
+            "--disable-interactivity",
         ])
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("winget indisponible : {e}"))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!("winget : {stdout} {stderr}"));
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let app_stdout = app.cloned();
+    let app_stderr = app.cloned();
+
+    let stdout_handle = stdout.map(|s| spawn_stream_reader(s, app_stdout, "ollama_install"));
+    let stderr_handle = stderr.map(|s| spawn_stream_reader(s, app_stderr, "ollama_install"));
+
+    let status = child.wait().map_err(|e| e.to_string())?;
+
+    if let Some(h) = stdout_handle {
+        let _ = h.join();
+    }
+    if let Some(h) = stderr_handle {
+        let _ = h.join();
     }
 
-    for _ in 0..60 {
+    if !status.success() {
+        return Err("winget n'a pas pu installer Ollama".into());
+    }
+
+    for i in 0..30 {
         if resolve_ollama_exe().is_some() {
+            emit_message(app, "ollama_install", "Ollama installé via winget.");
             return Ok(());
         }
+        emit_progress_local(
+            app,
+            SetupProgress {
+                phase: "ollama_install".into(),
+                message: format!("Vérification de l'installation winget… ({i}/30)"),
+                percent: Some((i as f64 / 30.0) * 100.0),
+                bytes_downloaded: None,
+                bytes_total: None,
+                current_model: None,
+                model_index: None,
+                model_count: None,
+            },
+        );
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
 
@@ -320,10 +535,6 @@ async fn install_ollama(app: Option<&AppHandle>) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        if install_ollama_via_winget(app).await.is_ok() {
-            return Ok(());
-        }
-
         let cache_dir = dirs::data_local_dir()
             .ok_or_else(|| "Impossible d'accéder au dossier AppData".to_string())?
             .join("OwnMyOwnAI")
@@ -332,11 +543,21 @@ async fn install_ollama(app: Option<&AppHandle>) -> Result<(), String> {
         std::fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
         let setup_path = cache_dir.join("OllamaSetup.exe");
 
+        // Téléchargement direct en priorité : progression Go/Mo visible dans l'app.
         if !setup_path.is_file() {
             download_ollama_installer(&setup_path, app).await?;
         }
 
-        return install_ollama_via_setup(&setup_path, app).await;
+        if install_ollama_via_setup(&setup_path, app).await.is_ok() {
+            return Ok(());
+        }
+
+        emit_message(
+            app,
+            "ollama_install",
+            "Installateur direct échoué — nouvel essai via winget…",
+        );
+        return install_ollama_via_winget(app).await;
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -354,7 +575,7 @@ async fn spawn_ollama_serve(app: Option<&AppHandle>) -> Result<(), String> {
 
     emit_message(app, "ollama_start", "Démarrage d'Ollama…");
 
-    Command::new(&exe)
+    command_hidden(&exe)
         .arg("serve")
         .env("OLLAMA_MODELS", &models_dir)
         .spawn()
@@ -485,7 +706,7 @@ pub async fn pull_model(
         extra_ref,
     );
 
-    let mut child = Command::new(&exe)
+    let mut child = command_hidden(&exe)
         .args(["pull", model])
         .env("OLLAMA_MODELS", &models_dir)
         .stdout(Stdio::piped())
