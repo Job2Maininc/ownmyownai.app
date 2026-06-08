@@ -29,7 +29,7 @@ pub fn set_tooltip(app: &AppHandle, text: &str) {
 
 pub fn setup(app: &App) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "tray_show", "Afficher le host", true, None::<&str>)?;
-    let hide_item = MenuItem::with_id(app, "tray_hide", "Masquer la fenÃªtre", true, None::<&str>)?;
+    let hide_item = MenuItem::with_id(app, "tray_hide", "Masquer la fenêtre", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "tray_quit", "Quitter", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &hide_item, &separator, &quit_item])?;

@@ -1,4 +1,6 @@
+mod context;
 mod credentials;
+mod hardware;
 mod host_status;
 mod ollama;
 mod relay;
@@ -7,7 +9,15 @@ mod tray;
 
 use credentials::{delete_credentials, get_credentials, save_credentials, StoredCredentials};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
-use ollama::{check_ollama, ensure_ollama_running, pull_model, pull_models, OllamaStatus};
+use context::{
+    create_knowledge_base, delete_knowledge_base, export_knowledge_base, import_knowledge_base,
+    init_context_db, list_documents, list_knowledge_bases, ContextLimits,
+};
+use hardware::get_hardware_info;
+use ollama::{
+    check_ollama, delete_model, disk_free_gb_for_models_dir, ensure_embedding_model,
+    ensure_ollama_running, list_installed_models, pull_model, pull_models, OllamaStatus,
+};
 use relay::{start_background_services, stop_background_services};
 use settings::{default_ollama_models_path, get_settings, save_settings, HostSettings};
 use serde::Deserialize;
@@ -64,10 +74,12 @@ async fn complete_pairing_cmd(
         supabase_url.trim_end_matches('/')
     );
 
+    let settings = get_settings().unwrap_or_default();
     let body = serde_json::json!({
         "code": code.trim(),
         "name": name,
         "platform": "windows",
+        "default_model": settings.default_model,
     });
 
     let res = client
@@ -117,6 +129,64 @@ async fn unpair_host_cmd() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command(rename = "get_hardware_info")]
+fn get_hardware_info_cmd() -> hardware::HardwareInfo {
+    get_hardware_info()
+}
+
+#[tauri::command(rename = "delete_ollama_model")]
+fn delete_ollama_model_cmd(model: String) -> Result<(), String> {
+    delete_model(&model)
+}
+
+#[tauri::command(rename = "get_disk_free_gb")]
+fn get_disk_free_gb_cmd() -> Option<f64> {
+    disk_free_gb_for_models_dir()
+}
+
+#[tauri::command(rename = "list_installed_models")]
+fn list_installed_models_cmd() -> Vec<String> {
+    list_installed_models()
+}
+
+#[tauri::command(rename = "ensure_embedding_model")]
+async fn ensure_embedding_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
+    ensure_embedding_model(Some(&app)).await
+}
+
+#[tauri::command(rename = "list_knowledge_bases")]
+fn list_knowledge_bases_cmd() -> Result<Vec<context::KnowledgeBase>, String> {
+    init_context_db()?;
+    list_knowledge_bases()
+}
+
+#[tauri::command(rename = "create_knowledge_base")]
+fn create_knowledge_base_cmd(name: String, description: String) -> Result<context::KnowledgeBase, String> {
+    init_context_db()?;
+    create_knowledge_base(&name, &description, &ContextLimits::default())
+}
+
+#[tauri::command(rename = "delete_knowledge_base")]
+fn delete_knowledge_base_cmd(id: String) -> Result<(), String> {
+    delete_knowledge_base(&id)
+}
+
+#[tauri::command(rename = "list_context_documents")]
+fn list_context_documents_cmd(kb_id: String) -> Result<Vec<context::DocumentInfo>, String> {
+    list_documents(&kb_id)
+}
+
+#[tauri::command(rename = "export_knowledge_base")]
+fn export_knowledge_base_cmd(kb_id: String, dest_path: String) -> Result<(), String> {
+    export_knowledge_base(&kb_id, &std::path::PathBuf::from(dest_path))
+}
+
+#[tauri::command(rename = "import_knowledge_base")]
+fn import_knowledge_base_cmd(zip_path: String) -> Result<context::KnowledgeBase, String> {
+    init_context_db()?;
+    import_knowledge_base(&std::path::PathBuf::from(zip_path), &ContextLimits::default())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -135,6 +205,17 @@ pub fn run() {
             start_background_services_cmd,
             get_host_status_cmd,
             unpair_host_cmd,
+            get_hardware_info_cmd,
+            delete_ollama_model_cmd,
+            get_disk_free_gb_cmd,
+            list_installed_models_cmd,
+            ensure_embedding_model_cmd,
+            list_knowledge_bases_cmd,
+            create_knowledge_base_cmd,
+            delete_knowledge_base_cmd,
+            list_context_documents_cmd,
+            export_knowledge_base_cmd,
+            import_knowledge_base_cmd,
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());

@@ -14,7 +14,8 @@
     "build:relay": "npm run build --workspace=@ownmyownai/relay",
     "build:protocol": "npm run build --workspace=@ownmyownai/protocol",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspace=@ownmyownai/protocol --if-present; npm run test --workspace=@ownmyownai/web --if-present"
   },
   "engines": {
     "node": ">=20"

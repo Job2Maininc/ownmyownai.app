@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Host } from "@ownmyownai/supabase-types";
-import { deleteHost, renameHost } from "@/app/dashboard/actions";
+import { deleteHost, renameHost, updateDefaultModel } from "@/app/dashboard/actions";
 import {
   getHostDisplayStatus,
   hostStatusClassName,
@@ -24,7 +24,10 @@ export function HostCard({ host: initialHost }: HostCardProps) {
   const [name, setName] = useState(host.name);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingModel, setUpdatingModel] = useState(false);
 
+  const installedModels = Array.isArray(host.installed_models) ? host.installed_models : [];
   const displayStatus = getHostDisplayStatus(host);
   const chatDisabled = displayStatus === "offline" || displayStatus === "busy";
   const chatTitle =
@@ -42,9 +45,13 @@ export function HostCard({ host: initialHost }: HostCardProps) {
       return;
     }
     setSaving(true);
+    setActionError(null);
     const { error: renameError } = await renameHost(host.id, trimmed);
     setSaving(false);
-    if (renameError) return;
+    if (renameError) {
+      setActionError(renameError);
+      return;
+    }
     setHost({ ...host, name: trimmed });
     setEditing(false);
     router.refresh();
@@ -55,80 +62,136 @@ export function HostCard({ host: initialHost }: HostCardProps) {
       return;
     }
     setDeleting(true);
+    setActionError(null);
     const { error: deleteError } = await deleteHost(host.id);
     setDeleting(false);
-    if (deleteError) return;
+    if (deleteError) {
+      setActionError(deleteError);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleDefaultModelChange(model: string) {
+    setUpdatingModel(true);
+    setActionError(null);
+    const { error } = await updateDefaultModel(host.id, model);
+    setUpdatingModel(false);
+    if (error) {
+      setActionError(error);
+      return;
+    }
+    setHost({ ...host, default_model: model });
     router.refresh();
   }
 
   return (
-    <Card className="flex items-center justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        {editing ? (
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleRename();
-            }}
-          >
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="flex-1 rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm outline-none focus:border-brand-500"
-              autoFocus
-              disabled={saving}
-            />
-            <Button type="submit" variant="ghost" disabled={saving}>
-              OK
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setEditing(false);
-                setName(host.name);
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleRename();
               }}
             >
-              Annuler
-            </Button>
-          </form>
-        ) : (
-          <button
-            type="button"
-            className="font-medium hover:text-brand-400"
-            title="Renommer"
-            onClick={() => setEditing(true)}
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="flex-1 rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm outline-none focus:border-brand-500"
+                autoFocus
+                disabled={saving}
+              />
+              <Button type="submit" variant="ghost" disabled={saving}>
+                OK
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setName(host.name);
+                }}
+              >
+                Annuler
+              </Button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="font-medium hover:text-brand-400"
+              title="Renommer"
+              onClick={() => setEditing(true)}
+            >
+              {host.name}
+            </button>
+          )}
+          <p className="text-sm text-[var(--muted)]">
+            <span className={hostStatusClassName(displayStatus)}>
+              {hostStatusLabel(displayStatus)}
+            </span>
+            {host.disk_free_gb != null && ` · ${host.disk_free_gb} Go libres`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={handleDelete}
+            disabled={deleting}
+            title="Supprimer ce PC"
           >
-            {host.name}
-          </button>
-        )}
-        <p className="text-sm text-[var(--muted)]">
-          {host.default_model} ·{" "}
-          <span className={hostStatusClassName(displayStatus)}>
-            {hostStatusLabel(displayStatus)}
-          </span>
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Button
-          variant="ghost"
-          onClick={handleDelete}
-          disabled={deleting}
-          title="Supprimer ce PC"
-        >
-          {deleting ? "…" : "Supprimer"}
-        </Button>
-        {chatDisabled ? (
-          <Button variant="secondary" disabled title={chatTitle}>
-            Chat
+            {deleting ? "…" : "Supprimer"}
           </Button>
+          {chatDisabled ? (
+            <Button variant="secondary" disabled title={chatTitle}>
+              Chat
+            </Button>
+          ) : (
+            <Link href={`/chat/${host.id}`}>
+              <Button variant="primary">Chat</Button>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-[var(--muted)]">Modèle par défaut :</span>
+        {installedModels.length > 0 ? (
+          <select
+            value={host.default_model}
+            disabled={updatingModel}
+            onChange={(e) => void handleDefaultModelChange(e.target.value)}
+            className="rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm"
+          >
+            {installedModels.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
         ) : (
-          <Link href={`/chat/${host.id}`}>
-            <Button variant="primary">Chat</Button>
-          </Link>
+          <code className="text-xs">{host.default_model}</code>
         )}
       </div>
+
+      {installedModels.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {installedModels.map((m) => (
+            <span
+              key={m}
+              className={`rounded px-2 py-0.5 text-xs ${
+                m === host.default_model ? "bg-brand-600/30" : "bg-black/30"
+              }`}
+            >
+              {m}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {actionError && <p className="text-sm text-red-400">{actionError}</p>}
     </Card>
   );
 }

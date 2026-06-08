@@ -57,7 +57,7 @@ export class HostRoom implements DurableObject {
         ws.send(
           JSON.stringify({
             type: "chat.error",
-            payload: { message: "Host is offline" },
+            payload: { message: "Le host est hors ligne" },
           }),
         );
       }

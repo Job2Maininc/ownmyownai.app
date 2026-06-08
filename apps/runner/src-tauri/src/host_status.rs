@@ -95,6 +95,7 @@ pub struct HostStatusSnapshot {
     pub last_relay_error: Option<String>,
     pub active_sessions: u32,
     pub services_running: bool,
+    pub disk_free_gb: Option<f64>,
 }
 
 pub fn build_snapshot() -> HostStatusSnapshot {
@@ -132,6 +133,7 @@ pub fn build_snapshot() -> HostStatusSnapshot {
         last_relay_error,
         active_sessions: ACTIVE_SESSIONS.load(Ordering::SeqCst),
         services_running: crate::relay::services_running(),
+        disk_free_gb: crate::ollama::disk_free_gb_for_models_dir(),
     }
 }
 

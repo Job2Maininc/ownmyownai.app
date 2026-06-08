@@ -6,6 +6,13 @@ export interface Profile {
   created_at: string;
 }
 
+export interface ContextSummaryEntry {
+  id: string;
+  name: string;
+  doc_count: number;
+  status: "ready" | "indexing" | "error";
+}
+
 export interface Host {
   id: string;
   user_id: string;
@@ -13,6 +20,9 @@ export interface Host {
   platform: string;
   ollama_version: string | null;
   default_model: string;
+  installed_models: string[];
+  disk_free_gb: number | null;
+  context_summary: ContextSummaryEntry[];
   status: HostStatus;
   last_seen_at: string | null;
   created_at: string;
@@ -55,6 +65,9 @@ export interface Database {
           platform?: string;
           ollama_version?: string | null;
           default_model?: string;
+          installed_models?: string[];
+          disk_free_gb?: number | null;
+          context_summary?: ContextSummaryEntry[];
           status?: HostStatus;
           last_seen_at?: string | null;
         };

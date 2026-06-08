@@ -16,7 +16,7 @@
 | 2 | Pairing Supabase → host visible dashboard < 2 min | |
 | 3 | Host éteint → web affiche « Hors ligne » | |
 | 4 | Chat web → streaming < 60s (8 Go RAM, 3B) | |
-| 5 | 2 onglets : second onglet reçoit erreur ou partage session | |
+| 5 | 2 onglets : second onglet reçoit erreur ou partage session | UX message « autre onglet actif » |
 | 6 | Aucun message chat en base Supabase | |
 | 7 | Relais redémarre → reconnexion auto runner/web | |
 

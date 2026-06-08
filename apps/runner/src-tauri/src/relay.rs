@@ -1,9 +1,17 @@
+use crate::context::{
+    build_rag_context, create_knowledge_base, delete_document, delete_knowledge_base,
+    get_context_summary, ingest_document, list_chunks, list_documents, list_knowledge_bases,
+    ContextLimits, init_context_db,
+};
 use crate::credentials::{get_credentials, resolve_supabase_url, StoredCredentials};
 use crate::host_status::{
     self, session_ended, session_started, set_heartbeat_error, set_heartbeat_ok,
     set_relay_connected, set_relay_error,
 };
-use crate::ollama::{default_model, ensure_ollama_running, stream_chat};
+use crate::ollama::{
+    default_model, disk_free_gb_for_models_dir, ensure_embedding_model, ensure_ollama_running,
+    list_installed_models, model_exists, pull_model, stream_chat,
+};
 use crate::settings::resolved_default_model;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -164,6 +172,9 @@ async fn send_heartbeat(
         .json(&serde_json::json!({
             "status": status,
             "default_model": resolved_default_model(),
+            "installed_models": list_installed_models(),
+            "disk_free_gb": disk_free_gb_for_models_dir(),
+            "context_summary": get_context_summary(),
         }))
         .send()
         .await
@@ -207,6 +218,27 @@ async fn run_relay_loop(
                     }
                     "chat.cancel" => {
                         handle_chat_cancel(&envelope);
+                    }
+                    "model.pull" => {
+                        let _ = handle_model_pull(&envelope, &mut write).await;
+                    }
+                    "context.list" => {
+                        let _ = handle_context_list(&envelope, &mut write).await;
+                    }
+                    "context.create" => {
+                        let _ = handle_context_create(&envelope, &mut write).await;
+                    }
+                    "context.delete" => {
+                        let _ = handle_context_delete(&envelope, &mut write).await;
+                    }
+                    "context.status" => {
+                        let _ = handle_context_status(&envelope, &mut write).await;
+                    }
+                    "context.upload" => {
+                        let _ = handle_context_upload(&envelope, &mut write).await;
+                    }
+                    "context.chunks" => {
+                        let _ = handle_context_chunks(&envelope, &mut write).await;
                     }
                     _ => {}
                 }
@@ -278,7 +310,12 @@ async fn handle_chat_start(
     >,
 ) -> Result<(), String> {
     if !session_started() {
-        return send_chat_error(write, envelope, "Host occupé").await;
+        return send_chat_error(
+            write,
+            envelope,
+            "Ce PC est déjà utilisé par un autre onglet ou une autre session de chat.",
+        )
+        .await;
     }
 
     CHAT_CANCEL.store(false, Ordering::SeqCst);
@@ -317,7 +354,43 @@ async fn handle_chat_start_inner(
         .cloned()
         .unwrap_or_default();
 
-    let messages: Vec<serde_json::Value> = messages.into_iter().take(20).collect();
+    let mut messages: Vec<serde_json::Value> = messages.into_iter().take(20).collect();
+
+    if !model_exists(model) {
+        return send_chat_error(
+            write,
+            envelope,
+            &format!(
+                "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
+            ),
+        )
+        .await;
+    }
+
+    let context_ids: Vec<String> = payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if !context_ids.is_empty() {
+        let last_user = messages
+            .iter()
+            .rev()
+            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+            .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+            .unwrap_or("");
+        if let Ok(Some(rag)) = build_rag_context(&context_ids, last_user).await {
+            messages.insert(
+                0,
+                serde_json::json!({ "role": "system", "content": rag }),
+            );
+        }
+    }
 
     let response = stream_chat(model, &messages).await?;
     let mut stream = response.bytes_stream();
@@ -359,4 +432,287 @@ async fn handle_chat_start_inner(
     }
 
     Ok(())
+}
+
+fn context_limits() -> ContextLimits {
+    ContextLimits::default()
+}
+
+async fn send_ws_response(
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+    msg_type: &str,
+    payload: serde_json::Value,
+    request_id: &Option<String>,
+) -> Result<(), String> {
+    let env = WsEnvelope {
+        msg_type: msg_type.into(),
+        payload,
+        requestId: request_id.clone(),
+    };
+    write
+        .send(Message::Text(serde_json::to_string(&env).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn handle_model_pull(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let model = envelope
+        .payload
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
+    if model.is_empty() {
+        return send_ws_response(
+            write,
+            "model.pull.error",
+            serde_json::json!({ "message": "Modèle requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    let _ = ensure_ollama_running(None).await;
+    let model_owned = model.to_string();
+    let request_id = envelope.requestId.clone();
+    match pull_model(&model_owned, None).await {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "model.pull.done",
+                serde_json::json!({ "model": model }),
+                &request_id,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "model.pull.error",
+                serde_json::json!({ "message": e }),
+                &request_id,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_context_list(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let bases = list_knowledge_bases().unwrap_or_default();
+    send_ws_response(
+        write,
+        "context.list",
+        serde_json::json!({ "bases": bases }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_context_create(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let _ = ensure_embedding_model(None).await;
+    let name = envelope
+        .payload
+        .get("name")
+        .and_then(|n| n.as_str())
+        .unwrap_or("Nouvelle base");
+    let description = envelope
+        .payload
+        .get("description")
+        .and_then(|d| d.as_str())
+        .unwrap_or("");
+    match create_knowledge_base(name, description, &context_limits()) {
+        Ok(kb) => {
+            send_ws_response(
+                write,
+                "context.created",
+                serde_json::json!({ "base": kb }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "context.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_context_delete(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let kb_id = envelope
+        .payload
+        .get("id")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let doc_id = envelope.payload.get("documentId").and_then(|id| id.as_str());
+    let result = if let Some(doc) = doc_id {
+        delete_document(doc)
+    } else if !kb_id.is_empty() {
+        delete_knowledge_base(kb_id)
+    } else {
+        Err("ID requis".into())
+    };
+    match result {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "context.deleted",
+                serde_json::json!({}),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "context.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_context_status(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let kb_id = envelope
+        .payload
+        .get("knowledgeBaseId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let docs = list_documents(kb_id).unwrap_or_default();
+    send_ws_response(
+        write,
+        "context.status",
+        serde_json::json!({ "documents": docs }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_context_upload(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let _ = ensure_embedding_model(None).await;
+    let kb_id = envelope
+        .payload
+        .get("knowledgeBaseId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let filename = envelope
+        .payload
+        .get("filename")
+        .and_then(|f| f.as_str())
+        .unwrap_or("document.txt");
+    let data_b64 = envelope
+        .payload
+        .get("data")
+        .and_then(|d| d.as_str())
+        .unwrap_or("");
+    if kb_id.is_empty() || data_b64.is_empty() {
+        return send_ws_response(
+            write,
+            "context.error",
+            serde_json::json!({ "message": "knowledgeBaseId et data requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    let data = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD,
+        data_b64,
+    )
+    .map_err(|e| e.to_string())?;
+    let limits = context_limits();
+    send_ws_response(
+        write,
+        "context.upload.progress",
+        serde_json::json!({ "percent": 10, "message": "Réception du fichier…" }),
+        &envelope.requestId,
+    )
+    .await?;
+    match ingest_document(kb_id, filename, &data, &limits).await {
+        Ok(doc_id) => {
+            send_ws_response(
+                write,
+                "context.upload.done",
+                serde_json::json!({ "documentId": doc_id }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "context.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_context_chunks(
+    envelope: &WsEnvelope,
+    write: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        Message,
+    >,
+) -> Result<(), String> {
+    let doc_id = envelope
+        .payload
+        .get("documentId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let chunks = list_chunks(doc_id).unwrap_or_default();
+    send_ws_response(
+        write,
+        "context.chunks",
+        serde_json::json!({ "chunks": chunks }),
+        &envelope.requestId,
+    )
+    .await
 }

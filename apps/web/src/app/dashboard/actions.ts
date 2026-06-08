@@ -53,3 +53,23 @@ export async function deleteHost(hostId: string) {
   revalidatePath("/dashboard");
   return { error: null };
 }
+
+export async function updateDefaultModel(hostId: string, defaultModel: string) {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/hosts?id=eq.${encodeURIComponent(hostId)}`,
+    {
+      method: "PATCH",
+      headers: { ...(await restHeaders()), Prefer: "return=minimal" },
+      body: JSON.stringify({ default_model: defaultModel }),
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    return { error: text || "Échec de la mise à jour du modèle" };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/chat/${hostId}`);
+  return { error: null };
+}

@@ -27,6 +27,7 @@ export type WsEnvelope = z.infer<typeof WsEnvelopeSchema>;
 export const ChatStartPayloadSchema = z.object({
   model: z.string().optional(),
   messages: z.array(ChatMessageSchema),
+  contextIds: z.array(z.string()).optional(),
 });
 export type ChatStartPayload = z.infer<typeof ChatStartPayloadSchema>;
 
@@ -52,9 +53,39 @@ export const WS_MESSAGE_TYPES = {
   CHAT_ERROR: "chat.error",
   CHAT_CANCEL: "chat.cancel",
   HOST_STATUS: "host.status",
+  MODEL_PULL: "model.pull",
+  MODEL_PULL_DONE: "model.pull.done",
+  MODEL_PULL_ERROR: "model.pull.error",
+  CONTEXT_LIST: "context.list",
+  CONTEXT_CREATE: "context.create",
+  CONTEXT_CREATED: "context.created",
+  CONTEXT_DELETE: "context.delete",
+  CONTEXT_DELETED: "context.deleted",
+  CONTEXT_STATUS: "context.status",
+  CONTEXT_UPLOAD: "context.upload",
+  CONTEXT_UPLOAD_PROGRESS: "context.upload.progress",
+  CONTEXT_UPLOAD_DONE: "context.upload.done",
+  CONTEXT_CHUNKS: "context.chunks",
+  CONTEXT_ERROR: "context.error",
   PING: "ping",
   PONG: "pong",
 } as const;
+
+export interface KnowledgeBaseSummary {
+  id: string;
+  name: string;
+  description?: string;
+  docCount: number;
+  status: string;
+}
+
+export interface ContextDocumentSummary {
+  id: string;
+  filename: string;
+  status: string;
+  chunkCount: number;
+  errorMessage?: string | null;
+}
 
 export function createEnvelope(
   type: string,

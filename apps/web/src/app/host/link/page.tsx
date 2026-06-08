@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { createPairingCode } from "@/lib/api";
+import { AppHeader } from "@/components/layout/app-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PairingStatus } from "./pairing-status";
 
 export default function HostLinkPage() {
   const searchParams = useSearchParams();
@@ -39,6 +41,8 @@ export default function HostLinkPage() {
   }, [initialCode, generateCode]);
 
   return (
+    <>
+    <AppHeader />
     <main className="mx-auto min-h-screen max-w-lg px-6 py-12">
       <Link href="/dashboard" className="mb-6 inline-block text-sm text-brand-500 hover:underline">
         ← Dashboard
@@ -74,7 +78,9 @@ export default function HostLinkPage() {
         <Button onClick={generateCode} variant="secondary" className="mt-4 w-full" disabled={loading}>
           Nouveau code
         </Button>
+        <PairingStatus code={code} />
       </Card>
     </main>
+    </>
   );
 }

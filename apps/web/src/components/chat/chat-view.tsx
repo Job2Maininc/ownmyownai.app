@@ -8,6 +8,8 @@ import { hostStatusClassName, hostStatusLabel } from "@/lib/host-status";
 import { RelayClient } from "@/lib/relay-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ContextPanel, loadActiveContextIds } from "./context-panel";
+import { MarkdownMessage } from "./markdown-message";
 
 interface UiMessage {
   role: "user" | "assistant";
@@ -17,10 +19,15 @@ interface UiMessage {
 interface ChatViewProps {
   hostId: string;
   defaultModel: string;
+  installedModels?: string[];
 }
 
 function storageKey(hostId: string) {
   return `chat:${hostId}`;
+}
+
+function contextKey(hostId: string) {
+  return `context-active:${hostId}`;
 }
 
 function loadMessages(hostId: string): UiMessage[] {
@@ -35,21 +42,30 @@ function loadMessages(hostId: string): UiMessage[] {
   }
 }
 
-export function ChatView({ hostId, defaultModel }: ChatViewProps) {
+export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatViewProps) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState(defaultModel);
+  const [modelSearch, setModelSearch] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [hostStatus, setHostStatus] = useState<HostStatus>("offline");
   const [error, setError] = useState<string | null>(null);
   const [relayStatus, setRelayStatus] = useState<"connecting" | "connected" | "offline" | "error">(
     "connecting",
   );
+  const [activeContextIds, setActiveContextIds] = useState<string[]>([]);
+  const [showContext, setShowContext] = useState(true);
   const relayRef = useRef<RelayClient | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
   const activeRequestId = useRef<string | null>(null);
   const hydrated = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const models = installedModels.length > 0 ? installedModels : [defaultModel];
+  const filteredModels = models.filter((m) =>
+    m.toLowerCase().includes(modelSearch.toLowerCase()),
+  );
 
   useEffect(() => {
     setModel(defaultModel);
@@ -59,12 +75,21 @@ export function ChatView({ hostId, defaultModel }: ChatViewProps) {
     if (hydrated.current) return;
     hydrated.current = true;
     setMessages(loadMessages(hostId));
+    setActiveContextIds(loadActiveContextIds(hostId));
   }, [hostId]);
 
   useEffect(() => {
     if (!hydrated.current) return;
     sessionStorage.setItem(storageKey(hostId), JSON.stringify(messages));
   }, [hostId, messages]);
+
+  useEffect(() => {
+    sessionStorage.setItem(contextKey(hostId), JSON.stringify(activeContextIds));
+  }, [hostId, activeContextIds]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streaming]);
 
   useEffect(() => {
     hasConnectedRef.current = false;
@@ -110,7 +135,10 @@ export function ChatView({ hostId, defaultModel }: ChatViewProps) {
 
   const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
+  const hostBusy = hostStatus === "busy";
+  const hostOffline = hostStatus === "offline";
   const hostReachable = hostStatus === "online" || hostStatus === "busy";
+  const canSend = hostReachable && !hostOffline && (!hostBusy || streaming);
 
   function handleNewConversation() {
     setMessages([]);
@@ -126,7 +154,7 @@ export function ChatView({ hostId, defaultModel }: ChatViewProps) {
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim() || streaming || !relayRef.current || !hostReachable) return;
+    if (!input.trim() || streaming || !relayRef.current || !canSend) return;
 
     const userMsg: UiMessage = { role: "user", content: input.trim() };
     const newMessages = [...messages, userMsg];
@@ -141,27 +169,38 @@ export function ChatView({ hostId, defaultModel }: ChatViewProps) {
       content: m.content,
     }));
 
-    const requestId = relayRef.current.sendChat(chatMessages, model.trim() || defaultModel);
+    const requestId = relayRef.current.sendChat(
+      chatMessages,
+      model.trim() || defaultModel,
+      activeContextIds,
+    );
     activeRequestId.current = requestId ?? null;
   }
 
-  const headerStatus =
-    reconnecting
-      ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
-      : !connected
-        ? { label: "Connexion…", className: "text-[var(--muted)]" }
+  const headerStatus = reconnecting
+    ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
+    : !connected
+      ? { label: "Connexion…", className: "text-[var(--muted)]" }
+      : hostBusy && !streaming
+        ? {
+            label: "PC occupé — autre onglet actif",
+            className: "text-amber-400",
+          }
         : {
             label: `Host ${hostStatusLabel(hostStatus).toLowerCase()}`,
             className: hostStatusClassName(hostStatus),
           };
 
   return (
-    <main className="mx-auto flex h-screen max-w-3xl flex-col px-4 py-4">
+    <main className="mx-auto flex h-screen max-w-5xl flex-col px-4 py-4">
       <header className="mb-4 flex items-center justify-between border-b border-[var(--border)] pb-4">
         <Link href="/dashboard" className="text-sm text-brand-500 hover:underline">
           ← Mes PCs
         </Link>
         <div className="flex items-center gap-3">
+          <Button type="button" variant="ghost" onClick={() => setShowContext((v) => !v)}>
+            {showContext ? "Masquer contexte" : "Bases de contexte"}
+          </Button>
           <Button type="button" variant="ghost" onClick={handleNewConversation}>
             Nouvelle conversation
           </Button>
@@ -169,68 +208,109 @@ export function ChatView({ hostId, defaultModel }: ChatViewProps) {
         </div>
       </header>
 
-      <div className="mb-3 flex items-center gap-2">
-        <label htmlFor="model-select" className="text-sm text-[var(--muted)]">
-          Modèle
-        </label>
-        <input
-          id="model-select"
-          list="model-options"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          disabled={streaming}
-          className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
-        />
-        <datalist id="model-options">
-          <option value={defaultModel} />
-        </datalist>
-      </div>
-
-      <div className="flex-1 space-y-4 overflow-y-auto pb-4">
-        {messages.length === 0 && (
-          <Card>
-            <p className="text-center text-[var(--muted)]">
-              Posez une question — la réponse est générée sur votre PC.
-            </p>
-          </Card>
-        )}
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`rounded-lg px-4 py-3 ${
-              msg.role === "user"
-                ? "ml-8 bg-brand-600/20"
-                : "mr-8 border border-[var(--border)] bg-[var(--card)]"
-            }`}
-          >
-            <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+      <div className="flex min-h-0 flex-1 gap-4">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="mb-3 flex items-center gap-2">
+            <label htmlFor="model-select" className="text-sm text-[var(--muted)]">
+              Modèle
+            </label>
+            <input
+              id="model-search"
+              type="search"
+              placeholder="Filtrer…"
+              value={modelSearch}
+              onChange={(e) => setModelSearch(e.target.value)}
+              className="w-24 rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm"
+              disabled={streaming}
+            />
+            <select
+              id="model-select"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={streaming}
+              className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+            >
+              {filteredModels.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                  {m === defaultModel ? " (défaut)" : ""}
+                </option>
+              ))}
+            </select>
           </div>
-        ))}
-        {streaming && messages[messages.length - 1]?.role !== "assistant" && (
-          <p className="text-sm text-[var(--muted)]">Réflexion…</p>
+
+          {activeContextIds.length > 0 && (
+            <p className="mb-2 text-xs text-brand-400">
+              Contexte actif : {activeContextIds.length} base(s)
+            </p>
+          )}
+
+          <div className="flex-1 space-y-4 overflow-y-auto pb-4">
+            {messages.length === 0 && (
+              <Card>
+                <p className="text-center text-[var(--muted)]">
+                  Posez une question — la réponse est générée sur votre PC.
+                </p>
+              </Card>
+            )}
+            {messages.map((msg, i) => (
+              <div
+                key={`${msg.role}-${i}`}
+                className={`rounded-lg px-4 py-3 ${
+                  msg.role === "user"
+                    ? "ml-8 bg-brand-600/20"
+                    : "mr-8 border border-[var(--border)] bg-[var(--card)]"
+                }`}
+              >
+                {msg.role === "assistant" ? (
+                  <MarkdownMessage content={msg.content} />
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                )}
+              </div>
+            ))}
+            {streaming && messages[messages.length - 1]?.role !== "assistant" && (
+              <p className="text-sm text-[var(--muted)]">Réflexion…</p>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+          {hostBusy && !streaming && (
+            <p className="mb-2 text-sm text-amber-400">
+              Ce PC est utilisé par une autre session. Attendez ou fermez l&apos;autre onglet.
+            </p>
+          )}
+
+          <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--border)] pt-4">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Votre message…"
+              disabled={streaming || !canSend}
+              className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+            />
+            {streaming ? (
+              <Button type="button" variant="secondary" onClick={handleStop}>
+                Arrêter
+              </Button>
+            ) : (
+              <Button type="submit" disabled={!canSend || !input.trim()}>
+                Envoyer
+              </Button>
+            )}
+          </form>
+        </div>
+
+        {showContext && (
+          <ContextPanel
+            relay={relayRef.current}
+            connected={connected}
+            activeIds={activeContextIds}
+            onActiveChange={setActiveContextIds}
+          />
         )}
       </div>
-
-      {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
-
-      <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--border)] pt-4">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Votre message…"
-          disabled={streaming || !hostReachable}
-          className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
-        />
-        {streaming ? (
-          <Button type="button" variant="secondary" onClick={handleStop}>
-            Arrêter
-          </Button>
-        ) : (
-          <Button type="submit" disabled={!hostReachable || !input.trim()}>
-            Envoyer
-          </Button>
-        )}
-      </form>
     </main>
   );
 }

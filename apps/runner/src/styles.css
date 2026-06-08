@@ -557,3 +557,139 @@ input {
   gap: 8px;
   margin-top: 8px;
 }
+
+.dashboard-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dashboard-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dashboard-tab--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.model-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.chip-filter {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip-filter--active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-search,
+.custom-pull input {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #000;
+  color: var(--text);
+}
+
+.model-catalog {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.model-catalog__item {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.model-catalog__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-catalog__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compat--compatible { color: var(--accent); }
+.compat--limited { color: #fbbf24; }
+.compat--not_recommended { color: var(--error); }
+
+.custom-pull {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.context-create {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.context-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.context-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.context-list__btn {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.panel__meta {
+  font-size: 12px;
+  margin: 0 0 12px;
+}

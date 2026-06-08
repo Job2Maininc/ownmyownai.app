@@ -37,16 +37,51 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({})) as {
     status?: string;
     default_model?: string;
+    installed_models?: string[];
+    disk_free_gb?: number;
+    context_summary?: Array<{
+      id: string;
+      name: string;
+      doc_count: number;
+      status: string;
+    }>;
   };
   const status = body.status === "busy" ? "busy" : "online";
 
-  const update: { status: string; last_seen_at: string; default_model?: string } = {
+  const update: {
+    status: string;
+    last_seen_at: string;
+    default_model?: string;
+    installed_models?: string[];
+    disk_free_gb?: number;
+    context_summary?: unknown[];
+  } = {
     status,
     last_seen_at: new Date().toISOString(),
   };
 
   if (typeof body.default_model === "string" && body.default_model.trim()) {
     update.default_model = body.default_model.trim();
+  }
+
+  if (Array.isArray(body.installed_models)) {
+    update.installed_models = body.installed_models
+      .filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+      .map((m) => m.trim());
+  }
+
+  if (typeof body.disk_free_gb === "number" && Number.isFinite(body.disk_free_gb)) {
+    update.disk_free_gb = body.disk_free_gb;
+  }
+
+  if (Array.isArray(body.context_summary)) {
+    update.context_summary = body.context_summary.filter(
+      (e) =>
+        e &&
+        typeof e.id === "string" &&
+        typeof e.name === "string" &&
+        typeof e.doc_count === "number",
+    );
   }
 
   const { error } = await supabase.from("hosts").update(update).eq("id", hostId);

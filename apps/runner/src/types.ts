@@ -40,4 +40,5 @@ export interface HostStatusSnapshot {
   lastRelayError: string | null;
   activeSessions: number;
   servicesRunning: boolean;
+  diskFreeGb: number | null;
 }

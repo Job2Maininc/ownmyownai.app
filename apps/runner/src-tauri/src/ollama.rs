@@ -587,6 +587,62 @@ pub async fn pull_models(models: &[String], app: Option<&AppHandle>) -> Result<(
     Ok(())
 }
 
+pub const EMBEDDING_MODEL: &str = "nomic-embed-text";
+
+pub fn list_installed_models() -> Vec<String> {
+    check_ollama()
+        .map(|s| s.models)
+        .unwrap_or_default()
+}
+
+pub fn model_exists(model: &str) -> bool {
+    let models = list_installed_models();
+    models.iter().any(|m| m == model || m.starts_with(&format!("{model}:")))
+}
+
+pub fn delete_model(model: &str) -> Result<(), String> {
+    let output = run_ollama(&["rm", model])?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+pub fn disk_free_gb_for_models_dir() -> Option<f64> {
+    crate::hardware::disk_free_gb_for_path(&resolved_models_dir())
+}
+
+pub async fn create_embedding(model: &str, text: &str) -> Result<Vec<f32>, String> {
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": model,
+        "prompt": text,
+    });
+    let res = client
+        .post(format!("{OLLAMA_URL}/api/embeddings"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Échec embedding : {}", res.text().await.unwrap_or_default()));
+    }
+    #[derive(Deserialize)]
+    struct EmbedResponse {
+        embedding: Vec<f32>,
+    }
+    let data: EmbedResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(data.embedding)
+}
+
+pub async fn ensure_embedding_model(app: Option<&AppHandle>) -> Result<(), String> {
+    if model_exists(EMBEDDING_MODEL) {
+        return Ok(());
+    }
+    pull_model(EMBEDDING_MODEL, app).await
+}
+
 pub fn default_model() -> String {
     resolved_default_model()
 }
@@ -599,6 +655,11 @@ pub async fn stream_chat(
     model: &str,
     messages: &[serde_json::Value],
 ) -> Result<reqwest::Response, String> {
+    if !model_exists(model) {
+        return Err(format!(
+            "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
+        ));
+    }
     let client = reqwest::Client::new();
     let body = serde_json::json!({
         "model": model,

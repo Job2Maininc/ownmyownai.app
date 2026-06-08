@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
+import ContextManager from "./ContextManager";
+import ModelManager from "./ModelManager";
 import type { HostStatusSnapshot } from "../types";
+
+type DashboardTab = "status" | "models" | "context";
 
 interface DashboardProps {
   appUrl: string;
@@ -50,6 +54,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [unpairing, setUnpairing] = useState(false);
+  const [tab, setTab] = useState<DashboardTab>("status");
 
   const refresh = useCallback(async () => {
     try {
@@ -124,6 +129,37 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         </p>
       </header>
 
+      <nav className="dashboard-tabs" aria-label="Sections">
+        {(
+          [
+            ["status", "État"],
+            ["models", "Modèles"],
+            ["context", "Contexte"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={`dashboard-tab ${tab === id ? "dashboard-tab--active" : ""}`}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "models" && (
+        <ModelManager
+          installedModels={status?.models ?? []}
+          defaultModel={status?.defaultModel ?? "llama3.2:3b"}
+          onDefaultChanged={refresh}
+        />
+      )}
+
+      {tab === "context" && <ContextManager />}
+
+      {tab === "status" && (
+      <>
       <section className="status-grid" aria-label="État des services">
         <StatusPill
           label="Ollama"
@@ -148,6 +184,12 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
           detail={formatRelativeTime(status?.lastHeartbeatAt ?? null)}
         />
       </section>
+
+      {status?.diskFreeGb != null && (
+        <p className="muted panel__meta">
+          Espace disque libre (modèles) : {status.diskFreeGb} Go
+        </p>
+      )}
 
       <section className="panel">
         <div className="panel__head">
@@ -225,6 +267,8 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
           ) : null}
         </section>
       ) : null}
+      </>
+      )}
 
       <div className="dashboard__actions">
         <button

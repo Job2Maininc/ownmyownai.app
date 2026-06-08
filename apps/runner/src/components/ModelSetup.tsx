@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { RECOMMENDED_MODELS } from "../data/models";
+import {
+  RECOMMENDED_MODELS,
+  compatibilityLabel,
+  getCompatibility,
+} from "../data/models";
 import type { HostSettings } from "../types";
 
 interface ModelSetupProps {
@@ -14,6 +18,8 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const [selectedModels, setSelectedModels] = useState<string[]>(["llama3.2:3b"]);
   const [defaultModel, setDefaultModel] = useState("llama3.2:3b");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [ramGb, setRamGb] = useState(8);
+  const [hideIncompatible, setHideIncompatible] = useState(false);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -29,6 +35,9 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
 
   useEffect(() => {
     loadSettings();
+    void invoke<{ totalRamGb: number }>("get_hardware_info")
+      .then((h) => setRamGb(h.totalRamGb))
+      .catch(() => undefined);
   }, [loadSettings]);
 
   function toggleModel(id: string) {
@@ -117,10 +126,23 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         d&apos;espace libre.
       </p>
 
+      <label className="filter-toggle">
+        <input
+          type="checkbox"
+          checked={hideIncompatible}
+          onChange={(e) => setHideIncompatible(e.target.checked)}
+        />
+        Masquer les modèles non recommandés pour {ramGb} Go RAM
+      </label>
+
       <div className="model-list">
-        {RECOMMENDED_MODELS.map((model) => {
+        {RECOMMENDED_MODELS.filter((model) => {
+          if (!hideIncompatible) return true;
+          return getCompatibility(model, ramGb) !== "not_recommended";
+        }).map((model) => {
           const checked = selectedModels.includes(model.id);
           const isDefault = defaultModel === model.id;
+          const compat = getCompatibility(model, ramGb);
           return (
             <label
               key={model.id}
@@ -135,7 +157,10 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
                 <div className="model-card__title">
                   <strong>{model.name}</strong>
                   <span className="model-card__meta">
-                    ~{model.sizeGb} Go · {model.ramGb} Go RAM min.
+                    ~{model.sizeGb} Go · {model.ramGb} Go RAM min. ·{" "}
+                    <span className={`compat compat--${compat}`}>
+                      {compatibilityLabel(compat)}
+                    </span>
                   </span>
                 </div>
                 {checked && (

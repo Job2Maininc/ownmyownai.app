@@ -16,3 +16,29 @@ body {
   background: var(--background);
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+.context-panel {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+
+.context-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.prose-chat pre {
+  margin: 8px 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  overflow-x: auto;
+}
+
+.prose-chat code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
