@@ -5,6 +5,8 @@ import {
   type ChatMessage,
   type ChunkPreview,
   type ContextDocumentSummary,
+  type ContextLinkSummary,
+  type ContextStatusPayload,
   type HostStatus,
   type KnowledgeBaseSummary,
   type ModelPullProgressPayload,
@@ -46,7 +48,12 @@ export class RelayClient {
   private chatFirstResponseTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRequests = new Map<
     string,
-    { resolve: (env: WsEnvelope) => void; reject: (err: Error) => void; types: Set<string> }
+    {
+      resolve: (env: WsEnvelope) => void;
+      reject: (err: Error) => void;
+      types: Set<string>;
+      onProgress?: (percent: number, message: string) => void;
+    }
   >();
 
   constructor(callbacks: RelayClientCallbacks) {
@@ -195,6 +202,11 @@ export class RelayClient {
     if (!envelope.requestId) return false;
     const pending = this.pendingRequests.get(envelope.requestId);
     if (!pending) return false;
+    if (envelope.type === WS_MESSAGE_TYPES.CONTEXT_UPLOAD_PROGRESS) {
+      const payload = envelope.payload as { percent?: number; message?: string };
+      pending.onProgress?.(payload.percent ?? 0, payload.message ?? "");
+      return true;
+    }
     if (pending.types.has(envelope.type) || envelope.type.includes("error")) {
       this.pendingRequests.delete(envelope.requestId);
       pending.resolve(envelope);
@@ -339,10 +351,22 @@ export class RelayClient {
     await this.waitFor(requestId, [WS_MESSAGE_TYPES.CONTEXT_DELETED, WS_MESSAGE_TYPES.CONTEXT_ERROR]);
   }
 
-  async getContextStatus(knowledgeBaseId: string): Promise<ContextDocumentSummary[]> {
+  async deleteContextDocument(documentId: string) {
+    const requestId = this.send(WS_MESSAGE_TYPES.CONTEXT_DELETE, { documentId }) ?? "";
+    await this.waitFor(requestId, [WS_MESSAGE_TYPES.CONTEXT_DELETED, WS_MESSAGE_TYPES.CONTEXT_ERROR]);
+  }
+
+  async getContextStatus(knowledgeBaseId: string): Promise<ContextStatusPayload> {
     const requestId = this.send(WS_MESSAGE_TYPES.CONTEXT_STATUS, { knowledgeBaseId }) ?? "";
     const env = await this.waitFor(requestId, [WS_MESSAGE_TYPES.CONTEXT_STATUS, WS_MESSAGE_TYPES.CONTEXT_ERROR]);
-    return ((env.payload as { documents?: ContextDocumentSummary[] }).documents ?? []);
+    const payload = env.payload as {
+      documents?: ContextDocumentSummary[];
+      links?: ContextLinkSummary[];
+    };
+    return {
+      documents: payload.documents ?? [],
+      links: payload.links ?? [],
+    };
   }
 
   async uploadContextDocument(
@@ -377,6 +401,7 @@ export class RelayClient {
           WS_MESSAGE_TYPES.CONTEXT_UPLOAD_DONE,
           WS_MESSAGE_TYPES.CONTEXT_ERROR,
         ]),
+        onProgress,
       });
     });
   }

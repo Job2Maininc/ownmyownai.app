@@ -37,6 +37,14 @@ Le bucket reste public pour le téléchargement direct du ZIP portable, mais le 
 - Les messages de chat ne sont **pas** stockés dans Supabase
 - Le contexte RAG (documents, chunks) reste **local** sur le PC hôte
 
+## Sources de contexte liées (Host v0.2.0)
+
+- Les chemins liés (fichier, dossier, disque) sont configurés **uniquement** depuis l'app Host via le sélecteur natif Tauri
+- Les fichiers sources ne sont **pas** recopiés : `documents.filepath` pointe vers le chemin réel (Google Drive local, etc.)
+- Supprimer un lien ou un document indexé **ne supprime jamais** le fichier source sur le disque
+- Le panneau web affiche le statut en lecture seule ; aucun accès direct du navigateur aux chemins locaux
+- Le scan de disque entier est limité (500 fichiers, profondeur 8, exclusions dossiers système Windows)
+
 ## Relay JWT
 
 `RELAY_JWT_SECRET` doit être identique entre Supabase Edge Functions et le worker Cloudflare Relay. Utilisez une chaîne aléatoire d'au moins 32 caractères.

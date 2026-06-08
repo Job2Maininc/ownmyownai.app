@@ -20,6 +20,19 @@
 | 5 | 2 onglets : second onglet reçoit erreur ou partage session | UX message « autre onglet actif » |
 | 6 | Aucun message chat en base Supabase | |
 | 7 | Relais redémarre → reconnexion auto runner/web | |
+| 8 | Lier un dossier Google Drive local depuis l'app Host | |
+| 9 | Modifier un fichier lié → ré-indexation auto < 30 s | |
+| 10 | Redémarrer Host → resync complet au lancement | |
+| 11 | Chat avec base active utilise le contenu à jour | |
+| 12 | Web affiche statut des sources liées (lecture seule) | |
+
+## Contexte lié (Host v0.2.0)
+
+- [x] Table `context_links` + colonnes `documents` (source lié / upload)
+- [x] Ingestion depuis chemin (`ingest_from_path`, `reindex_document`)
+- [x] Sync au lancement + watcher `notify` avec debounce
+- [x] UI Host : lier fichier / dossier / disque, sync manuel
+- [x] Web : statut liens, suppression document, progression upload
 
 ## Build local
 

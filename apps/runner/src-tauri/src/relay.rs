@@ -1,7 +1,7 @@
 use crate::context::{
     build_rag_context, create_knowledge_base, delete_document, delete_knowledge_base,
-    get_context_summary, ingest_document, list_chunks, list_documents, list_knowledge_bases,
-    ContextLimits, init_context_db,
+    get_context_summary, ingest_document, list_chunks, list_context_links, list_documents,
+    list_knowledge_bases, start_context_watcher, ContextLimits, init_context_db,
 };
 use crate::credentials::{get_credentials, resolve_supabase_url, StoredCredentials};
 use crate::host_status::{
@@ -86,6 +86,9 @@ pub async fn start_background_services(
         Err(e) => set_heartbeat_error(e),
     }
     host_status::emit_status();
+
+    let _ = init_context_db();
+    start_context_watcher();
 
     tauri::async_runtime::spawn(async {
         if let Err(e) = ensure_ollama_running(None).await {
@@ -746,10 +749,11 @@ async fn handle_context_status(
         .and_then(|id| id.as_str())
         .unwrap_or("");
     let docs = list_documents(kb_id).unwrap_or_default();
+    let links = list_context_links(kb_id).unwrap_or_default();
     send_ws_response(
         write,
         "context.status",
-        serde_json::json!({ "documents": docs }),
+        serde_json::json!({ "documents": docs, "links": links }),
         &envelope.requestId,
     )
     .await
@@ -798,8 +802,22 @@ async fn handle_context_upload(
         &envelope.requestId,
     )
     .await?;
+    send_ws_response(
+        write,
+        "context.upload.progress",
+        serde_json::json!({ "percent": 40, "message": "Extraction et indexation…" }),
+        &envelope.requestId,
+    )
+    .await?;
     match ingest_document(kb_id, filename, &data, &limits).await {
         Ok(doc_id) => {
+            send_ws_response(
+                write,
+                "context.upload.progress",
+                serde_json::json!({ "percent": 100, "message": "Terminé" }),
+                &envelope.requestId,
+            )
+            .await?;
             send_ws_response(
                 write,
                 "context.upload.done",

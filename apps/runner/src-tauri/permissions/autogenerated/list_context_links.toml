@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-context-links"
+description = "Enables the list_context_links command without any pre-configured scope."
+commands.allow = ["list_context_links"]
+
+[[permission]]
+identifier = "deny-list-context-links"
+description = "Denies the list_context_links command without any pre-configured scope."
+commands.deny = ["list_context_links"]

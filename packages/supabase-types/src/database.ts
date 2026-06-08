@@ -10,7 +10,9 @@ export interface ContextSummaryEntry {
   id: string;
   name: string;
   doc_count: number;
+  linked_doc_count?: number;
   status: "ready" | "indexing" | "error";
+  sync_status?: string;
 }
 
 export interface Host {

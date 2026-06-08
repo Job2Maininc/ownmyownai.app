@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-context-link-enabled"
+description = "Enables the set_context_link_enabled command without any pre-configured scope."
+commands.allow = ["set_context_link_enabled"]
+
+[[permission]]
+identifier = "deny-set-context-link-enabled"
+description = "Denies the set_context_link_enabled command without any pre-configured scope."
+commands.deny = ["set_context_link_enabled"]

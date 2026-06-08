@@ -483,10 +483,34 @@
           "markdownDescription": "Enables the import_knowledge_base command without any pre-configured scope."
         },
         {
+          "description": "Enables the link_context_drive command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-link-context-drive",
+          "markdownDescription": "Enables the link_context_drive command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the link_context_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-link-context-file",
+          "markdownDescription": "Enables the link_context_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the link_context_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-link-context-folder",
+          "markdownDescription": "Enables the link_context_folder command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list_context_documents command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list-context-documents",
           "markdownDescription": "Enables the list_context_documents command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_context_links command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-context-links",
+          "markdownDescription": "Enables the list_context_links command without any pre-configured scope."
         },
         {
           "description": "Enables the list_installed_models command without any pre-configured scope.",
@@ -525,10 +549,34 @@
           "markdownDescription": "Enables the save_host_settings command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_context_link_enabled command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-context-link-enabled",
+          "markdownDescription": "Enables the set_context_link_enabled command without any pre-configured scope."
+        },
+        {
           "description": "Enables the start_background_services command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start-background-services",
           "markdownDescription": "Enables the start_background_services command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the sync_all_context_links command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-sync-all-context-links",
+          "markdownDescription": "Enables the sync_all_context_links command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the sync_context_link command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-sync-context-link",
+          "markdownDescription": "Enables the sync_context_link command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the unlink_context_link command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-unlink-context-link",
+          "markdownDescription": "Enables the unlink_context_link command without any pre-configured scope."
         },
         {
           "description": "Enables the unpair_host command without any pre-configured scope.",
@@ -627,10 +675,34 @@
           "markdownDescription": "Denies the import_knowledge_base command without any pre-configured scope."
         },
         {
+          "description": "Denies the link_context_drive command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-link-context-drive",
+          "markdownDescription": "Denies the link_context_drive command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the link_context_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-link-context-file",
+          "markdownDescription": "Denies the link_context_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the link_context_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-link-context-folder",
+          "markdownDescription": "Denies the link_context_folder command without any pre-configured scope."
+        },
+        {
           "description": "Denies the list_context_documents command without any pre-configured scope.",
           "type": "string",
           "const": "deny-list-context-documents",
           "markdownDescription": "Denies the list_context_documents command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_context_links command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-context-links",
+          "markdownDescription": "Denies the list_context_links command without any pre-configured scope."
         },
         {
           "description": "Denies the list_installed_models command without any pre-configured scope.",
@@ -669,10 +741,34 @@
           "markdownDescription": "Denies the save_host_settings command without any pre-configured scope."
         },
         {
+          "description": "Denies the set_context_link_enabled command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-context-link-enabled",
+          "markdownDescription": "Denies the set_context_link_enabled command without any pre-configured scope."
+        },
+        {
           "description": "Denies the start_background_services command without any pre-configured scope.",
           "type": "string",
           "const": "deny-start-background-services",
           "markdownDescription": "Denies the start_background_services command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sync_all_context_links command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-sync-all-context-links",
+          "markdownDescription": "Denies the sync_all_context_links command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sync_context_link command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-sync-context-link",
+          "markdownDescription": "Denies the sync_context_link command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the unlink_context_link command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-unlink-context-link",
+          "markdownDescription": "Denies the unlink_context_link command without any pre-configured scope."
         },
         {
           "description": "Denies the unpair_host command without any pre-configured scope.",

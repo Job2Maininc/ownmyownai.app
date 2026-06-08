@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   ChunkPreview,
   ContextDocumentSummary,
+  ContextLinkSummary,
   KnowledgeBaseSummary,
 } from "@ownmyownai/protocol";
 import type { RelayClient } from "@/lib/relay-client";
@@ -36,6 +37,25 @@ function formatPanelError(error: unknown): string {
   return message.replace(/^Error:\s*/i, "");
 }
 
+function truncatePath(path: string, max = 40) {
+  if (path.length <= max) return path;
+  return `…${path.slice(-max + 1)}`;
+}
+
+function linkStatusLabel(link: ContextLinkSummary) {
+  if (!link.enabled) return "En pause";
+  switch (link.lastSyncStatus) {
+    case "syncing":
+      return "Indexation…";
+    case "ready":
+      return "Synchronisé";
+    case "error":
+      return "Erreur";
+    default:
+      return "En attente";
+  }
+}
+
 export function ContextPanel({
   relay,
   connected,
@@ -45,9 +65,12 @@ export function ContextPanel({
   const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<ContextDocumentSummary[]>([]);
+  const [links, setLinks] = useState<ContextLinkSummary[]>([]);
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState(0);
+  const [uploadMessage, setUploadMessage] = useState("");
   const [chunksDocId, setChunksDocId] = useState<string | null>(null);
   const [chunks, setChunks] = useState<ChunkPreview[]>([]);
   const [chunksLoading, setChunksLoading] = useState(false);
@@ -64,7 +87,7 @@ export function ContextPanel({
       const message = formatPanelError(e);
       setError(
         message.includes("ne répond pas")
-          ? `${message} (installez la v0.1.17+ si besoin)`
+          ? `${message} (installez la v0.2.0+ si besoin)`
           : message,
       );
     } finally {
@@ -72,14 +95,24 @@ export function ContextPanel({
     }
   }, [relay, connected]);
 
+  const refreshStatus = useCallback(
+    async (kbId: string) => {
+      if (!relay || !connected) return;
+      const status = await relay.getContextStatus(kbId);
+      setDocuments(status.documents);
+      setLinks(status.links);
+    },
+    [relay, connected],
+  );
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
     if (!expandedId || !relay || !connected) return;
-    void relay.getContextStatus(expandedId).then(setDocuments).catch(() => undefined);
-  }, [expandedId, relay, connected, bases]);
+    void refreshStatus(expandedId).catch(() => undefined);
+  }, [expandedId, relay, connected, bases, refreshStatus]);
 
   function toggleActive(id: string) {
     const next = activeIds.includes(id)
@@ -111,6 +144,17 @@ export function ContextPanel({
     }
   }
 
+  async function handleDeleteDocument(documentId: string) {
+    if (!relay || !expandedId || !window.confirm("Retirer ce document de l'index ?")) return;
+    try {
+      await relay.deleteContextDocument(documentId);
+      await refreshStatus(expandedId);
+      await refresh();
+    } catch (e) {
+      setError(formatPanelError(e));
+    }
+  }
+
   async function handleViewChunks(documentId: string) {
     if (!relay) return;
     if (chunksDocId === documentId) {
@@ -134,20 +178,26 @@ export function ContextPanel({
   async function handleUpload(kbId: string, files: FileList | null) {
     if (!relay || !files?.length) return;
     setUploading(true);
+    setUploadPercent(0);
+    setUploadMessage("Envoi…");
     setError(null);
     try {
       for (const file of Array.from(files)) {
-        const buf = await file.arrayBuffer();
-        await relay.uploadContextDocument(kbId, file.name, buf);
+        await relay.uploadContextDocument(kbId, file.name, await file.arrayBuffer(), (percent, message) => {
+          setUploadPercent(percent);
+          setUploadMessage(message);
+        });
       }
       if (expandedId === kbId) {
-        setDocuments(await relay.getContextStatus(kbId));
+        await refreshStatus(kbId);
       }
       await refresh();
     } catch (e) {
       setError(formatPanelError(e));
     } finally {
       setUploading(false);
+      setUploadPercent(0);
+      setUploadMessage("");
     }
   }
 
@@ -155,7 +205,7 @@ export function ContextPanel({
     <aside className="context-panel" aria-label="Bases de contexte">
       <h2 className="context-panel__title">Bases de contexte</h2>
       <p className="text-xs text-[var(--muted)]">
-        Documents locaux sur votre PC — jamais stockés dans le cloud.
+        Documents locaux sur votre PC — jamais stockés dans le cloud. Liez des dossiers depuis l&apos;app Host.
       </p>
       <div className="mt-2 flex gap-2">
         <input
@@ -201,15 +251,42 @@ export function ContextPanel({
             </p>
             {expandedId === kb.id && (
               <div className="mt-2">
+                {links.length > 0 && (
+                  <div className="mb-2 rounded border border-[var(--border)] p-2">
+                    <p className="text-xs font-medium">Sources liées (Host)</p>
+                    <ul className="mt-1 space-y-1 text-xs text-[var(--muted)]">
+                      {links.map((link) => (
+                        <li key={link.id}>
+                          🔗 {truncatePath(link.path)} — {linkStatusLabel(link)}
+                          {link.lastSyncError && (
+                            <span className="text-red-400"> ({link.lastSyncError})</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {links.length === 0 && (
+                  <p className="mb-2 text-xs text-[var(--muted)]">
+                    Ajoutez des dossiers depuis l&apos;app Host sur ce PC (Google Drive local, etc.).
+                  </p>
+                )}
                 {uploading ? (
-                  <ContextUploadSkeleton />
+                  <div>
+                    <ContextUploadSkeleton />
+                    {uploadPercent > 0 && (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        {uploadMessage || "Indexation…"} ({Math.round(uploadPercent)}%)
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] hover:border-brand-500">
-                    Glisser-déposer ou cliquer (.txt, .md, .pdf)
+                    Glisser-déposer ou cliquer (.txt, .md, .pdf, .docx)
                     <input
                       type="file"
                       className="hidden"
-                      accept=".txt,.md,.pdf"
+                      accept=".txt,.md,.pdf,.docx"
                       multiple
                       disabled={uploading}
                       onChange={(e) => void handleUpload(kb.id, e.target.files)}
@@ -221,9 +298,14 @@ export function ContextPanel({
                     <li key={d.id}>
                       <div className="flex items-center gap-2">
                         <span>
-                          {d.filename} — {d.status}
+                          {d.sourceType === "linked" ? "🔗" : "📤"} {d.filename} — {d.status}
                           {d.chunkCount > 0 && ` (${d.chunkCount} extraits)`}
                         </span>
+                        {d.externalPath && (
+                          <span className="text-[var(--muted)]" title={d.externalPath}>
+                            {truncatePath(d.externalPath)}
+                          </span>
+                        )}
                         {d.status === "ready" && d.chunkCount > 0 && (
                           <button
                             type="button"
@@ -233,6 +315,13 @@ export function ContextPanel({
                             {chunksDocId === d.id ? "Masquer" : "Extraits"}
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="text-red-400 hover:underline"
+                          onClick={() => void handleDeleteDocument(d.id)}
+                        >
+                          Retirer
+                        </button>
                       </div>
                       {d.errorMessage && (
                         <p className="text-red-400">{d.errorMessage}</p>

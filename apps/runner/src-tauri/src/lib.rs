@@ -13,7 +13,9 @@ use credentials::{delete_credentials, get_credentials, save_credentials, StoredC
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
 use context::{
     create_knowledge_base, delete_knowledge_base, export_knowledge_base, import_knowledge_base,
-    init_context_db, list_documents, list_knowledge_bases,
+    init_context_db, link_context_file, link_context_folder, list_context_links, list_documents,
+    list_knowledge_bases, reindex_uploaded_documents, set_context_link_enabled, sync_all_links,
+    sync_link, unlink_context_link, ContextLink,
 };
 use hardware::get_hardware_info;
 use ollama::{
@@ -195,9 +197,74 @@ fn export_knowledge_base_cmd(kb_id: String, dest_path: String) -> Result<(), Str
 }
 
 #[tauri::command(rename = "import_knowledge_base")]
-fn import_knowledge_base_cmd(zip_path: String) -> Result<context::KnowledgeBase, String> {
+async fn import_knowledge_base_cmd(zip_path: String) -> Result<context::KnowledgeBase, String> {
     init_context_db()?;
-    import_knowledge_base(&std::path::PathBuf::from(zip_path), &resolved_context_limits())
+    let kb = import_knowledge_base(
+        &std::path::PathBuf::from(zip_path),
+        &resolved_context_limits(),
+    )?;
+    let _ = ensure_embedding_model(None).await;
+    let _ = reindex_uploaded_documents(&kb.id).await;
+    Ok(kb)
+}
+
+#[tauri::command(rename = "list_context_links")]
+fn list_context_links_cmd(kb_id: String) -> Result<Vec<ContextLink>, String> {
+    init_context_db()?;
+    list_context_links(&kb_id)
+}
+
+#[tauri::command(rename = "link_context_file")]
+async fn link_context_file_cmd(
+    kb_id: String,
+    paths: Vec<String>,
+) -> Result<Vec<ContextLink>, String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    link_context_file(&kb_id, paths).await
+}
+
+#[tauri::command(rename = "link_context_folder")]
+async fn link_context_folder_cmd(
+    kb_id: String,
+    path: String,
+    recursive: bool,
+) -> Result<ContextLink, String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    link_context_folder(&kb_id, path, recursive, "folder").await
+}
+
+#[tauri::command(rename = "link_context_drive")]
+async fn link_context_drive_cmd(kb_id: String, drive_path: String) -> Result<ContextLink, String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    link_context_folder(&kb_id, drive_path, true, "drive").await
+}
+
+#[tauri::command(rename = "unlink_context_link")]
+fn unlink_context_link_cmd(link_id: String) -> Result<(), String> {
+    unlink_context_link(&link_id)
+}
+
+#[tauri::command(rename = "sync_context_link")]
+async fn sync_context_link_cmd(link_id: String) -> Result<(), String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    sync_link(&link_id).await
+}
+
+#[tauri::command(rename = "sync_all_context_links")]
+async fn sync_all_context_links_cmd() -> Result<(), String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    sync_all_links().await;
+    Ok(())
+}
+
+#[tauri::command(rename = "set_context_link_enabled")]
+fn set_context_link_enabled_cmd(link_id: String, enabled: bool) -> Result<(), String> {
+    set_context_link_enabled(&link_id, enabled)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -231,6 +298,14 @@ pub fn run() {
             list_context_documents_cmd,
             export_knowledge_base_cmd,
             import_knowledge_base_cmd,
+            list_context_links_cmd,
+            link_context_file_cmd,
+            link_context_folder_cmd,
+            link_context_drive_cmd,
+            unlink_context_link_cmd,
+            sync_context_link_cmd,
+            sync_all_context_links_cmd,
+            set_context_link_enabled_cmd,
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());

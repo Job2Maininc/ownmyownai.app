@@ -80,12 +80,34 @@ export interface KnowledgeBaseSummary {
   status: string;
 }
 
+export interface ContextLinkSummary {
+  id: string;
+  knowledgeBaseId: string;
+  linkType: string;
+  path: string;
+  recursive: boolean;
+  enabled: boolean;
+  lastSyncAt?: string | null;
+  lastSyncStatus: string;
+  lastSyncError?: string | null;
+  docCount: number;
+}
+
 export interface ContextDocumentSummary {
   id: string;
   filename: string;
   status: string;
   chunkCount: number;
   errorMessage?: string | null;
+  sourceType?: string;
+  linkId?: string | null;
+  relativePath?: string | null;
+  externalPath?: string | null;
+}
+
+export interface ContextStatusPayload {
+  documents: ContextDocumentSummary[];
+  links: ContextLinkSummary[];
 }
 
 export interface ChunkPreview {

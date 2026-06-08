@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unlink-context-link"
+description = "Enables the unlink_context_link command without any pre-configured scope."
+commands.allow = ["unlink_context_link"]
+
+[[permission]]
+identifier = "deny-unlink-context-link"
+description = "Denies the unlink_context_link command without any pre-configured scope."
+commands.deny = ["unlink_context_link"]

@@ -15,6 +15,12 @@ pub struct ContextLimitsSettings {
     pub max_docs_per_base: u32,
     #[serde(default = "default_max_file_mb")]
     pub max_file_mb: u32,
+    #[serde(default = "default_max_scan_files")]
+    pub max_scan_files: u32,
+    #[serde(default = "default_max_scan_depth")]
+    pub max_scan_depth: u32,
+    #[serde(default = "default_sync_debounce_ms")]
+    pub sync_debounce_ms: u64,
 }
 
 fn default_max_bases() -> u32 {
@@ -27,12 +33,44 @@ fn default_max_file_mb() -> u32 {
     10
 }
 
+fn default_max_scan_files() -> u32 {
+    500
+}
+
+fn default_max_scan_depth() -> u32 {
+    8
+}
+
+fn default_sync_debounce_ms() -> u64 {
+    3000
+}
+
 impl Default for ContextLimitsSettings {
     fn default() -> Self {
         Self {
             max_bases: default_max_bases(),
             max_docs_per_base: default_max_docs_per_base(),
             max_file_mb: default_max_file_mb(),
+            max_scan_files: default_max_scan_files(),
+            max_scan_depth: default_max_scan_depth(),
+            sync_debounce_ms: default_sync_debounce_ms(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SyncScanSettings {
+    pub max_scan_files: u32,
+    pub max_scan_depth: u32,
+    pub sync_debounce_ms: u64,
+}
+
+impl Default for SyncScanSettings {
+    fn default() -> Self {
+        Self {
+            max_scan_files: default_max_scan_files(),
+            max_scan_depth: default_max_scan_depth(),
+            sync_debounce_ms: default_sync_debounce_ms(),
         }
     }
 }
@@ -106,6 +144,16 @@ impl Default for HostSettings {
 pub fn resolved_context_limits() -> ContextLimits {
     get_settings()
         .map(|s| ContextLimits::from(&s.context_limits))
+        .unwrap_or_default()
+}
+
+pub fn resolved_sync_scan_settings() -> SyncScanSettings {
+    get_settings()
+        .map(|s| SyncScanSettings {
+            max_scan_files: s.context_limits.max_scan_files,
+            max_scan_depth: s.context_limits.max_scan_depth,
+            sync_debounce_ms: s.context_limits.sync_debounce_ms,
+        })
         .unwrap_or_default()
 }
 
