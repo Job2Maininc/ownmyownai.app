@@ -87,6 +87,13 @@ pub async fn start_background_services(
     }
     host_status::emit_status();
 
+    tauri::async_runtime::spawn(async {
+        if let Err(e) = ensure_ollama_running(None).await {
+            eprintln!("Ollama auto-start au lancement : {e}");
+        }
+        host_status::emit_status();
+    });
+
     tauri::async_runtime::spawn(async move {
         loop {
             if SERVICES_STOP.load(Ordering::SeqCst) {

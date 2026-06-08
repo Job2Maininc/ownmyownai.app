@@ -1,5 +1,7 @@
+use crate::credentials::get_credentials;
 use crate::process::command_hidden;
 use crate::settings::{resolved_default_model, resolved_models_dir, FALLBACK_DEFAULT_MODEL};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use futures_util::StreamExt;
@@ -356,7 +358,62 @@ pub fn probe_ollama_now() -> Result<OllamaStatus, String> {
     Ok(store_ollama_status(fetch_ollama_status_sync()))
 }
 
-/// Rafraîchit l'état Ollama en arrière-plan pour ne pas bloquer l'interface.
+static OLLAMA_ENSURE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+static OLLAMA_LAST_ENSURE_FAIL: Mutex<Option<Instant>> = Mutex::new(None);
+
+const OLLAMA_ENSURE_RETRY_AFTER: Duration = Duration::from_secs(45);
+
+fn host_is_paired() -> bool {
+    get_credentials().ok().flatten().is_some()
+}
+
+fn should_retry_ollama_ensure() -> bool {
+    let guard = match OLLAMA_LAST_ENSURE_FAIL.lock() {
+        Ok(g) => g,
+        Err(_) => return true,
+    };
+    guard
+        .map(|at| at.elapsed() >= OLLAMA_ENSURE_RETRY_AFTER)
+        .unwrap_or(true)
+}
+
+fn record_ollama_ensure_failure() {
+    if let Ok(mut guard) = OLLAMA_LAST_ENSURE_FAIL.lock() {
+        *guard = Some(Instant::now());
+    }
+}
+
+fn clear_ollama_ensure_failure() {
+    if let Ok(mut guard) = OLLAMA_LAST_ENSURE_FAIL.lock() {
+        *guard = None;
+    }
+}
+
+fn spawn_ollama_ensure_if_needed() {
+    if !host_is_paired() {
+        return;
+    }
+    if OLLAMA_ENSURE_IN_PROGRESS.load(Ordering::SeqCst) {
+        return;
+    }
+    if !should_retry_ollama_ensure() {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async {
+        let result = ensure_ollama_running(None).await;
+        match result {
+            Ok(()) => clear_ollama_ensure_failure(),
+            Err(e) => {
+                record_ollama_ensure_failure();
+                eprintln!("Ollama auto-start : {e}");
+            }
+        }
+        crate::host_status::emit_status();
+    });
+}
+
+/// Rafraîchit l'état Ollama en arrière-plan et le relance si le host est lié.
 pub fn start_status_poller() {
     tauri::async_runtime::spawn(async {
         let mut interval = tokio::time::interval(Duration::from_secs(6));
@@ -365,6 +422,15 @@ pub fn start_status_poller() {
             let result = tauri::async_runtime::spawn_blocking(probe_ollama_now).await;
             if result.is_ok() {
                 crate::host_status::emit_status();
+            }
+
+            let running = result
+                .ok()
+                .and_then(|r| r.ok())
+                .map(|s| s.running)
+                .unwrap_or(false);
+            if !running {
+                spawn_ollama_ensure_if_needed();
             }
         }
     });
@@ -670,6 +736,35 @@ async fn spawn_ollama_serve(app: Option<&AppHandle>) -> Result<(), String> {
 }
 
 pub async fn ensure_ollama_running(app: Option<&AppHandle>) -> Result<(), String> {
+    if probe_ollama_now()?.running {
+        return Ok(());
+    }
+
+    if OLLAMA_ENSURE_IN_PROGRESS
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        for _ in 0..50 {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            if probe_ollama_now()?.running {
+                return Ok(());
+            }
+            if !OLLAMA_ENSURE_IN_PROGRESS.load(Ordering::SeqCst) {
+                break;
+            }
+        }
+        if probe_ollama_now()?.running {
+            return Ok(());
+        }
+        return Err("Ollama est en cours de démarrage — réessayez dans quelques secondes".into());
+    }
+
+    let result = ensure_ollama_running_inner(app).await;
+    OLLAMA_ENSURE_IN_PROGRESS.store(false, Ordering::SeqCst);
+    result
+}
+
+async fn ensure_ollama_running_inner(app: Option<&AppHandle>) -> Result<(), String> {
     if probe_ollama_now()?.running {
         return Ok(());
     }
