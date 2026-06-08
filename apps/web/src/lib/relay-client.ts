@@ -3,13 +3,27 @@ import {
   serializeEnvelope,
   WS_MESSAGE_TYPES,
   type ChatMessage,
+  type ChatThreadSummary,
   type ChunkPreview,
   type ContextDocumentSummary,
   type ContextLinkSummary,
   type ContextStatusPayload,
   type HostStatus,
+  type InlineEditApplyRequest,
+  type InlineEditPreviewRequest,
+  type InlineEditPreviewResponse,
   type KnowledgeBaseSummary,
+  type RagCitation,
   type ModelPullProgressPayload,
+  type ChatMentionScope,
+  type ProjectOpenedPayload,
+  type ProjectSummary,
+  type PatchApplyRequest,
+  type PatchPreviewRequest,
+  type PatchPreviewResponse,
+  type PlaybookSummary,
+  type TerminalExecPayload,
+  type TerminalOutputPayload,
   type WsEnvelope,
 } from "@ownmyownai/protocol";
 
@@ -25,6 +39,8 @@ export interface RelayClientCallbacks {
   onStatus?: (status: RelayStatus) => void;
   onHostStatus?: (status: HostStatus) => void;
   onDelta?: (content: string) => void;
+  onThinkingDelta?: (thinking: string) => void;
+  onCitations?: (citations: RagCitation[]) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
   onContextMessage?: (envelope: WsEnvelope) => void;
@@ -36,6 +52,8 @@ const MAX_BACKOFF_MS = 30_000;
 const CHAT_IDLE_TIMEOUT_MS = 300_000;
 const CHAT_FIRST_RESPONSE_TIMEOUT_MS = 90_000;
 const CONTEXT_REQUEST_TIMEOUT_MS = 45_000;
+const PATCH_TIMEOUT_MS = 120_000;
+const INLINE_EDIT_TIMEOUT_MS = 120_000;
 
 export class RelayClient {
   private ws: WebSocket | null = null;
@@ -207,6 +225,10 @@ export class RelayClient {
       pending.onProgress?.(payload.percent ?? 0, payload.message ?? "");
       return true;
     }
+    if (envelope.type === WS_MESSAGE_TYPES.TERMINAL_OUTPUT) {
+      pending.resolve(envelope);
+      return true;
+    }
     if (pending.types.has(envelope.type) || envelope.type.includes("error")) {
       this.pendingRequests.delete(envelope.requestId);
       pending.resolve(envelope);
@@ -246,6 +268,24 @@ export class RelayClient {
         const payload = envelope.payload as { content?: string };
         if (payload.content) {
           this.callbacks.onDelta?.(payload.content);
+        }
+        break;
+      }
+      case WS_MESSAGE_TYPES.CHAT_THINKING_DELTA: {
+        if (!this.isActiveRequest(envelope)) return;
+        this.clearChatFirstResponseTimer();
+        this.resetChatIdleTimer();
+        const payload = envelope.payload as { thinking?: string };
+        if (payload.thinking) {
+          this.callbacks.onThinkingDelta?.(payload.thinking);
+        }
+        break;
+      }
+      case WS_MESSAGE_TYPES.CHAT_CITATIONS: {
+        if (!this.isActiveRequest(envelope)) return;
+        const payload = envelope.payload as { citations?: RagCitation[] };
+        if (payload.citations?.length) {
+          this.callbacks.onCitations?.(payload.citations);
         }
         break;
       }
@@ -303,11 +343,23 @@ export class RelayClient {
     messages: ChatMessage[],
     model?: string,
     contextIds?: string[],
+    threadId?: string,
     requestId?: string,
+    projectId?: string,
+    mentionScope?: ChatMentionScope,
+    thinkingMode?: boolean,
   ) {
     const id = this.send(
       WS_MESSAGE_TYPES.CHAT_START,
-      { messages, model, contextIds: contextIds ?? [] },
+      {
+        messages,
+        model,
+        contextIds: contextIds ?? [],
+        threadId,
+        projectId,
+        mentionScope,
+        thinkingMode,
+      },
       requestId,
     );
     if (id) {
@@ -322,6 +374,48 @@ export class RelayClient {
     const id = requestId ?? this.activeRequestId;
     if (!id) return;
     this.send(WS_MESSAGE_TYPES.CHAT_CANCEL, {}, id);
+  }
+
+  sendPlaybookRun(
+    playbookId: string,
+    options?: {
+      model?: string;
+      contextIds?: string[];
+      linkId?: string;
+      path?: string;
+    },
+    requestId?: string,
+  ) {
+    const id = this.send(
+      WS_MESSAGE_TYPES.PLAYBOOK_RUN,
+      {
+        playbookId,
+        model: options?.model,
+        contextIds: options?.contextIds ?? [],
+        linkId: options?.linkId,
+        path: options?.path,
+      },
+      requestId,
+    );
+    if (id) {
+      this.activeRequestId = id;
+      this.startChatFirstResponseTimer();
+      this.resetChatIdleTimer();
+    }
+    return id;
+  }
+
+  async listPlaybooks(): Promise<PlaybookSummary[]> {
+    const requestId = this.send(WS_MESSAGE_TYPES.PLAYBOOK_LIST, {}) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.PLAYBOOK_LIST, WS_MESSAGE_TYPES.PLAYBOOK_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type !== WS_MESSAGE_TYPES.PLAYBOOK_LIST) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger les playbooks"));
+    }
+    return ((env.payload as { playbooks?: PlaybookSummary[] }).playbooks ?? []);
   }
 
   async listContextBases(): Promise<KnowledgeBaseSummary[]> {
@@ -449,6 +543,51 @@ export class RelayClient {
     });
   }
 
+  async execTerminal(
+    payload: TerminalExecPayload,
+    onOutput?: (output: TerminalOutputPayload) => void,
+  ): Promise<number> {
+    const requestId = this.send(WS_MESSAGE_TYPES.TERMINAL_EXEC, payload) ?? "";
+    const timeoutMs = (payload.timeoutSecs ?? 120) * 1000 + 30_000;
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error("Délai d'exécution de la commande dépassé"));
+      }, timeoutMs);
+
+      this.pendingRequests.set(requestId, {
+        resolve: (env) => {
+          if (env.type === WS_MESSAGE_TYPES.TERMINAL_OUTPUT) {
+            onOutput?.(env.payload as TerminalOutputPayload);
+            return;
+          }
+          clearTimeout(timer);
+          this.pendingRequests.delete(requestId);
+          if (env.type === WS_MESSAGE_TYPES.TERMINAL_DONE) {
+            resolve((env.payload as { exitCode?: number }).exitCode ?? -1);
+          } else {
+            reject(
+              new Error(
+                (env.payload as { message?: string }).message ??
+                  "Échec de l'exécution de la commande",
+              ),
+            );
+          }
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+        types: new Set([
+          WS_MESSAGE_TYPES.TERMINAL_OUTPUT,
+          WS_MESSAGE_TYPES.TERMINAL_DONE,
+          WS_MESSAGE_TYPES.TERMINAL_ERROR,
+        ]),
+      });
+    });
+  }
+
   async getContextChunks(documentId: string): Promise<ChunkPreview[]> {
     const requestId = this.send(WS_MESSAGE_TYPES.CONTEXT_CHUNKS, { documentId }) ?? "";
     const env = await this.waitFor(requestId, [
@@ -459,6 +598,229 @@ export class RelayClient {
       throw new Error((env.payload as { message?: string }).message ?? "Erreur");
     }
     return ((env.payload as { chunks?: ChunkPreview[] }).chunks ?? []);
+  }
+
+  async previewInlineEdit(
+    request: InlineEditPreviewRequest,
+  ): Promise<InlineEditPreviewResponse> {
+    const requestId = this.send(WS_MESSAGE_TYPES.INLINE_EDIT_PREVIEW, request) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.INLINE_EDIT_PREVIEWED, WS_MESSAGE_TYPES.INLINE_EDIT_ERROR],
+      INLINE_EDIT_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.INLINE_EDIT_ERROR) {
+      throw new Error(this.payloadMessage(env, "Échec de la prévisualisation"));
+    }
+    return env.payload as InlineEditPreviewResponse;
+  }
+
+  async applyInlineEdit(request: InlineEditApplyRequest): Promise<void> {
+    const requestId = this.send(WS_MESSAGE_TYPES.INLINE_EDIT_APPLY, request) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.INLINE_EDIT_APPLIED, WS_MESSAGE_TYPES.INLINE_EDIT_ERROR],
+      INLINE_EDIT_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.INLINE_EDIT_ERROR) {
+      throw new Error(this.payloadMessage(env, "Échec de l'application"));
+    }
+  }
+
+  async previewPatch(request: PatchPreviewRequest): Promise<PatchPreviewResponse> {
+    const requestId = this.send(WS_MESSAGE_TYPES.PATCH_PREVIEW, request) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.PATCH_PREVIEWED, WS_MESSAGE_TYPES.PATCH_ERROR],
+      PATCH_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.PATCH_ERROR) {
+      throw new Error(this.payloadMessage(env, "Échec de la prévisualisation du patch"));
+    }
+    return env.payload as PatchPreviewResponse;
+  }
+
+  async listProjects(): Promise<{
+    projects: ProjectSummary[];
+    activeProjectId?: string | null;
+  }> {
+    const requestId = this.send(WS_MESSAGE_TYPES.PROJECT_LIST, {}) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.PROJECT_LIST, WS_MESSAGE_TYPES.PROJECT_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.PROJECT_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger les projets"));
+    }
+    const payload = env.payload as {
+      projects?: ProjectSummary[];
+      activeProjectId?: string | null;
+    };
+    return {
+      projects: payload.projects ?? [],
+      activeProjectId: payload.activeProjectId,
+    };
+  }
+
+  async openProject(id: string): Promise<ProjectOpenedPayload> {
+    const requestId = this.send(WS_MESSAGE_TYPES.PROJECT_OPEN, { id }) ?? "";
+    const env = await this.waitFor(requestId, [
+      WS_MESSAGE_TYPES.PROJECT_OPENED,
+      WS_MESSAGE_TYPES.PROJECT_ERROR,
+    ]);
+    if (env.type === WS_MESSAGE_TYPES.PROJECT_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible d'ouvrir le projet"));
+    }
+    return env.payload as ProjectOpenedPayload;
+  }
+
+  async applyPatch(request: PatchApplyRequest): Promise<void> {
+    const requestId = this.send(WS_MESSAGE_TYPES.PATCH_APPLY, request) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.PATCH_APPLIED, WS_MESSAGE_TYPES.PATCH_ERROR],
+      PATCH_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.PATCH_ERROR) {
+      throw new Error(this.payloadMessage(env, "Échec de l'application du patch"));
+    }
+  }
+
+  async listChatThreads(limit = 50): Promise<ChatThreadSummary[]> {
+    const requestId = this.send(WS_MESSAGE_TYPES.HISTORY_LIST, { limit }) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.HISTORY_LIST, WS_MESSAGE_TYPES.HISTORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.HISTORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger l'historique"));
+    }
+    return ((env.payload as { threads?: ChatThreadSummary[] }).threads ?? []);
+  }
+
+  async listChatThreadBranches(rootThreadId: string): Promise<ChatThreadSummary[]> {
+    const requestId =
+      this.send(WS_MESSAGE_TYPES.HISTORY_BRANCHES, { rootThreadId }) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.HISTORY_BRANCHES, WS_MESSAGE_TYPES.HISTORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.HISTORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger les branches"));
+    }
+    return ((env.payload as { threads?: ChatThreadSummary[] }).threads ?? []);
+  }
+
+  async getChatThread(threadId: string): Promise<{
+    thread: {
+      id: string;
+      title: string;
+      model?: string;
+      contextIds: string[];
+      createdAt: string;
+      updatedAt: string;
+      parentThreadId?: string | null;
+      forkAtIndex?: number | null;
+      rootThreadId: string;
+    };
+    messages: ChatMessage[];
+  }> {
+    const requestId = this.send(WS_MESSAGE_TYPES.HISTORY_GET, { threadId }) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.HISTORY_GET, WS_MESSAGE_TYPES.HISTORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.HISTORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Conversation introuvable"));
+    }
+    const payload = env.payload as {
+      thread?: {
+        id: string;
+        title: string;
+        model?: string;
+        contextIds: string[];
+        createdAt: string;
+        updatedAt: string;
+        parentThreadId?: string | null;
+        forkAtIndex?: number | null;
+        rootThreadId?: string;
+      };
+      messages?: ChatMessage[];
+    };
+    return {
+      thread: {
+        id: threadId,
+        title: "",
+        contextIds: [],
+        createdAt: "",
+        updatedAt: "",
+        rootThreadId: threadId,
+        ...payload.thread,
+      },
+      messages: payload.messages ?? [],
+    };
+  }
+
+  async saveChatThread(
+    messages: ChatMessage[],
+    options?: {
+      threadId?: string;
+      title?: string;
+      model?: string;
+      contextIds?: string[];
+    },
+  ): Promise<string> {
+    const requestId = this.send(WS_MESSAGE_TYPES.HISTORY_SAVE, {
+      threadId: options?.threadId,
+      title: options?.title,
+      model: options?.model,
+      contextIds: options?.contextIds ?? [],
+      messages,
+    }) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.HISTORY_SAVED, WS_MESSAGE_TYPES.HISTORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.HISTORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Échec de sauvegarde"));
+    }
+    return (env.payload as { threadId: string }).threadId;
+  }
+
+  async forkChatThread(
+    parentThreadId: string,
+    forkAtIndex: number,
+    options?: { model?: string; contextIds?: string[] },
+  ): Promise<string> {
+    const requestId = this.send(WS_MESSAGE_TYPES.HISTORY_FORK, {
+      parentThreadId,
+      forkAtIndex,
+      model: options?.model,
+      contextIds: options?.contextIds ?? [],
+    }) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.HISTORY_FORKED, WS_MESSAGE_TYPES.HISTORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.HISTORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Échec de création de branche"));
+    }
+    return (env.payload as { threadId: string }).threadId;
+  }
+
+  async deleteChatThread(threadId: string): Promise<void> {
+    const requestId = this.send(WS_MESSAGE_TYPES.HISTORY_DELETE, { threadId }) ?? "";
+    await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.HISTORY_DELETED, WS_MESSAGE_TYPES.HISTORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
   }
 
   disconnect() {

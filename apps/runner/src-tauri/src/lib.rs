@@ -1,4 +1,5 @@
 mod agent;
+mod cloud_keys;
 mod context;
 mod dpapi;
 mod playbooks;
@@ -6,6 +7,7 @@ mod projects;
 mod credentials;
 mod hardware;
 mod history;
+mod providers;
 mod share;
 mod process;
 mod host_status;
@@ -14,26 +16,40 @@ mod ollama;
 mod relay;
 mod settings;
 mod sync_schedule;
+mod notifications;
 mod tray;
 mod updater;
+mod user_memory;
 
+use agent::{
+    collect_git_diff, collect_gh_pr_diff, find_git_repos, is_gh_available, review_git_diff,
+    PrReviewInput, PrReviewResult,
+};
 use credentials::{delete_credentials, get_credentials, save_credentials, StoredCredentials};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
 use context::{
     create_knowledge_base, delete_knowledge_base, export_knowledge_base, import_knowledge_base,
-    init_context_db, link_context_file, link_context_folder, list_context_links, list_documents,
-    list_knowledge_bases, reindex_uploaded_documents, set_context_link_enabled, sync_all_links,
-    sync_link, unlink_context_link, ContextLink,
+    init_context_db, link_context_file, link_context_folder, link_context_repo, list_audit_log,
+    list_context_links, list_documents, list_knowledge_bases, reindex_uploaded_documents,
+    set_context_link_enabled, set_knowledge_base_system_instruction, sync_all_links, sync_link,
+    unlink_context_link, AuditEntry, ContextLink,
 };
-use hardware::get_hardware_info;
+use projects::{
+    create_project, delete_project, list_projects, open_project, update_project, ProjectSummary,
+};
+use hardware::{advise_quantization, get_hardware_info};
+use cloud_keys::CloudProviderId;
 use ollama::{
     check_ollama, delete_model, disk_free_gb_for_models_dir, ensure_embedding_model,
-    ensure_ollama_running, list_installed_models, pull_model, pull_models, OllamaStatus,
+    ensure_ollama_running, pull_model, pull_models, OllamaStatus,
 };
+use providers::{get_cloud_providers_status, list_available_models, CloudProviderStatus};
 use relay::{start_background_services, stop_background_services};
 use settings::{
-    default_ollama_models_path, get_settings, resolved_context_limits, save_settings, HostSettings,
+    default_ollama_models_path, get_active_project_id, get_settings, resolved_context_limits,
+    save_settings, set_user_memory_enabled, HostSettings,
 };
+use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemoryState};
 use serde::Deserialize;
 
 #[tauri::command(rename = "check_ollama")]
@@ -167,9 +183,34 @@ fn get_disk_free_gb_cmd() -> Option<f64> {
     disk_free_gb_for_models_dir()
 }
 
+#[tauri::command(rename = "get_quantization_advice")]
+fn get_quantization_advice_cmd(model: String) -> hardware::QuantizationAdvice {
+    let disk_free = disk_free_gb_for_models_dir();
+    advise_quantization(&model, disk_free)
+}
+
 #[tauri::command(rename = "list_installed_models")]
 fn list_installed_models_cmd() -> Vec<String> {
-    list_installed_models()
+    list_available_models()
+}
+
+#[tauri::command(rename = "get_cloud_providers_status")]
+fn get_cloud_providers_status_cmd() -> Vec<CloudProviderStatus> {
+    get_cloud_providers_status()
+}
+
+#[tauri::command(rename = "save_cloud_provider_key")]
+fn save_cloud_provider_key_cmd(provider_id: String, api_key: String) -> Result<(), String> {
+    let provider = CloudProviderId::from_str_id(&provider_id)
+        .ok_or_else(|| format!("Fournisseur inconnu : {provider_id}"))?;
+    cloud_keys::save_provider_api_key(provider, &api_key)
+}
+
+#[tauri::command(rename = "delete_cloud_provider_key")]
+fn delete_cloud_provider_key_cmd(provider_id: String) -> Result<(), String> {
+    let provider = CloudProviderId::from_str_id(&provider_id)
+        .ok_or_else(|| format!("Fournisseur inconnu : {provider_id}"))?;
+    cloud_keys::delete_provider_api_key(provider)
 }
 
 #[tauri::command(rename = "ensure_embedding_model")]
@@ -192,6 +233,68 @@ fn create_knowledge_base_cmd(name: String, description: String) -> Result<contex
 #[tauri::command(rename = "delete_knowledge_base")]
 fn delete_knowledge_base_cmd(id: String) -> Result<(), String> {
     delete_knowledge_base(&id)
+}
+
+#[tauri::command(rename = "set_knowledge_base_system_instruction")]
+fn set_knowledge_base_system_instruction_cmd(
+    kb_id: String,
+    system_instruction: String,
+) -> Result<(), String> {
+    init_context_db()?;
+    set_knowledge_base_system_instruction(&kb_id, &system_instruction)
+}
+
+#[tauri::command(rename = "list_projects")]
+fn list_projects_cmd() -> Result<Vec<ProjectSummary>, String> {
+    init_context_db()?;
+    let active = get_active_project_id().ok().flatten();
+    list_projects(active.as_deref())
+}
+
+#[tauri::command(rename = "update_project")]
+fn update_project_cmd(
+    id: String,
+    name: Option<String>,
+    description: Option<String>,
+    system_instruction: Option<String>,
+    knowledge_base_ids: Option<Vec<String>>,
+) -> Result<ProjectSummary, String> {
+    init_context_db()?;
+    let active = get_active_project_id().ok().flatten();
+    update_project(
+        &id,
+        name.as_deref(),
+        description.as_deref(),
+        system_instruction.as_deref(),
+        knowledge_base_ids.as_deref(),
+        active.as_deref(),
+    )
+}
+
+#[tauri::command(rename = "create_project")]
+fn create_project_cmd(
+    name: String,
+    description: String,
+    knowledge_base_ids: Vec<String>,
+) -> Result<ProjectSummary, String> {
+    init_context_db()?;
+    create_project(&name, &description, &knowledge_base_ids)
+}
+
+#[tauri::command(rename = "open_project")]
+fn open_project_cmd(id: String) -> Result<ProjectSummary, String> {
+    init_context_db()?;
+    let (project, _) = open_project(&id)?;
+    Ok(project)
+}
+
+#[tauri::command(rename = "delete_project")]
+fn delete_project_cmd(id: String) -> Result<(), String> {
+    init_context_db()?;
+    if get_active_project_id().ok().flatten().as_deref() == Some(id.as_str()) {
+        let _ = settings::set_active_project_id(None);
+    }
+    delete_project(&id)
 }
 
 #[tauri::command(rename = "list_context_documents")]
@@ -250,6 +353,13 @@ async fn link_context_drive_cmd(kb_id: String, drive_path: String) -> Result<Con
     link_context_folder(&kb_id, drive_path, true, "drive").await
 }
 
+#[tauri::command(rename = "link_context_repo")]
+async fn link_context_repo_cmd(kb_id: String, path: String) -> Result<ContextLink, String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    link_context_repo(&kb_id, path).await
+}
+
 #[tauri::command(rename = "unlink_context_link")]
 fn unlink_context_link_cmd(link_id: String) -> Result<(), String> {
     unlink_context_link(&link_id)
@@ -259,7 +369,12 @@ fn unlink_context_link_cmd(link_id: String) -> Result<(), String> {
 async fn sync_context_link_cmd(link_id: String) -> Result<(), String> {
     init_context_db()?;
     ensure_embedding_model(None).await?;
-    sync_link(&link_id).await
+    sync_link(&link_id).await?;
+    notifications::notify_task_done(
+        notifications::TaskDoneKind::SyncLink,
+        "Indexation du lien terminée.",
+    );
+    Ok(())
 }
 
 #[tauri::command(rename = "sync_all_context_links")]
@@ -275,12 +390,71 @@ fn set_context_link_enabled_cmd(link_id: String, enabled: bool) -> Result<(), St
     set_context_link_enabled(&link_id, enabled)
 }
 
+#[tauri::command(rename = "list_git_repos")]
+fn list_git_repos_cmd() -> Result<Vec<agent::GitRepoInfo>, String> {
+    init_context_db()?;
+    find_git_repos()
+}
+
+#[tauri::command(rename = "collect_git_diff")]
+fn collect_git_diff_cmd(repo_path: String, mode: String) -> Result<String, String> {
+    collect_git_diff(&repo_path, &mode)
+}
+
+#[tauri::command(rename = "collect_gh_pr_diff")]
+fn collect_gh_pr_diff_cmd(repo_path: String, pr_number: u32) -> Result<String, String> {
+    collect_gh_pr_diff(&repo_path, pr_number)
+}
+
+#[tauri::command(rename = "is_gh_available")]
+fn is_gh_available_cmd() -> bool {
+    is_gh_available()
+}
+
+#[tauri::command(rename = "review_git_diff")]
+async fn review_git_diff_cmd(input: PrReviewInput) -> Result<PrReviewResult, String> {
+    review_git_diff(input).await
+}
+
+#[tauri::command(rename = "get_user_memory")]
+fn get_user_memory_cmd() -> Result<UserMemoryState, String> {
+    init_context_db()?;
+    memory_state()
+}
+
+#[tauri::command(rename = "add_user_memory_fact")]
+fn add_user_memory_fact_cmd(content: String) -> Result<UserMemoryFact, String> {
+    init_context_db()?;
+    add_fact(&content)
+}
+
+#[tauri::command(rename = "delete_user_memory_fact")]
+fn delete_user_memory_fact_cmd(id: String) -> Result<(), String> {
+    init_context_db()?;
+    delete_fact(&id)
+}
+
+#[tauri::command(rename = "set_user_memory_enabled")]
+fn set_user_memory_enabled_cmd(enabled: bool) -> Result<(), String> {
+    set_user_memory_enabled(enabled)
+}
+
+#[tauri::command(rename = "list_audit_log")]
+fn list_audit_log_cmd(
+    limit: Option<u32>,
+    action_filter: Option<String>,
+) -> Result<Vec<AuditEntry>, String> {
+    init_context_db()?;
+    list_audit_log(limit.unwrap_or(100), action_filter.as_deref())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             open_url_cmd,
             check_ollama_cmd,
@@ -298,11 +472,21 @@ pub fn run() {
             get_hardware_info_cmd,
             delete_ollama_model_cmd,
             get_disk_free_gb_cmd,
+            get_quantization_advice_cmd,
             list_installed_models_cmd,
+            get_cloud_providers_status_cmd,
+            save_cloud_provider_key_cmd,
+            delete_cloud_provider_key_cmd,
             ensure_embedding_model_cmd,
             list_knowledge_bases_cmd,
             create_knowledge_base_cmd,
             delete_knowledge_base_cmd,
+            set_knowledge_base_system_instruction_cmd,
+            list_projects_cmd,
+            update_project_cmd,
+            create_project_cmd,
+            open_project_cmd,
+            delete_project_cmd,
             list_context_documents_cmd,
             export_knowledge_base_cmd,
             import_knowledge_base_cmd,
@@ -310,10 +494,21 @@ pub fn run() {
             link_context_file_cmd,
             link_context_folder_cmd,
             link_context_drive_cmd,
+            link_context_repo_cmd,
             unlink_context_link_cmd,
             sync_context_link_cmd,
             sync_all_context_links_cmd,
             set_context_link_enabled_cmd,
+            list_git_repos_cmd,
+            collect_git_diff_cmd,
+            collect_gh_pr_diff_cmd,
+            is_gh_available_cmd,
+            review_git_diff_cmd,
+            get_user_memory_cmd,
+            add_user_memory_fact_cmd,
+            delete_user_memory_fact_cmd,
+            set_user_memory_enabled_cmd,
+            list_audit_log_cmd,
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());

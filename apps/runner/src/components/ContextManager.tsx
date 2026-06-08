@@ -6,6 +6,7 @@ interface KnowledgeBase {
   id: string;
   name: string;
   description: string;
+  systemInstruction?: string;
   docCount: number;
   status: string;
 }
@@ -31,6 +32,7 @@ interface ContextLink {
   lastSyncStatus: string;
   lastSyncError?: string | null;
   docCount: number;
+  symbolCount?: number;
 }
 
 const SUPPORTED_FILTERS = [
@@ -62,6 +64,8 @@ export default function ContextManager() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [links, setLinks] = useState<ContextLink[]>([]);
   const [newName, setNewName] = useState("");
+  const [systemInstruction, setSystemInstruction] = useState("");
+  const [instructionDirty, setInstructionDirty] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,7 +104,25 @@ export default function ContextManager() {
     if (!selectedId) return;
     void refreshDocs(selectedId);
     void refreshLinks(selectedId);
-  }, [selectedId, refreshDocs, refreshLinks]);
+    const kb = bases.find((b) => b.id === selectedId);
+    setSystemInstruction(kb?.systemInstruction ?? "");
+    setInstructionDirty(false);
+  }, [selectedId, refreshDocs, refreshLinks, bases]);
+
+  async function saveSystemInstruction() {
+    if (!selectedId) return;
+    setError(null);
+    try {
+      await invoke("set_knowledge_base_system_instruction", {
+        kbId: selectedId,
+        systemInstruction,
+      });
+      setInstructionDirty(false);
+      await refreshBases();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   async function createBase() {
     const name = newName.trim() || "Nouvelle base";
@@ -191,6 +213,28 @@ export default function ContextManager() {
     try {
       await invoke("ensure_embedding_model");
       await invoke("link_context_folder", { kbId, path, recursive: true });
+      await refreshLinks(kbId);
+      await refreshDocs(kbId);
+      await refreshBases();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function linkRepo(kbId: string) {
+    const path = await open({
+      title: "Lier un dépôt Git",
+      directory: true,
+      multiple: false,
+    });
+    if (!path || typeof path !== "string") return;
+    setSyncing(true);
+    setError(null);
+    try {
+      await invoke("ensure_embedding_model");
+      await invoke("link_context_repo", { kbId, path });
       await refreshLinks(kbId);
       await refreshDocs(kbId);
       await refreshBases();
@@ -307,6 +351,29 @@ export default function ContextManager() {
       </ul>
       {selectedId && (
         <div className="context-docs">
+          <h3>Instruction système</h3>
+          <p className="muted">
+            Injectée avant le contexte RAG à chaque message (visible en lecture seule sur le web).
+          </p>
+          <textarea
+            className="context-instruction"
+            rows={4}
+            value={systemInstruction}
+            onChange={(e) => {
+              setSystemInstruction(e.target.value);
+              setInstructionDirty(true);
+            }}
+            placeholder="Ex. : Réponds toujours en français, style concis…"
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={!instructionDirty}
+            onClick={() => void saveSystemInstruction()}
+          >
+            Enregistrer l&apos;instruction
+          </button>
+
           <h3>Sources liées</h3>
           <div className="context-create">
             <button
@@ -324,6 +391,14 @@ export default function ContextManager() {
               onClick={() => void linkFolder(selectedId)}
             >
               Dossier
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={syncing}
+              onClick={() => void linkRepo(selectedId)}
+            >
+              Dépôt Git
             </button>
             <button
               type="button"
@@ -345,6 +420,9 @@ export default function ContextManager() {
                 <br />
                 <span className="muted">
                   {syncStatusLabel(link)} · {link.docCount} doc(s)
+                  {link.linkType === "repo" && (link.symbolCount ?? 0) > 0
+                    ? ` · ${link.symbolCount} symbole(s)`
+                    : ""}
                 </span>
                 {link.lastSyncError && (
                   <span className="error-line"> — {link.lastSyncError}</span>

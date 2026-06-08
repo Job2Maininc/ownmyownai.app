@@ -105,6 +105,11 @@
 - [x] Chat relay : `enableTools: true` dans `chat.start` déclenche l'agent multi-étapes
 - [x] Playbooks Host (`summarize-folder`) réutilisent la même boucle
 
+## Quantization advisor (omoa-quantization-advisor)
+
+- [x] Recommandation Q4/Q8 selon RAM et espace disque (`hardware.rs`, `get_quantization_advice`)
+- [x] Suggestion affichée à l'ajout d'un modèle (ModelSetup + ModelManager)
+
 ## Fallback modèle (Host)
 
 - [x] `fallbackModel` dans `settings.json` + chaîne auto (défaut → sélection → `llama3.2:3b`)
@@ -116,6 +121,13 @@
 - [x] File de tâches `tokio::spawn` (indexation, agent multi-étapes)
 - [x] Statut tray + événements WS `job.*`
 - [x] Annulation via `job.cancel` / `cancel_background_job`
+
+## Notifications desktop (omoa-desktop-notifications)
+
+- [x] Toast Windows à la fin d'une indexation (`sync_all_links`, `sync_context_link`, jobs `context.sync*`)
+- [x] Toast Windows à la fin d'un agent / playbook
+- [x] `tauri-plugin-notification` + réglage `desktopNotifications` (défaut activé)
+- [x] `cargo check` dans `apps/runner/src-tauri`
 
 ## Review PR assistée (omoa-pr-review)
 

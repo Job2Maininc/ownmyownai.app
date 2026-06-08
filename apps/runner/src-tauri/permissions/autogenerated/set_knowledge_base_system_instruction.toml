@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-knowledge-base-system-instruction"
+description = "Enables the set_knowledge_base_system_instruction command without any pre-configured scope."
+commands.allow = ["set_knowledge_base_system_instruction"]
+
+[[permission]]
+identifier = "deny-set-knowledge-base-system-instruction"
+description = "Denies the set_knowledge_base_system_instruction command without any pre-configured scope."
+commands.deny = ["set_knowledge_base_system_instruction"]

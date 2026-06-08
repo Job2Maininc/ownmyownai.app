@@ -1,17 +1,37 @@
 use crate::context::{
-    build_rag_context, create_knowledge_base, delete_document, delete_knowledge_base,
-    get_context_summary, ingest_document, list_chunks, list_context_links, list_documents,
-    list_knowledge_bases, start_context_watcher, ContextLimits, init_context_db,
+    apply_inline_edit, build_codebase_context, build_rag_context, create_knowledge_base,
+    delete_document,
+    delete_knowledge_base, get_context_summary, ingest_document, list_chunks, list_context_links,
+    list_documents, list_knowledge_bases, load_project_rules, log_audit, preview_inline_edit,
+    start_context_watcher, AuditAction, ContextLimits, RagCitation, init_context_db,
+};
+use crate::projects::{
+    get_active_project_id, get_project, list_projects, open_project, resolve_project_context_ids,
+};
+use crate::history::{
+    delete_thread, fork_thread, get_thread, init_history_db, list_thread_branches, list_threads,
+    save_thread,
 };
 use crate::credentials::{get_credentials, resolve_supabase_url, StoredCredentials};
 use crate::host_status::{
     self, session_ended, session_started, set_heartbeat_error, set_heartbeat_ok,
     set_relay_connected, set_relay_error,
 };
+use crate::agent::{review_git_diff, run_agent_loop, AgentConfig, PrReviewInput};
+use crate::model_routing::{resolve_chat_model, ChatTaskIntent};
 use crate::ollama::{
     default_model, disk_free_gb_for_models_dir, ensure_embedding_model, ensure_ollama_running,
-    list_installed_models, model_exists, pull_model, stream_chat, PullProgressCallback,
-    SetupProgress,
+    model_exists, pull_model, resolve_thinking_model, stream_chat, stream_chat_thinking,
+    PullProgressCallback, SetupProgress,
+};
+use crate::providers::{
+    is_available_model, is_cloud_model, list_available_models, relay_chat_stream,
+};
+use crate::playbooks::{self, PlaybookRunParams};
+use crate::settings::set_user_memory_enabled;
+use crate::user_memory::{add_fact, build_memory_context, delete_fact, memory_state};
+use crate::process::{
+    clamp_timeout_secs, run_allowlisted_command, AllowlistedCommand, OutputStream,
 };
 use crate::settings::{resolved_context_limits, resolved_default_model};
 use futures_util::{SinkExt, StreamExt};
@@ -32,6 +52,8 @@ static SERVICES_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVICES_STOP: AtomicBool = AtomicBool::new(false);
 static CHAT_CANCEL: AtomicBool = AtomicBool::new(false);
 static ACTIVE_CHAT_REQUEST: Mutex<Option<String>> = Mutex::new(None);
+
+const ARTIFACTS_SYSTEM_HINT: &str = "When producing standalone documents (reports, markdown, tables) for the user to copy or download locally, wrap them in a fenced block:\n\n```artifact\ntitle: Short title\n---\n(full markdown content)\n```\n\nKeep conversational text outside the block.";
 
 pub fn services_running() -> bool {
     SERVICES_RUNNING.load(Ordering::SeqCst)
@@ -88,6 +110,7 @@ pub async fn start_background_services(
     host_status::emit_status();
 
     let _ = init_context_db();
+    let _ = init_history_db();
     start_context_watcher();
 
     tauri::async_runtime::spawn(async {
@@ -190,7 +213,7 @@ async fn send_heartbeat(
         .json(&serde_json::json!({
             "status": status,
             "default_model": resolved_default_model(),
-            "installed_models": list_installed_models(),
+            "installed_models": list_available_models(),
             "disk_free_gb": disk_free_gb_for_models_dir(),
             "context_summary": get_context_summary(),
         }))
@@ -336,6 +359,126 @@ async fn run_relay_loop(
                                     let _ = handle_context_chunks(&envelope, &write_task).await;
                                 });
                             }
+                            "pr.review" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_pr_review(&envelope, &write_task).await;
+                                });
+                            }
+                            "project.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_project_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "project.open" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_project_open(&envelope, &write_task).await;
+                                });
+                            }
+                            "inline_edit.preview" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_inline_edit_preview(&envelope, &write_task).await;
+                                });
+                            }
+                            "inline_edit.apply" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_inline_edit_apply(&envelope, &write_task).await;
+                                });
+                            }
+                            "history.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_history_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "history.get" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_history_get(&envelope, &write_task).await;
+                                });
+                            }
+                            "history.save" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_history_save(&envelope, &write_task).await;
+                                });
+                            }
+                            "history.delete" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_history_delete(&envelope, &write_task).await;
+                                });
+                            }
+                            "history.fork" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_history_fork(&envelope, &write_task).await;
+                                });
+                            }
+                            "history.branches" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_history_branches(&envelope, &write_task).await;
+                                });
+                            }
+                            "memory.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_memory_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "memory.add" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_memory_add(&envelope, &write_task).await;
+                                });
+                            }
+                            "memory.delete" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_memory_delete(&envelope, &write_task).await;
+                                });
+                            }
+                            "memory.setEnabled" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_memory_set_enabled(&envelope, &write_task).await;
+                                });
+                            }
+                            "playbook.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_playbook_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "playbook.run" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_playbook_run(&envelope, &write_task).await;
+                                    let _ = send_relay_host_status(&write_task).await;
+                                });
+                            }
                             _ => {}
                         }
                     }
@@ -389,6 +532,32 @@ async fn send_chat_error(
         .map_err(|e| e.to_string())
 }
 
+async fn send_chat_agent_step(
+    write: &SharedRelayWrite,
+    request_id: &Option<String>,
+    step: u32,
+    max_steps: u32,
+    tool: &str,
+    status: &str,
+) -> Result<(), String> {
+    let msg = WsEnvelope {
+        msg_type: "chat.agent.step".into(),
+        payload: serde_json::json!({
+            "step": step,
+            "maxSteps": max_steps,
+            "tool": tool,
+            "status": status,
+        }),
+        requestId: request_id.clone(),
+    };
+    write
+        .lock()
+        .await
+        .send(Message::Text(serde_json::to_string(&msg).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 async fn send_chat_delta(
     write: &SharedRelayWrite,
     request_id: &Option<String>,
@@ -397,6 +566,42 @@ async fn send_chat_delta(
     let delta = WsEnvelope {
         msg_type: "chat.delta".into(),
         payload: serde_json::json!({ "content": content }),
+        requestId: request_id.clone(),
+    };
+    write
+        .lock()
+        .await
+        .send(Message::Text(serde_json::to_string(&delta).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn send_chat_citations(
+    write: &SharedRelayWrite,
+    request_id: &Option<String>,
+    citations: &[RagCitation],
+) -> Result<(), String> {
+    let msg = WsEnvelope {
+        msg_type: "chat.citations".into(),
+        payload: serde_json::json!({ "citations": citations }),
+        requestId: request_id.clone(),
+    };
+    write
+        .lock()
+        .await
+        .send(Message::Text(serde_json::to_string(&msg).unwrap()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn send_chat_thinking_delta(
+    write: &SharedRelayWrite,
+    request_id: &Option<String>,
+    thinking: &str,
+) -> Result<(), String> {
+    let delta = WsEnvelope {
+        msg_type: "chat.thinking_delta".into(),
+        payload: serde_json::json!({ "thinking": thinking }),
         requestId: request_id.clone(),
     };
     write
@@ -461,21 +666,7 @@ async fn handle_chat_start_inner(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
 ) -> Result<(), String> {
-    let _ = send_chat_delta(
-        write,
-        &envelope.requestId,
-        "Chargement du modèle sur votre PC…\n\n",
-    )
-    .await;
-
-    ensure_ollama_running(None).await?;
-
     let payload = &envelope.payload;
-    let fallback_model = default_model();
-    let model = payload
-        .get("model")
-        .and_then(|m| m.as_str())
-        .unwrap_or(fallback_model.as_str());
     let messages = payload
         .get("messages")
         .and_then(|m| m.as_array())
@@ -484,18 +675,87 @@ async fn handle_chat_start_inner(
 
     let mut messages: Vec<serde_json::Value> = messages.into_iter().take(20).collect();
 
-    if !model_exists(model) {
+    let last_user = messages
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+        .unwrap_or("");
+
+    let explicit_model = payload
+        .get("model")
+        .and_then(|m| m.as_str())
+        .filter(|m| !m.is_empty());
+
+    let task_intent = payload
+        .get("taskIntent")
+        .and_then(|v| v.as_str())
+        .and_then(ChatTaskIntent::from_str);
+
+    let thinking_mode = payload
+        .get("thinkingMode")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let resolved = resolve_chat_model(explicit_model, task_intent, last_user);
+    let model = if thinking_mode && !is_cloud_model(&resolved.model) {
+        resolve_thinking_model(&resolved.model)?
+    } else {
+        resolved.model.clone()
+    };
+
+    let is_cloud = is_cloud_model(&model);
+    if thinking_mode && is_cloud {
         return send_chat_error(
             write,
             envelope,
-            &format!(
-                "Le modèle « {model} » n'est pas installé sur ce PC. Téléchargez-le depuis le gestionnaire de modèles."
-            ),
+            "Le mode réflexion n'est pas disponible avec les modèles cloud.",
         )
         .await;
     }
 
-    let context_ids: Vec<String> = payload
+    if !is_cloud {
+        ensure_ollama_running(None).await?;
+    }
+
+    let loading_msg = if is_cloud {
+        format!("Modèle cloud → {model}\nConnexion au fournisseur…\n\n")
+    } else if thinking_mode {
+        format!("Mode réflexion → {model}\nChargement du modèle sur votre PC…\n\n")
+    } else {
+        match resolved.intent {
+            Some(intent) => {
+                let fallback_note = if resolved.fallback_used {
+                    " (modèle secours)"
+                } else {
+                    ""
+                };
+                format!(
+                    "Routage tâche « {} » → {}{fallback_note}\nChargement du modèle sur votre PC…\n\n",
+                    intent.label_fr(),
+                    model
+                )
+            }
+            None => "Chargement du modèle sur votre PC…\n\n".to_string(),
+        }
+    };
+    let _ = send_chat_delta(write, &envelope.requestId, &loading_msg).await;
+
+    if !is_available_model(&model) {
+        let hint = if is_cloud {
+            "Configurez la clé API et activez le fournisseur dans l'app Host."
+        } else {
+            "Téléchargez-le depuis le gestionnaire de modèles."
+        };
+        return send_chat_error(
+            write,
+            envelope,
+            &format!("Le modèle « {model} » n'est pas disponible. {hint}"),
+        )
+        .await;
+    }
+
+    let mut context_ids: Vec<String> = payload
         .get("contextIds")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -505,27 +765,246 @@ async fn handle_chat_start_inner(
         })
         .unwrap_or_default();
 
+    let project_id = payload
+        .get("projectId")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or_else(|| get_active_project_id().ok().flatten());
+
+    if context_ids.is_empty() {
+        if let Some(ref pid) = project_id {
+            if let Ok(ids) = resolve_project_context_ids(pid) {
+                context_ids = ids;
+            }
+        }
+    }
+
+    let enable_tools = payload
+        .get("enableTools")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if enable_tools {
+        return handle_chat_with_local_tools(
+            envelope,
+            write,
+            &model,
+            &context_ids,
+            &messages,
+            project_id.as_deref(),
+        )
+        .await;
+    }
+
+    let mut prepend_system: Vec<serde_json::Value> = Vec::new();
+    if let Some(ref pid) = project_id {
+        if let Ok(project) = get_project(pid, project_id.as_deref()) {
+            let instr = project.system_instruction.trim();
+            if !instr.is_empty() {
+                prepend_system.push(serde_json::json!({ "role": "system", "content": instr }));
+            }
+        }
+    }
+    if let Ok(kb_instrs) = crate::context::collect_kb_system_instructions(&context_ids) {
+        for instr in kb_instrs {
+            prepend_system.push(serde_json::json!({ "role": "system", "content": instr }));
+        }
+    }
+
+    let mut rag_injected = false;
+    let mut codebase_injected = false;
     if !context_ids.is_empty() {
-        let last_user = messages
-            .iter()
-            .rev()
-            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
-            .and_then(|m| m.get("content").and_then(|c| c.as_str()))
-            .unwrap_or("");
+        if let Ok(Some(rules)) = load_project_rules(&context_ids) {
+            prepend_system.push(serde_json::json!({ "role": "system", "content": rules }));
+        }
         if let Ok(Some(rag)) = build_rag_context(&context_ids, last_user).await {
-            messages.insert(
-                0,
-                serde_json::json!({ "role": "system", "content": rag }),
+            prepend_system.push(serde_json::json!({ "role": "system", "content": rag }));
+            rag_injected = true;
+        }
+        if let Ok(Some(code_ctx)) = build_codebase_context(&context_ids, last_user).await {
+            prepend_system.push(serde_json::json!({ "role": "system", "content": code_ctx }));
+            codebase_injected = true;
+        }
+        log_audit(
+            AuditAction::AgentAccess,
+            Some("chat"),
+            envelope.requestId.as_deref(),
+            Some(serde_json::json!({
+                "contextIds": context_ids,
+                "model": model,
+                "projectId": project_id,
+                "ragInjected": rag_injected,
+                "codebaseInjected": codebase_injected,
+            })),
+        );
+    }
+
+    for (i, sys) in prepend_system.into_iter().enumerate() {
+        messages.insert(i, sys);
+    }
+
+    if is_cloud {
+        stream_cloud_chat(envelope, write, &model, &messages).await
+    } else if thinking_mode {
+        let response = stream_chat_thinking(&model, &messages).await?;
+        stream_thinking_chat(envelope, write, response, &mut String::new()).await
+    } else {
+        let response = stream_chat(&model, &messages).await?;
+        stream_openai_chat(envelope, write, response, &mut String::new()).await
+    }
+}
+
+async fn stream_cloud_chat(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+    model: &str,
+    messages: &[serde_json::Value],
+) -> Result<(), String> {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let model_owned = model.to_string();
+    let messages_owned = messages.to_vec();
+    let stream_task = tokio::spawn(async move {
+        relay_chat_stream(&model_owned, &messages_owned, &CHAT_CANCEL, |delta| {
+            let _ = tx.send(delta.to_string());
+            Ok(())
+        })
+        .await
+    });
+
+    let mut assistant_content = String::new();
+    while let Some(delta) = rx.recv().await {
+        if CHAT_CANCEL.load(Ordering::SeqCst) {
+            break;
+        }
+        assistant_content.push_str(&delta);
+        let _ = send_chat_delta(write, &envelope.requestId, &delta).await;
+    }
+
+    stream_task
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| {
+            let _ = send_chat_error(write, envelope, &e);
+            e
+        })?;
+
+    finish_chat_with_persist(envelope, write, &assistant_content).await
+}
+
+async fn handle_chat_with_local_tools(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+    model: &str,
+    context_ids: &[String],
+    messages: &[serde_json::Value],
+    project_id: Option<&str>,
+) -> Result<(), String> {
+    let mut agent_messages = messages.to_vec();
+    let mut offset = 0usize;
+    if let Some(pid) = project_id {
+        if let Ok(project) = get_project(pid, project_id) {
+            let instr = project.system_instruction.trim();
+            if !instr.is_empty() {
+                agent_messages.insert(
+                    offset,
+                    serde_json::json!({ "role": "system", "content": instr }),
+                );
+                offset += 1;
+            }
+        }
+    }
+    if let Ok(kb_instrs) = crate::context::collect_kb_system_instructions(context_ids) {
+        for instr in kb_instrs {
+            agent_messages.insert(
+                offset,
+                serde_json::json!({ "role": "system", "content": instr }),
+            );
+            offset += 1;
+        }
+    }
+    if !context_ids.is_empty() {
+        if let Ok(Some(rules)) = load_project_rules(context_ids) {
+            agent_messages.insert(
+                offset,
+                serde_json::json!({ "role": "system", "content": rules }),
             );
         }
     }
 
-    let response = stream_chat(model, &messages).await?;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let write_fwd = write.clone();
+    let request_id = envelope.requestId.clone();
+    let forward = tokio::spawn(async move {
+        while let Some(delta) = rx.recv().await {
+            if CHAT_CANCEL.load(Ordering::SeqCst) {
+                break;
+            }
+            let _ = send_chat_delta(&write_fwd, &request_id, &delta).await;
+        }
+    });
+
+    let tx_step = tx.clone();
+    let write_step = write.clone();
+    let request_step = envelope.requestId.clone();
+    let on_step = Arc::new(move |step: u32, tool: &str, status: &str| {
+        let _ = tx_step.send(format!("Étape {step} — `{tool}` ({status})…\n"));
+        let w = write_step.clone();
+        let rid = request_step.clone();
+        let tool_owned = tool.to_string();
+        let status_owned = status.to_string();
+        tokio::spawn(async move {
+            let _ = send_chat_agent_step(
+                &w,
+                &rid,
+                step,
+                crate::agent::MAX_AGENT_STEPS,
+                &tool_owned,
+                &status_owned,
+            )
+            .await;
+        });
+    });
+
+    let cancel = Arc::new(|| CHAT_CANCEL.load(Ordering::SeqCst));
+
+    let result = run_agent_loop(AgentConfig {
+        model: model.to_string(),
+        messages: agent_messages,
+        context_ids: context_ids.to_vec(),
+        on_step,
+        is_cancelled: cancel,
+    })
+    .await;
+
+    drop(tx);
+    let _ = forward.await;
+
+    if CHAT_CANCEL.load(Ordering::SeqCst) {
+        return send_chat_done(write, &envelope.requestId).await;
+    }
+
+    match result {
+        Ok(answer) => {
+            if !answer.is_empty() {
+                let _ = send_chat_delta(write, &envelope.requestId, &answer).await;
+            }
+            finish_chat_with_persist(envelope, write, &answer).await
+        }
+        Err(message) => send_chat_error(write, envelope, &message).await,
+    }
+}
+
+async fn stream_openai_chat(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+    response: reqwest::Response,
+    assistant_content: &mut String,
+) -> Result<(), String> {
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
         if CHAT_CANCEL.load(Ordering::SeqCst) {
-            return send_chat_done(write, &envelope.requestId).await;
+            return finish_chat_with_persist(envelope, write, assistant_content).await;
         }
 
         let chunk = chunk.map_err(|e| e.to_string())?;
@@ -533,7 +1012,7 @@ async fn handle_chat_start_inner(
 
         for line in text.lines() {
             if CHAT_CANCEL.load(Ordering::SeqCst) {
-                return send_chat_done(write, &envelope.requestId).await;
+                return finish_chat_with_persist(envelope, write, assistant_content).await;
             }
 
             if !line.starts_with("data: ") {
@@ -541,17 +1020,152 @@ async fn handle_chat_start_inner(
             }
             let data = &line[6..];
             if data == "[DONE]" {
-                return send_chat_done(write, &envelope.requestId).await;
+                return finish_chat_with_persist(envelope, write, assistant_content).await;
             }
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                 if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
+                    assistant_content.push_str(content);
                     let _ = send_chat_delta(write, &envelope.requestId, content).await;
                 }
             }
         }
     }
 
-    send_chat_done(write, &envelope.requestId).await
+    finish_chat_with_persist(envelope, write, assistant_content).await
+}
+
+async fn stream_thinking_chat(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+    response: reqwest::Response,
+    assistant_content: &mut String,
+) -> Result<(), String> {
+    let mut stream = response.bytes_stream();
+    let mut line_buffer = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        if CHAT_CANCEL.load(Ordering::SeqCst) {
+            return finish_chat_with_persist(envelope, write, assistant_content).await;
+        }
+
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        line_buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        while let Some(pos) = line_buffer.find('\n') {
+            let line = line_buffer[..pos].trim().to_string();
+            line_buffer = line_buffer[pos + 1..].to_string();
+            if line.is_empty() {
+                continue;
+            }
+
+            if CHAT_CANCEL.load(Ordering::SeqCst) {
+                return finish_chat_with_persist(envelope, write, assistant_content).await;
+            }
+
+            let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+
+            if let Some(thinking) = json["message"]["thinking"].as_str() {
+                if !thinking.is_empty() {
+                    let _ =
+                        send_chat_thinking_delta(write, &envelope.requestId, thinking).await;
+                }
+            }
+            if let Some(content) = json["message"]["content"].as_str() {
+                if !content.is_empty() {
+                    assistant_content.push_str(content);
+                    let _ = send_chat_delta(write, &envelope.requestId, content).await;
+                }
+            }
+            if json["done"].as_bool() == Some(true) {
+                return finish_chat_with_persist(envelope, write, assistant_content).await;
+            }
+        }
+    }
+
+    finish_chat_with_persist(envelope, write, assistant_content).await
+}
+
+async fn finish_chat_with_persist(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+    assistant_content: &str,
+) -> Result<(), String> {
+    let result = send_chat_done(write, &envelope.requestId).await;
+    if result.is_ok() {
+        let _ = persist_chat_turn(envelope, assistant_content);
+    }
+    result
+}
+
+fn persist_chat_turn(envelope: &WsEnvelope, assistant_content: &str) -> Result<(), String> {
+    let thread_id = envelope
+        .payload
+        .get("threadId")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
+    let Some(thread_id) = thread_id else {
+        return Ok(());
+    };
+
+    let model = envelope
+        .payload
+        .get("model")
+        .and_then(|m| m.as_str());
+    let context_ids: Vec<String> = envelope
+        .payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let messages = envelope
+        .payload
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut pairs: Vec<(String, String)> = messages
+        .iter()
+        .filter_map(|m| {
+            let role = m.get("role")?.as_str()?.to_string();
+            let content = m.get("content")?.as_str()?.to_string();
+            if role == "system" {
+                return None;
+            }
+            Some((role, content))
+        })
+        .collect();
+
+    let trimmed = assistant_content.trim();
+    if !trimmed.is_empty() {
+        if pairs.last().map(|(r, _)| r.as_str()) == Some("assistant") {
+            if let Some(last) = pairs.last_mut() {
+                last.1 = trimmed.to_string();
+            }
+        } else {
+            pairs.push(("assistant".into(), trimmed.to_string()));
+        }
+    }
+
+    if pairs.is_empty() {
+        return Ok(());
+    }
+
+    let _ = save_thread(
+        Some(thread_id),
+        None,
+        model,
+        &context_ids,
+        &pairs,
+    );
+    Ok(())
 }
 
 fn context_limits() -> ContextLimits {
@@ -660,6 +1274,69 @@ async fn handle_context_list(
         &envelope.requestId,
     )
     .await
+}
+
+async fn handle_project_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let active_id = get_active_project_id().ok().flatten();
+    let projects = list_projects(active_id.as_deref()).unwrap_or_default();
+    send_ws_response(
+        write,
+        "project.list",
+        serde_json::json!({
+            "projects": projects,
+            "activeProjectId": active_id,
+        }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_project_open(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let id = envelope
+        .payload
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if id.is_empty() {
+        return send_ws_response(
+            write,
+            "project.error",
+            serde_json::json!({ "message": "ID projet requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    match open_project(id) {
+        Ok((project, kbase_ids)) => {
+            send_ws_response(
+                write,
+                "project.opened",
+                serde_json::json!({
+                    "project": project,
+                    "knowledgeBaseIds": kbase_ids,
+                }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "project.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
 }
 
 async fn handle_context_create(
@@ -838,6 +1515,231 @@ async fn handle_context_upload(
     }
 }
 
+async fn handle_playbook_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let items = playbooks::list_playbooks();
+    send_ws_response(
+        write,
+        "playbook.list",
+        serde_json::json!({ "playbooks": items }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_playbook_run(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    if !session_started() {
+        return send_chat_error(
+            write,
+            envelope,
+            "Ce PC est déjà utilisé par un autre onglet ou une autre session de chat.",
+        )
+        .await;
+    }
+
+    let _ = send_relay_host_status(write).await;
+    CHAT_CANCEL.store(false, Ordering::SeqCst);
+    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
+        *active = envelope.requestId.clone();
+    }
+
+    let result = handle_playbook_run_inner(envelope, write).await;
+    if let Err(ref message) = result {
+        let _ = send_chat_error(write, envelope, message).await;
+    } else {
+        let _ = send_chat_done(write, &envelope.requestId).await;
+    }
+
+    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
+        *active = None;
+    }
+    CHAT_CANCEL.store(false, Ordering::SeqCst);
+    session_ended();
+    Ok(())
+}
+
+async fn handle_playbook_run_inner(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = send_chat_delta(
+        write,
+        &envelope.requestId,
+        "Chargement du modèle sur votre PC…\n\n",
+    )
+    .await;
+
+    ensure_ollama_running(None).await?;
+
+    let payload = &envelope.payload;
+    let playbook_id = payload
+        .get("playbookId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if playbook_id.is_empty() {
+        return Err("playbookId requis".into());
+    }
+
+    let model = payload
+        .get("model")
+        .and_then(|m| m.as_str())
+        .filter(|m| !m.is_empty())
+        .unwrap_or(resolved_default_model().as_str())
+        .to_string();
+
+    if !is_available_model(&model) {
+        let hint = if is_cloud_model(&model) {
+            "Configurez la clé API et activez le fournisseur dans l'app Host."
+        } else {
+            "Téléchargez-le depuis le gestionnaire de modèles."
+        };
+        return Err(format!("Le modèle « {model} » n'est pas disponible. {hint}"));
+    }
+
+    if !is_cloud_model(&model) {
+        ensure_ollama_running(None).await?;
+    }
+
+    let context_ids: Vec<String> = payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let link_id = payload
+        .get("linkId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let path = payload
+        .get("path")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let write_pump = write.clone();
+    let request_id = envelope.requestId.clone();
+    let pump = tokio::spawn(async move {
+        while let Some(chunk) = delta_rx.recv().await {
+            if send_chat_delta(&write_pump, &request_id, &chunk)
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+
+    let is_cancelled = Arc::new(|| CHAT_CANCEL.load(Ordering::SeqCst));
+    let run_result = playbooks::run_playbook(
+        PlaybookRunParams {
+            playbook_id: playbook_id.to_string(),
+            context_ids,
+            link_id,
+            path,
+            model,
+        },
+        is_cancelled,
+        delta_tx,
+    )
+    .await;
+
+    let _ = pump.await;
+    run_result
+}
+
+async fn handle_terminal_exec(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let program = envelope
+        .payload
+        .get("program")
+        .and_then(|p| p.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let args: Vec<String> = envelope
+        .payload
+        .get("args")
+        .and_then(|a| a.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let cwd = envelope
+        .payload
+        .get("cwd")
+        .and_then(|c| c.as_str())
+        .map(String::from);
+    let timeout_secs = clamp_timeout_secs(
+        envelope
+            .payload
+            .get("timeoutSecs")
+            .and_then(|t| t.as_u64()),
+    );
+
+    let cmd = AllowlistedCommand {
+        program,
+        args,
+        cwd,
+    };
+
+    let request_id = envelope.requestId.clone();
+    let write_output = write.clone();
+
+    let result = run_allowlisted_command(&cmd, timeout_secs, |stream, data| {
+        let stream_name = match stream {
+            OutputStream::Stdout => "stdout",
+            OutputStream::Stderr => "stderr",
+        };
+        let write_task = write_output.clone();
+        let request_id = request_id.clone();
+        let data = data.to_string();
+        tauri::async_runtime::spawn(async move {
+            let _ = send_ws_response(
+                &write_task,
+                "terminal.output",
+                serde_json::json!({ "stream": stream_name, "data": data }),
+                &request_id,
+            )
+            .await;
+        });
+    })
+    .await;
+
+    match result {
+        Ok(exit_code) => {
+            send_ws_response(
+                write,
+                "terminal.done",
+                serde_json::json!({ "exitCode": exit_code }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(message) => {
+            send_ws_response(
+                write,
+                "terminal.error",
+                serde_json::json!({ "message": message }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
 async fn handle_context_chunks(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
@@ -855,4 +1757,535 @@ async fn handle_context_chunks(
         &envelope.requestId,
     )
     .await
+}
+
+async fn handle_pr_review(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let payload = &envelope.payload;
+    let input = PrReviewInput {
+        diff: payload.get("diff").and_then(|v| v.as_str()).map(String::from),
+        repo_path: payload
+            .get("repoPath")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        link_id: payload
+            .get("linkId")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        diff_mode: payload
+            .get("diffMode")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        pr_number: payload
+            .get("prNumber")
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32),
+        model: payload
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+    };
+
+    match review_git_diff(input).await {
+        Ok(result) => {
+            send_ws_response(
+                write,
+                "pr.review.done",
+                serde_json::to_value(result).unwrap_or_default(),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "pr.review.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_inline_edit_preview(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let doc_id = envelope
+        .payload
+        .get("documentId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let selected = envelope
+        .payload
+        .get("selectedText")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let instruction = envelope
+        .payload
+        .get("instruction")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let model = envelope.payload.get("model").and_then(|v| v.as_str());
+
+    if doc_id.is_empty() || selected.is_empty() || instruction.is_empty() {
+        return send_ws_response(
+            write,
+            "inline_edit.error",
+            serde_json::json!({ "message": "documentId, selectedText et instruction requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+
+    match preview_inline_edit(doc_id, selected, instruction, model).await {
+        Ok(preview) => {
+            send_ws_response(
+                write,
+                "inline_edit.previewed",
+                serde_json::to_value(preview).unwrap_or_default(),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "inline_edit.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_inline_edit_apply(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let doc_id = envelope
+        .payload
+        .get("documentId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let selected = envelope
+        .payload
+        .get("selectedText")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let proposed = envelope
+        .payload
+        .get("proposedText")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if doc_id.is_empty() || selected.is_empty() {
+        return send_ws_response(
+            write,
+            "inline_edit.error",
+            serde_json::json!({ "message": "documentId et selectedText requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+
+    match apply_inline_edit(doc_id, selected, proposed).await {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "inline_edit.applied",
+                serde_json::json!({ "documentId": doc_id }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "inline_edit.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_history_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_history_db();
+    let limit = envelope
+        .payload
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(50) as u32;
+    let threads = list_threads(limit).unwrap_or_default();
+    send_ws_response(
+        write,
+        "history.list",
+        serde_json::json!({ "threads": threads }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_history_get(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_history_db();
+    let thread_id = envelope
+        .payload
+        .get("threadId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    if thread_id.is_empty() {
+        return send_ws_response(
+            write,
+            "history.error",
+            serde_json::json!({ "message": "threadId requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    match get_thread(thread_id) {
+        Ok((thread, messages)) => {
+            send_ws_response(
+                write,
+                "history.get",
+                serde_json::json!({ "thread": thread, "messages": messages }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "history.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_history_save(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_history_db();
+    let payload = &envelope.payload;
+    let thread_id = payload.get("threadId").and_then(|id| id.as_str());
+    let title = payload.get("title").and_then(|t| t.as_str());
+    let model = payload.get("model").and_then(|m| m.as_str());
+    let context_ids: Vec<String> = payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let raw_messages = payload
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let pairs: Vec<(String, String)> = raw_messages
+        .iter()
+        .filter_map(|m| {
+            let role = m.get("role")?.as_str()?.to_string();
+            let content = m.get("content")?.as_str()?.to_string();
+            if role == "system" {
+                return None;
+            }
+            Some((role, content))
+        })
+        .collect();
+
+    match save_thread(thread_id, title, model, &context_ids, &pairs) {
+        Ok(id) => {
+            send_ws_response(
+                write,
+                "history.saved",
+                serde_json::json!({ "threadId": id }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "history.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_history_delete(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_history_db();
+    let thread_id = envelope
+        .payload
+        .get("threadId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    if thread_id.is_empty() {
+        return send_ws_response(
+            write,
+            "history.error",
+            serde_json::json!({ "message": "threadId requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    match delete_thread(thread_id) {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "history.deleted",
+                serde_json::json!({}),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "history.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_history_fork(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_history_db();
+    let payload = &envelope.payload;
+    let parent_thread_id = payload
+        .get("parentThreadId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let fork_at_index = payload
+        .get("forkAtIndex")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    if parent_thread_id.is_empty() {
+        return send_ws_response(
+            write,
+            "history.error",
+            serde_json::json!({ "message": "parentThreadId requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    let model = payload.get("model").and_then(|m| m.as_str());
+    let context_ids: Vec<String> = payload
+        .get("contextIds")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    match fork_thread(parent_thread_id, fork_at_index, model, &context_ids) {
+        Ok(thread_id) => {
+            send_ws_response(
+                write,
+                "history.forked",
+                serde_json::json!({ "threadId": thread_id }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "history.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_history_branches(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_history_db();
+    let root_thread_id = envelope
+        .payload
+        .get("rootThreadId")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    if root_thread_id.is_empty() {
+        return send_ws_response(
+            write,
+            "history.error",
+            serde_json::json!({ "message": "rootThreadId requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    let branches = list_thread_branches(root_thread_id).unwrap_or_default();
+    send_ws_response(
+        write,
+        "history.branches",
+        serde_json::json!({ "threads": branches }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_memory_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    match memory_state() {
+        Ok(state) => {
+            send_ws_response(
+                write,
+                "memory.list",
+                serde_json::to_value(state).unwrap_or_default(),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "memory.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_memory_add(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let content = envelope
+        .payload
+        .get("content")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    match add_fact(content) {
+        Ok(fact) => {
+            send_ws_response(
+                write,
+                "memory.added",
+                serde_json::json!({ "fact": fact }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "memory.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_memory_delete(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let _ = init_context_db();
+    let id = envelope
+        .payload
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if id.is_empty() {
+        return send_ws_response(
+            write,
+            "memory.error",
+            serde_json::json!({ "message": "id requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    match delete_fact(id) {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "memory.deleted",
+                serde_json::json!({}),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "memory.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_memory_set_enabled(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let enabled = envelope
+        .payload
+        .get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    match set_user_memory_enabled(enabled) {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "memory.updated",
+                serde_json::json!({ "enabled": enabled }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "memory.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
 }

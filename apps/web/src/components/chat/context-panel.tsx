@@ -6,16 +6,20 @@ import type {
   ContextDocumentSummary,
   ContextLinkSummary,
   KnowledgeBaseSummary,
+  ProjectSummary,
 } from "@ownmyownai/protocol";
 import type { RelayClient } from "@/lib/relay-client";
 import { Button } from "@/components/ui/button";
 import { ContextUploadSkeleton } from "./chat-skeleton";
+import { InlineEditPanel } from "./inline-edit-panel";
 
 interface ContextPanelProps {
   relay: RelayClient | null;
   connected: boolean;
   activeIds: string[];
   onActiveChange: (ids: string[]) => void;
+  activeProjectId?: string | null;
+  onProjectChange?: (projectId: string | null, kbaseIds: string[]) => void;
 }
 
 function contextStorageKey(hostId: string) {
@@ -42,6 +46,10 @@ function truncatePath(path: string, max = 40) {
   return `…${path.slice(-max + 1)}`;
 }
 
+function isLinkedMarkdown(doc: ContextDocumentSummary) {
+  return doc.sourceType === "linked" && doc.filename.toLowerCase().endsWith(".md");
+}
+
 function linkStatusLabel(link: ContextLinkSummary) {
   if (!link.enabled) return "En pause";
   switch (link.lastSyncStatus) {
@@ -61,7 +69,10 @@ export function ContextPanel({
   connected,
   activeIds,
   onActiveChange,
+  activeProjectId = null,
+  onProjectChange,
 }: ContextPanelProps) {
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<ContextDocumentSummary[]>([]);
@@ -74,14 +85,29 @@ export function ContextPanel({
   const [chunksDocId, setChunksDocId] = useState<string | null>(null);
   const [chunks, setChunks] = useState<ChunkPreview[]>([]);
   const [chunksLoading, setChunksLoading] = useState(false);
+  const [inlineEditDoc, setInlineEditDoc] = useState<ContextDocumentSummary | null>(null);
+  const [inlineEditSelection, setInlineEditSelection] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const refreshProjects = useCallback(async () => {
+    if (!relay || !connected) return;
+    try {
+      const { projects: list } = await relay.listProjects();
+      setProjects(list);
+    } catch {
+      /* Host < v0.3 sans projets */
+    }
+  }, [relay, connected]);
 
   const refresh = useCallback(async () => {
     if (!relay || !connected) return;
     setLoading(true);
     setError(null);
     try {
-      const list = await relay.listContextBases();
+      const [list] = await Promise.all([
+        relay.listContextBases(),
+        refreshProjects(),
+      ]);
       setBases(list);
     } catch (e) {
       const message = formatPanelError(e);
@@ -93,7 +119,7 @@ export function ContextPanel({
     } finally {
       setLoading(false);
     }
-  }, [relay, connected]);
+  }, [relay, connected, refreshProjects]);
 
   const refreshStatus = useCallback(
     async (kbId: string) => {
@@ -113,6 +139,19 @@ export function ContextPanel({
     if (!expandedId || !relay || !connected) return;
     void refreshStatus(expandedId).catch(() => undefined);
   }, [expandedId, relay, connected, bases, refreshStatus]);
+
+  async function handleOpenProject(id: string) {
+    if (!relay) return;
+    setError(null);
+    try {
+      const opened = await relay.openProject(id);
+      onProjectChange?.(opened.project.id, opened.knowledgeBaseIds);
+      onActiveChange(opened.knowledgeBaseIds);
+      await refreshProjects();
+    } catch (e) {
+      setError(formatPanelError(e));
+    }
+  }
 
   function toggleActive(id: string) {
     const next = activeIds.includes(id)
@@ -160,10 +199,14 @@ export function ContextPanel({
     if (chunksDocId === documentId) {
       setChunksDocId(null);
       setChunks([]);
+      setInlineEditDoc(null);
+      setInlineEditSelection("");
       return;
     }
     setChunksLoading(true);
     setError(null);
+    setInlineEditDoc(null);
+    setInlineEditSelection("");
     try {
       const list = await relay.getContextChunks(documentId);
       setChunksDocId(documentId);
@@ -173,6 +216,21 @@ export function ContextPanel({
     } finally {
       setChunksLoading(false);
     }
+  }
+
+  function openInlineEdit(doc: ContextDocumentSummary, selection: string) {
+    setInlineEditDoc(doc);
+    setInlineEditSelection(selection);
+  }
+
+  async function handleInlineEditApplied() {
+    if (!relay || !expandedId) return;
+    await refreshStatus(expandedId);
+    if (inlineEditDoc) {
+      const list = await relay.getContextChunks(inlineEditDoc.id);
+      setChunks(list);
+    }
+    await refresh();
   }
 
   async function handleUpload(kbId: string, files: FileList | null) {
@@ -203,6 +261,41 @@ export function ContextPanel({
 
   return (
     <aside className="context-panel" aria-label="Bases de contexte">
+      {projects.length > 0 && (
+        <section className="mb-4">
+          <h2 className="context-panel__title">Projets</h2>
+          <p className="text-xs text-[var(--muted)]">
+            Ouvrir un projet active toutes ses bases en un clic.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {projects.map((project) => (
+              <li key={project.id} className="rounded border border-[var(--border)] p-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-xs ${activeProjectId === project.id ? "bg-brand-600/40" : "bg-black/30"}`}
+                    onClick={() => void handleOpenProject(project.id)}
+                  >
+                    {activeProjectId === project.id ? "Actif" : "Ouvrir"}
+                  </button>
+                  <span className="flex-1 text-sm font-medium">{project.name}</span>
+                </div>
+                <p className="text-xs text-[var(--muted)]">
+                  {project.knowledgeBaseIds.length} base(s)
+                </p>
+                {project.systemInstruction?.trim() && (
+                  <p className="mt-1 text-xs text-[var(--muted)]" title={project.systemInstruction}>
+                    Instruction :{" "}
+                    {project.systemInstruction.length > 80
+                      ? `${project.systemInstruction.slice(0, 80)}…`
+                      : project.systemInstruction}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <h2 className="context-panel__title">Bases de contexte</h2>
       <p className="text-xs text-[var(--muted)]">
         Documents locaux sur votre PC — jamais stockés dans le cloud. Liez des dossiers depuis l&apos;app Host.
@@ -251,6 +344,18 @@ export function ContextPanel({
             </p>
             {expandedId === kb.id && (
               <div className="mt-2">
+                {kb.systemInstruction?.trim() ? (
+                  <div className="mb-2 rounded border border-[var(--border)] p-2">
+                    <p className="text-xs font-medium">Instruction système (lecture seule)</p>
+                    <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--muted)]">
+                      {kb.systemInstruction}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mb-2 text-xs text-[var(--muted)]">
+                    Aucune instruction — définissez-en une dans l&apos;app Host.
+                  </p>
+                )}
                 {links.length > 0 && (
                   <div className="mb-2 rounded border border-[var(--border)] p-2">
                     <p className="text-xs font-medium">Sources liées (Host)</p>
@@ -334,13 +439,43 @@ export function ContextPanel({
                 )}
                 {chunksDocId && chunks.length > 0 && (
                   <ol className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded border border-[var(--border)] p-2 text-xs">
-                    {chunks.map((c) => (
-                      <li key={c.id}>
-                        <span className="text-[var(--muted)]">#{c.index + 1}</span>{" "}
-                        {c.preview}
-                      </li>
-                    ))}
+                    {chunks.map((c) => {
+                      const doc = documents.find((d) => d.id === chunksDocId);
+                      const editable = doc && isLinkedMarkdown(doc);
+                      return (
+                        <li key={c.id}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="flex-1 whitespace-pre-wrap">
+                              <span className="text-[var(--muted)]">#{c.index + 1}</span>{" "}
+                              {c.preview}
+                            </p>
+                            {editable && relay && (
+                              <button
+                                type="button"
+                                className="shrink-0 text-brand-400 hover:underline"
+                                onClick={() => openInlineEdit(doc, c.preview)}
+                              >
+                                Reformuler
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ol>
+                )}
+                {inlineEditDoc && relay && (
+                  <InlineEditPanel
+                    relay={relay}
+                    documentId={inlineEditDoc.id}
+                    filename={inlineEditDoc.filename}
+                    initialSelection={inlineEditSelection}
+                    onApplied={() => void handleInlineEditApplied()}
+                    onClose={() => {
+                      setInlineEditDoc(null);
+                      setInlineEditSelection("");
+                    }}
+                  />
                 )}
               </div>
             )}

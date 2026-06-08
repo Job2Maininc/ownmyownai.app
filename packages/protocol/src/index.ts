@@ -128,6 +128,15 @@ export const ChatDeltaPayloadSchema = z.object({
 });
 export type ChatDeltaPayload = z.infer<typeof ChatDeltaPayloadSchema>;
 
+/** Progression agent multi-étapes (optionnel — le Host émet aussi des `chat.delta` textuels). */
+export const ChatAgentStepPayloadSchema = z.object({
+  step: z.number().int().min(1).max(10),
+  maxSteps: z.number().int().min(1).max(10),
+  tool: z.string(),
+  status: z.enum(["running", "done", "error"]),
+});
+export type ChatAgentStepPayload = z.infer<typeof ChatAgentStepPayloadSchema>;
+
 export const ChatThinkingDeltaPayloadSchema = z.object({
   thinking: z.string(),
 });
@@ -165,6 +174,15 @@ export const HostStatusPayloadSchema = z.object({
   status: HostStatusSchema,
 });
 export type HostStatusPayload = z.infer<typeof HostStatusPayloadSchema>;
+
+/** Statut d'un fournisseur cloud optionnel côté Host (clé en keyring, jamais exposée au web). */
+export const CloudProviderStatusSchema = z.object({
+  id: z.enum(["openai", "anthropic"]),
+  configured: z.boolean(),
+  enabled: z.boolean(),
+  models: z.array(z.string()),
+});
+export type CloudProviderStatus = z.infer<typeof CloudProviderStatusSchema>;
 
 /** Dernières métriques d'inférence locale (Host → heartbeat → dashboard). */
 export const LastRequestMetricsSchema = z.object({
@@ -275,6 +293,7 @@ export type PlaybookRunPayload = z.infer<typeof PlaybookRunPayloadSchema>;
 export const WS_MESSAGE_TYPES = {
   CHAT_START: "chat.start",
   CHAT_DELTA: "chat.delta",
+  CHAT_AGENT_STEP: "chat.agent.step",
   CHAT_CITATIONS: "chat.citations",
   CHAT_THINKING_DELTA: "chat.thinking_delta",
   CHAT_DONE: "chat.done",
@@ -350,11 +369,50 @@ export const WS_MESSAGE_TYPES = {
   PLAYBOOK_LIST: "playbook.list",
   PLAYBOOK_RUN: "playbook.run",
   PLAYBOOK_ERROR: "playbook.error",
+  /** Review assistée d'un diff git (Host local + Ollama). */
+  PR_REVIEW: "pr.review",
+  PR_REVIEW_DONE: "pr.review.done",
+  PR_REVIEW_ERROR: "pr.review.error",
   /** Relay → runner : nombre de clients web connectés à la room. */
   RELAY_WEB_CLIENTS: "relay.web_clients",
   PING: "ping",
   PONG: "pong",
 } as const;
+
+export const PrReviewPayloadSchema = z.object({
+  diff: z.string().optional(),
+  repoPath: z.string().optional(),
+  linkId: z.string().optional(),
+  diffMode: z.enum(["head", "staged", "unstaged", "working"]).optional(),
+  prNumber: z.number().int().positive().optional(),
+  model: z.string().optional(),
+});
+export type PrReviewPayload = z.infer<typeof PrReviewPayloadSchema>;
+
+export const SecurityFindingSchema = z.object({
+  severity: z.string(),
+  category: z.string(),
+  file: z.string().optional(),
+  lineHint: z.string().optional(),
+  message: z.string(),
+});
+export type SecurityFinding = z.infer<typeof SecurityFindingSchema>;
+
+export const PrReviewResultSchema = z.object({
+  repoPath: z.string().optional(),
+  diffStats: z.object({
+    filesChanged: z.number(),
+    linesAdded: z.number(),
+    linesRemoved: z.number(),
+    bytes: z.number(),
+  }),
+  filesTouched: z.array(z.string()),
+  securityFindings: z.array(SecurityFindingSchema),
+  staticChecklist: z.string(),
+  aiReview: z.string(),
+  model: z.string(),
+});
+export type PrReviewResult = z.infer<typeof PrReviewResultSchema>;
 
 export const RelayWebClientsPayloadSchema = z.object({
   count: z.number().int().nonnegative(),

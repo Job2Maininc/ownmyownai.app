@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  ChatAgentStepPayloadSchema,
   ChatStartPayloadSchema,
   ChatThinkingDeltaPayloadSchema,
+  CloudProviderStatusSchema,
   CreateSharePayloadSchema,
   ProjectListPayloadSchema,
   parseEnvelope,
   HistoryForkPayloadSchema,
+  InlineEditPreviewRequestSchema,
   PatchPreviewRequestSchema,
   PatchPreviewResponseSchema,
   RelayWebClientsPayloadSchema,
@@ -15,6 +18,17 @@ import {
 } from "../index";
 
 describe("protocol", () => {
+  it("parse chat.agent.step payload", () => {
+    const payload = ChatAgentStepPayloadSchema.parse({
+      step: 2,
+      maxSteps: 10,
+      tool: "read_file",
+      status: "running",
+    });
+    expect(payload.tool).toBe("read_file");
+    expect(WS_MESSAGE_TYPES.CHAT_AGENT_STEP).toBe("chat.agent.step");
+  });
+
   it("parse chat.start avec enableTools pour outils locaux", () => {
     const payload = ChatStartPayloadSchema.parse({
       messages: [{ role: "user", content: "Liste le dossier lié" }],
@@ -39,6 +53,24 @@ describe("protocol", () => {
     });
     expect(payload.thinkingMode).toBe(true);
     expect(WS_MESSAGE_TYPES.CHAT_THINKING_DELTA).toBe("chat.thinking_delta");
+  });
+
+  it("parse chat.citations payload", () => {
+    const payload = ChatCitationsPayloadSchema.parse({
+      citations: [
+        {
+          index: 1,
+          source: "…notes.md",
+          sourceFull: "C:\\docs\\notes.md",
+          excerpt: "Extrait pertinent…",
+          score: 0.82,
+          chunkId: "chunk-1",
+          documentId: "doc-1",
+        },
+      ],
+    });
+    expect(payload.citations).toHaveLength(1);
+    expect(WS_MESSAGE_TYPES.CHAT_CITATIONS).toBe("chat.citations");
   });
 
   it("parse chat.thinking_delta payload", () => {
@@ -165,5 +197,27 @@ describe("protocol", () => {
     expect(response.hunks).toBe(1);
     expect(WS_MESSAGE_TYPES.PATCH_PREVIEW).toBe("patch.preview");
     expect(WS_MESSAGE_TYPES.PATCH_APPLY).toBe("patch.apply");
+  });
+
+  it("parse inline_edit.preview payload", () => {
+    const payload = InlineEditPreviewRequestSchema.parse({
+      documentId: "doc-1",
+      selectedText: "Paragraphe original",
+      instruction: "Reformuler",
+    });
+    expect(payload.documentId).toBe("doc-1");
+    expect(WS_MESSAGE_TYPES.INLINE_EDIT_PREVIEW).toBe("inline_edit.preview");
+    expect(WS_MESSAGE_TYPES.INLINE_EDIT_APPLIED).toBe("inline_edit.applied");
+  });
+
+  it("parse CloudProviderStatus sans exposer de clé API", () => {
+    const status = CloudProviderStatusSchema.parse({
+      id: "openai",
+      configured: true,
+      enabled: true,
+      models: ["openai:gpt-4o-mini"],
+    });
+    expect(status.configured).toBe(true);
+    expect(status.models[0]).toMatch(/^openai:/);
   });
 });

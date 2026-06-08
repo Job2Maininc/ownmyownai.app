@@ -1,26 +1,30 @@
 # Roadmap post-V1
 
-## Modèles cloud (hors scope V1)
+## Modèles cloud (optionnels)
 
-Les modèles hébergés (OpenAI, Anthropic, etc.) ne sont **pas** implémentés en V1. Architecture prévue :
+OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 
-- Le runner reste le point d'exécution pour Ollama local
-- Une future couche « provider » pourrait router vers des API cloud avec clés utilisateur stockées localement (keyring)
-- Le relay ne transporterait jamais les clés API vers le cloud OwnMyOwnAI
+- Clés API stockées en keyring Host (`cloud_keys.rs`), repli fichier local chiffré DPAPI si keyring indisponible
+- Modèles préfixés `openai:` / `anthropic:` ; activation par fournisseur dans `settings.json`
+- Le relay transporte le chat mais **jamais** les clés API vers le cloud OwnMyOwnAI
+- Commandes Tauri : `get_cloud_providers_status`, `save_cloud_provider_key`, `delete_cloud_provider_key`
 
-**Statut** : documenté uniquement — aucune implémentation avant validation produit.
+**Statut** : implémenté côté Host (v0.3).
 
 ## Fonctionnalités minimales livrées (P4)
 
 | Fonctionnalité | Statut |
 |----------------|--------|
 | Multi-session (`allowMultiSession` dans `settings.json`) | Feature flag runner |
-| Historique conversations | Métadonnées locales (`localStorage`) côté web |
+| Routage multi-modèle par tâche (`modelRouting` dans `settings.json`) | Petit modèle résumé, gros rédaction — intent + fallback |
+| Historique conversations | Host SQLite + sync WS ; métadonnées locales en secours |
+| Branches de conversation | Fork depuis message N ; arbre local (Host + localStorage) |
 | RAG amélioré | Chunking ~tokens + `ragTopK` / `ragChunkTokens` dans settings |
 | DOCX | Non supporté — message d'erreur explicite |
 
 ## Pistes futures
 
+- Terminal intégré (allowlist Host + streaming WS `terminal.*`) — implémenté v0.3
 - Historique complet runner (SQLite optionnel)
 - Extraction PDF robuste (crate dédiée ou OCR)
 - Tests E2E pairing avec mock Supabase
