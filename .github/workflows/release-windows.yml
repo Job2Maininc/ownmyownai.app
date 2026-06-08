@@ -51,6 +51,22 @@ jobs:
           $conf.version = $ver
           $conf | ConvertTo-Json -Depth 20 | Set-Content apps/runner/src-tauri/tauri.conf.json -Encoding UTF8
 
+      - name: Configure updater signing
+        id: signing
+        shell: pwsh
+        run: |
+          $key = $env:TAURI_SIGNING_PRIVATE_KEY
+          $canSign = [bool]($key -and $key -match 'untrusted comment:')
+          if (-not $canSign) {
+            Write-Host "Signing indisponible — build sans artefacts updater signés."
+            $confPath = "apps/runner/src-tauri/tauri.conf.json"
+            $conf = Get-Content $confPath -Raw | ConvertFrom-Json
+            $conf.bundle.createUpdaterArtifacts = $false
+            if ($conf.plugins.updater) { $conf.plugins.updater.active = $false }
+            $conf | ConvertTo-Json -Depth 20 | Set-Content $confPath -Encoding UTF8
+          }
+          echo "can_sign=$canSign" >> $env:GITHUB_OUTPUT
+
       - name: Generate app icon (valid .ico for Windows)
         shell: pwsh
         working-directory: apps/runner
@@ -75,8 +91,8 @@ jobs:
           VITE_APP_URL: ${{ vars.WEB_APP_URL || 'https://ownmyownai.app' }}
         run: npm run tauri build
 
-      - name: Publish updater manifest + installer to Supabase
-        if: ${{ env.SUPABASE_SERVICE_ROLE_KEY != '' && env.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      - name: Publish signed updater + installer to Supabase
+        if: ${{ env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.signing.outputs.can_sign == 'True' }}
         shell: pwsh
         run: |
           pwsh apps/runner/scripts/publish-host-release.ps1 `
@@ -84,6 +100,16 @@ jobs:
             -SupabaseUrl "https://jcknolulyrsvcwvttaed.supabase.co" `
             -ServiceRoleKey "$env:SUPABASE_SERVICE_ROLE_KEY" `
             -Notes "Release v${{ steps.version.outputs.value }}"
+
+      - name: Publish installer to Supabase (unsigned)
+        if: ${{ env.SUPABASE_SERVICE_ROLE_KEY != '' && steps.signing.outputs.can_sign != 'True' }}
+        shell: pwsh
+        run: |
+          pwsh apps/runner/scripts/publish-host-installer-only.ps1 `
+            -Version "${{ steps.version.outputs.value }}" `
+            -SupabaseUrl "https://jcknolulyrsvcwvttaed.supabase.co" `
+            -ServiceRoleKey "$env:SUPABASE_SERVICE_ROLE_KEY" `
+            -Notes "Release v${{ steps.version.outputs.value }} (sans auto-update signé)"
 
       - name: Package portable zip (fallback manuel)
         id: portable
