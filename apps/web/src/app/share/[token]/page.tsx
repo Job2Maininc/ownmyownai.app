@@ -52,8 +52,7 @@ export default function SharePage() {
   }, [token]);
 
   return (
-    <>
-      <AppHeader />
+    <AppHeader>
       <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
         <Link href="/" className="mb-6 inline-block text-sm text-brand-500 hover:underline">
           ← OwnMyOwnAI
@@ -106,6 +105,6 @@ export default function SharePage() {
           </>
         )}
       </main>
-    </>
+    </AppHeader>
   );
 }

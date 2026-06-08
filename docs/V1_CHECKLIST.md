@@ -30,6 +30,21 @@
 | 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
 | 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
 | 16 | Partage conversation : lien temporaire, contenu seul (pas RAG) | |
+| 17 | Palette commandes (`Ctrl+K`) + envoi chat (`Ctrl+Entrée`) | |
+| 18 | Artefacts : ouvrir, copier ou télécharger en local (.md) depuis le panneau latéral | |
+
+## UX Web — raccourcis clavier
+
+- [x] Palette de commandes globale (`Ctrl+K` / `⌘K`) sur pages authentifiées
+- [x] Envoi message chat via `Ctrl+Entrée` / `⌘Entrée`
+- [x] Commandes contextuelles chat (nouvelle conversation, contexte, export, partage, arrêt)
+
+## Mémoire utilisateur (Host)
+
+- [x] Table `user_memory` dans `context.db`
+- [x] Ajouter / supprimer fait (Tauri + WS `memory.add` / `memory.delete`)
+- [x] Toggle global `userMemoryEnabled` (settings + WS `memory.setEnabled`)
+- [x] Injection sélective au chat (mots-clés de la question)
 
 ## Projets / espaces de travail (Host v0.3)
 
@@ -38,9 +53,21 @@
 - [x] Ouvrir un projet active ses bases en un clic (persistance `active_project_id`)
 - [x] Web : liste projets lecture seule + activation des bases
 
+## Règles projet / .cursorrules (omoa-project-rules)
+
+- [x] Lecture `.ownmyownai/rules.md` ou `.cursorrules` dans dossiers liés au projet
+- [x] Injection automatique au chat (instructions système + règles + RAG)
+
 ## Sécurité locale (Host)
 
 - [x] `context.db` chiffré au repos via DPAPI Windows (`context.db.enc`)
+- [x] Providers cloud optionnels (OpenAI, Anthropic) : clés en keyring Host, routage relay depuis runner uniquement
+
+## Modèles cloud (optionnels)
+
+- [x] OpenAI / Anthropic activables dans `settings.json` (`cloudProviders`)
+- [x] Clés API via keyring Host — jamais exposées au web ni au relay
+- [x] Chat relay route vers API cloud si modèle `openai:*` ou `anthropic:*`
 
 ## Mode réflexion (omoa-thinking-mode)
 
@@ -56,6 +83,14 @@
 - [x] Sync planifiée (cron configurable, rapport `sync-schedule.log`, log par lien)
 - [x] UI Host : lier fichier / dossier / disque, sync manuel
 - [x] Web : statut liens, suppression document, progression upload
+- [x] Déduplication cross-liens : même contenu sous deux chemins → un seul index (hash SHA-256)
+
+## Index codebase Git (omoa-codebase-index)
+
+- [x] Lier dépôt Git local (`link_context_repo`, type `repo`, exclusion `.git`)
+- [x] Table `code_symbols` + index embeddings sur fichiers code
+- [x] Chat : recherche symbole/fichier via `build_codebase_context` + `contextIds`
+- [x] UI Host : bouton « Dépôt Git », compteur symboles sur liens `repo`
 
 ## Outils locaux (omoa-local-tools)
 
@@ -63,11 +98,32 @@
 - [x] Tool calling Ollama côté Host (`enableTools` dans `chat.start`)
 - [x] Schémas protocole `LocalToolNameSchema` dans `@ownmyownai/protocol`
 
+## Agent multi-étapes (omoa-multi-step-agent)
+
+- [x] Boucle plan → outil → observation → réponse (`run_agent_loop`, max 10 étapes)
+- [x] Garde-fous : sandbox chemins liés, annulation `chat.cancel`, erreur outil renvoyée au modèle
+- [x] Chat relay : `enableTools: true` dans `chat.start` déclenche l'agent multi-étapes
+- [x] Playbooks Host (`summarize-folder`) réutilisent la même boucle
+
 ## Fallback modèle (Host)
 
 - [x] `fallbackModel` dans `settings.json` + chaîne auto (défaut → sélection → `llama3.2:3b`)
 - [x] Chat relay : bascule si modèle absent ou premier token &gt; 45 s (`chat.modelFallback` WS)
 - [x] UI Host : sélecteur modèle secours dans le gestionnaire de modèles
+
+## Background agent (Host)
+
+- [x] File de tâches `tokio::spawn` (indexation, agent multi-étapes)
+- [x] Statut tray + événements WS `job.*`
+- [x] Annulation via `job.cancel` / `cancel_background_job`
+
+## Review PR assistée (omoa-pr-review)
+
+- [x] Dépôts Git détectés depuis les liens de contexte
+- [x] Coller ou charger un diff → review structurée locale (Ollama + checklist sécurité)
+- [x] Intégration `git diff` et `gh pr diff` optionnelle
+- [x] Protocole WS `pr.review` / `pr.review.done` dans `packages/protocol`
+- [x] `cargo check` dans `apps/runner/src-tauri`
 
 ## Build local
 

@@ -41,8 +41,7 @@ export default function HostLinkPage() {
   }, [initialCode, generateCode]);
 
   return (
-    <>
-    <AppHeader />
+    <AppHeader>
     <main className="mx-auto min-h-screen max-w-lg px-6 py-12">
       <Link href="/dashboard" className="mb-6 inline-block text-sm text-brand-500 hover:underline">
         ← Dashboard
@@ -81,6 +80,6 @@ export default function HostLinkPage() {
         <PairingStatus code={code} />
       </Card>
     </main>
-    </>
+    </AppHeader>
   );
 }

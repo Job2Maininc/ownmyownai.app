@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type {
   ChatMessage,
   ChatThreadSummary,
@@ -11,7 +12,9 @@ import type {
   RagCitation,
 } from "@ownmyownai/protocol";
 import type { Host } from "@ownmyownai/supabase-types";
+import { useRegisterPaletteCommands } from "@/components/command-palette/command-palette-provider";
 import { mintRelayToken } from "@/lib/api";
+import { collectArtifactsFromMessages, type ParsedArtifact } from "@/lib/artifacts";
 import {
   formatMentionHint,
   parseChatMentions,
@@ -34,11 +37,13 @@ import {
 } from "@/lib/conversation-store";
 import { downloadConversation } from "@/lib/export-conversation";
 import { hostStatusClassName, hostStatusLabel, resolveChatHostStatus } from "@/lib/host-status";
+import { formatShortcutLabel } from "@/lib/keyboard-shortcuts";
 import { RelayClient } from "@/lib/relay-client";
 import { TabSessionManager, type TabSessionRole } from "@/lib/tab-session";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ArtifactsPanel } from "./artifacts-panel";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { MarkdownMessage } from "./markdown-message";
@@ -46,6 +51,8 @@ import { PlaybookPicker } from "./playbook-picker";
 import { RagCitationBadges } from "./rag-citation-badges";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
+
+type SidebarTab = "context" | "artifacts";
 
 interface UiMessage {
   role: "user" | "assistant";
@@ -59,6 +66,8 @@ interface ChatViewProps {
   defaultModel: string;
   installedModels?: string[];
 }
+
+const SEND_SHORTCUT_LABEL = formatShortcutLabel({ key: "Enter", mod: true });
 
 function contextKey(hostId: string) {
   return `context-active:${hostId}`;
@@ -113,6 +122,7 @@ function branchLabelFromSummary(thread: ChatThreadSummary): string {
 }
 
 export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatViewProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState(defaultModel);
@@ -127,7 +137,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [activeContextIds, setActiveContextIds] = useState<string[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [contextBases, setContextBases] = useState<KnowledgeBaseSummary[]>([]);
-  const [showContext, setShowContext] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("context");
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [conversationTree, setConversationTree] = useState<ConversationTree | null>(null);
   const [branchMeta, setBranchMeta] = useState<ConversationBranchMeta[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -160,6 +172,17 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     () => formatMentionHint(parseChatMentions(input)),
     [input],
   );
+
+  const artifacts = useMemo(() => {
+    const map = collectArtifactsFromMessages(messages);
+    return Array.from(map.values());
+  }, [messages]);
+
+  const openArtifact = useCallback((artifact: ParsedArtifact) => {
+    setActiveArtifactId(artifact.id);
+    setSidebarTab("artifacts");
+    setShowSidebar(true);
+  }, []);
 
   const commitAssistantTurn = useCallback(
     (prev: UiMessage[], content: string, thinking?: string): UiMessage[] => {
@@ -564,7 +587,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     !hostOffline &&
     (!hostBusy || streaming);
 
-  function handleNewConversation() {
+  const handleNewConversation = useCallback(() => {
     if (conversationTree) {
       applyTree(startNewRootConversation(conversationTree));
     } else {
@@ -581,7 +604,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setStreaming(false);
     setConversationNotice("Nouvelle conversation prête — posez votre première question.");
     window.setTimeout(() => setConversationNotice(null), 4000);
-  }
+  }, [applyTree, clearAssistantTurn, conversationTree, hostId]);
 
   async function handleForkAt(messageIndex: number) {
     if (streaming || !isActiveTab) return;
@@ -672,13 +695,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const activeBranchId =
     connected && activeThreadId ? activeThreadId : conversationTree?.activeBranchId ?? "";
 
-  function handleStop() {
+  const handleStop = useCallback(() => {
     relayRef.current?.sendCancel(activeRequestId.current ?? undefined);
     setStreaming(false);
     activeRequestId.current = null;
-  }
+  }, []);
 
-  function handleExportConversation() {
+  const handleExportConversation = useCallback(() => {
     if (messages.length === 0 || streaming) return;
     const exportMessages = messages
       .filter((m) => m.content.trim())
@@ -686,7 +709,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     downloadConversation(exportMessages, {
       model: model.trim() || defaultModel,
     });
-  }
+  }, [defaultModel, messages, model, streaming]);
 
   function handlePlaybookRun(playbook: PlaybookSummary) {
     if (streaming || !relayRef.current || !canSend) return;
@@ -709,8 +732,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     activeRequestId.current = requestId ?? null;
   }
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
+  const sendMessage = useCallback(() => {
     if (!input.trim() || streaming || !relayRef.current || !canSend) return;
 
     const rawInput = input.trim();
@@ -747,6 +769,85 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       thinkingMode,
     );
     activeRequestId.current = requestId ?? null;
+  }, [
+    activeContextIds,
+    activeProjectId,
+    canSend,
+    contextBases,
+    defaultModel,
+    input,
+    messages,
+    model,
+    streaming,
+    thinkingMode,
+  ]);
+
+  const paletteCommands = useMemo(
+    () => [
+      {
+        id: "chat-new-conversation",
+        label: "Nouvelle conversation",
+        keywords: "reset effacer historique",
+        group: "Chat",
+        disabled: !isActiveTab || streaming,
+        onSelect: handleNewConversation,
+      },
+      {
+        id: "chat-toggle-context",
+        label: showSidebar ? "Masquer le panneau latéral" : "Afficher le panneau latéral",
+        keywords: "bases documents rag projet artefacts",
+        group: "Chat",
+        onSelect: () => setShowSidebar((value) => !value),
+      },
+      {
+        id: "chat-export",
+        label: "Exporter la conversation (.md)",
+        keywords: "markdown telecharger download",
+        group: "Chat",
+        disabled: !isActiveTab || messages.length === 0 || streaming,
+        onSelect: handleExportConversation,
+      },
+      {
+        id: "chat-share",
+        label: "Partager en lecture seule",
+        keywords: "lien temporaire share",
+        group: "Chat",
+        disabled: !isActiveTab || messages.length === 0 || streaming,
+        onSelect: () => setShowShareDialog(true),
+      },
+      {
+        id: "chat-stop",
+        label: "Arrêter la génération",
+        keywords: "stop cancel annuler",
+        group: "Chat",
+        disabled: !streaming,
+        onSelect: handleStop,
+      },
+      {
+        id: "chat-dashboard",
+        label: "Retour au tableau de bord",
+        keywords: "mes pcs hosts",
+        group: "Chat",
+        onSelect: () => router.push("/dashboard"),
+      },
+    ],
+    [
+      handleExportConversation,
+      handleNewConversation,
+      handleStop,
+      isActiveTab,
+      messages.length,
+      router,
+      showSidebar,
+      streaming,
+    ],
+  );
+
+  useRegisterPaletteCommands(paletteCommands);
+
+  function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    sendMessage();
   }
 
   const headerStatus = !isActiveTab
@@ -780,8 +881,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             disabled={!canSend || streaming}
             onRun={handlePlaybookRun}
           />
-          <Button type="button" variant="ghost" onClick={() => setShowContext((v) => !v)}>
-            {showContext ? "Masquer contexte" : "Bases de contexte"}
+          <Button type="button" variant="ghost" onClick={() => setShowSidebar((v) => !v)}>
+            {showSidebar ? "Masquer panneau" : "Panneau latéral"}
           </Button>
           <Button
             type="button"
@@ -941,6 +1042,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                       {msg.content.trim() && (
                         <MarkdownMessage
                           content={msg.content}
+                          messageKey={`msg-${i}`}
+                          onOpenArtifact={openArtifact}
                           relay={relayRef.current}
                           contextIds={activeContextIds}
                           connected={connected}
@@ -1003,12 +1106,19 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
               placeholder={
                 isActiveTab
-                  ? "Votre message… (@base:Nom, @fichier:…, @dossier:…)"
+                  ? `Votre message… (${SEND_SHORTCUT_LABEL} pour envoyer · @base:Nom, @fichier:…)`
                   : "Lecture seule — autre onglet actif"
               }
               disabled={streaming || !canSend}
+              aria-keyshortcuts={isActiveTab ? SEND_SHORTCUT_LABEL : undefined}
               className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
             />
             {streaming ? (
@@ -1023,18 +1133,46 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           </form>
         </div>
 
-        {showContext && (
-          <ContextPanel
-            relay={relayRef.current}
-            connected={connected && isActiveTab}
-            activeIds={activeContextIds}
-            onActiveChange={setActiveContextIds}
-            activeProjectId={activeProjectId}
-            onProjectChange={(projectId, kbaseIds) => {
-              setActiveProjectId(projectId);
-              setActiveContextIds(kbaseIds);
-            }}
-          />
+        {showSidebar && (
+          <div className="flex min-h-0 w-[320px] shrink-0 flex-col border-l border-[var(--border)] pl-4">
+            <div className="chat-sidebar-tabs" role="tablist" aria-label="Panneau latéral">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sidebarTab === "context"}
+                onClick={() => setSidebarTab("context")}
+              >
+                Contexte
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sidebarTab === "artifacts"}
+                onClick={() => setSidebarTab("artifacts")}
+              >
+                Artefacts{artifacts.length > 0 ? ` (${artifacts.length})` : ""}
+              </button>
+            </div>
+            {sidebarTab === "context" ? (
+              <ContextPanel
+                relay={relayRef.current}
+                connected={connected && isActiveTab}
+                activeIds={activeContextIds}
+                onActiveChange={setActiveContextIds}
+                activeProjectId={activeProjectId}
+                onProjectChange={(projectId, kbaseIds) => {
+                  setActiveProjectId(projectId);
+                  setActiveContextIds(kbaseIds);
+                }}
+              />
+            ) : (
+              <ArtifactsPanel
+                artifacts={artifacts}
+                activeId={activeArtifactId}
+                onSelect={setActiveArtifactId}
+              />
+            )}
+          </div>
         )}
       </div>
 

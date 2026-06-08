@@ -26,13 +26,12 @@ export default async function ChatPage({ params }: ChatPageProps) {
   const installedModels = Array.isArray(host.installed_models) ? host.installed_models : [];
 
   return (
-    <>
-      <AppHeader />
+    <AppHeader>
       <ChatView
         hostId={host.id}
         defaultModel={host.default_model}
         installedModels={installedModels}
       />
-    </>
+    </AppHeader>
   );
 }

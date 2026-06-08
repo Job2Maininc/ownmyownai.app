@@ -25,8 +25,7 @@ export default async function DashboardPage() {
   const hosts = (hostsData ?? []) as Host[];
 
   return (
-    <>
-      <AppHeader />
+    <AppHeader>
       <main className="mx-auto min-h-screen max-w-3xl px-6 py-12">
         <OnboardingBanner hasHosts={hosts.length > 0} />
 
@@ -59,6 +58,6 @@ export default async function DashboardPage() {
           </Link>
         </p>
       </main>
-    </>
+    </AppHeader>
   );
 }
