@@ -1,28 +1,31 @@
 const RUNNER_STALE_MS = 45_000;
 const LIVENESS_CHECK_MS = 20_000;
 const WEB_CLIENT_CHECK_MS = 30_000;
+const RUNNER_LAST_SEEN_KEY = "runnerLastSeen";
+
+type WsRole = "web" | "runner";
+
+interface WsAttachment {
+  role: WsRole;
+}
 
 export class HostRoom implements DurableObject {
-  private runner: WebSocket | null = null;
-  private webClients = new Set<WebSocket>();
-  private runnerLastSeen = 0;
-
   constructor(
     private state: DurableObjectState,
     _env: Env,
   ) {}
 
   async alarm(): Promise<void> {
-    this.pruneWebClients();
-    this.checkRunnerLiveness();
-    if (this.webClients.size > 0) {
-      this.scheduleWebClientCheck();
+    await this.checkRunnerLiveness();
+    const webCount = this.aliveWebClientCount();
+    if (webCount > 0) {
+      await this.state.storage.setAlarm(Date.now() + WEB_CLIENT_CHECK_MS);
     }
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const role = (url.searchParams.get("role") ?? "web") as "web" | "runner";
+    const role = (url.searchParams.get("role") ?? "web") as WsRole;
 
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("Expected WebSocket", { status: 426 });
@@ -31,141 +34,171 @@ export class HostRoom implements DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
+    const existingRunner = role === "runner" ? this.getRunnerSocket() : null;
+
     this.state.acceptWebSocket(server);
-    this.handleConnection(server, role);
+    server.serializeAttachment({ role } satisfies WsAttachment);
 
-    return new Response(null, { status: 101, webSocket: client });
-  }
-
-  private handleConnection(ws: WebSocket, role: "web" | "runner") {
     if (role === "runner") {
-      if (this.runner) {
+      if (existingRunner) {
         try {
-          this.runner.close(1000, "replaced");
+          existingRunner.close(1000, "replaced");
         } catch {
           /* ignore */
         }
       }
-      this.runner = ws;
-      this.touchRunner();
+      await this.touchRunner();
       this.broadcastToWeb(
         JSON.stringify({ type: "host.status", payload: { status: "online" } }),
       );
       this.notifyRunnerWebClients();
     } else {
-      this.pruneWebClients();
-      this.webClients.add(ws);
-      ws.send(
+      server.send(
         JSON.stringify({
           type: "host.status",
-          payload: { status: this.isRunnerAlive() ? "online" : "offline" },
+          payload: { status: (await this.isRunnerAlive()) ? "online" : "offline" },
         }),
       );
       this.notifyRunnerWebClients();
-      this.scheduleWebClientCheck();
-    }
-
-    ws.addEventListener("message", (event) => {
-      const data = typeof event.data === "string" ? event.data : "";
-      if (role === "runner") {
-        this.touchRunner();
-        this.broadcastToWeb(data);
-      } else if (this.isRunnerAlive()) {
-        this.runner!.send(data);
-      } else {
-        let requestId: string | undefined;
-        try {
-          const parsed = JSON.parse(data) as { requestId?: string };
-          requestId = parsed.requestId;
-        } catch {
-          /* ignore */
-        }
-        ws.send(
-          JSON.stringify({
-            type: "chat.error",
-            requestId,
-            payload: { message: "Le host est hors ligne — ouvrez l'app Host sur ce PC." },
-          }),
-        );
-      }
-    });
-
-    ws.addEventListener("close", () => {
-      if (role === "runner" && this.runner === ws) {
-        this.dropRunner();
-      } else {
-        this.webClients.delete(ws);
-        this.pruneWebClients();
-        this.notifyRunnerWebClients();
-      }
-    });
-  }
-
-  private pruneWebClients() {
-    for (const client of this.webClients) {
-      if (client.readyState !== WebSocket.OPEN) {
-        this.webClients.delete(client);
+      if (this.aliveWebClientCount() > 0) {
+        await this.state.storage.setAlarm(Date.now() + WEB_CLIENT_CHECK_MS);
       }
     }
+
+    return new Response(null, { status: 101, webSocket: client });
   }
 
-  private aliveWebClientCount(): number {
-    this.pruneWebClients();
-    return this.webClients.size;
-  }
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const attachment = ws.deserializeAttachment() as WsAttachment | null;
+    if (!attachment) return;
 
-  private scheduleWebClientCheck() {
-    if (this.aliveWebClientCount() === 0) return;
-    void this.state.storage.setAlarm(Date.now() + WEB_CLIENT_CHECK_MS);
-  }
+    const data =
+      typeof message === "string" ? message : new TextDecoder().decode(message);
 
-  private touchRunner() {
-    this.runnerLastSeen = Date.now();
-    this.scheduleLivenessCheck();
-  }
-
-  private scheduleLivenessCheck() {
-    if (!this.runner) return;
-    void this.state.storage.setAlarm(Date.now() + LIVENESS_CHECK_MS);
-  }
-
-  private checkRunnerLiveness() {
-    if (!this.runner) return;
-    if (!this.isRunnerAlive()) {
-      this.dropRunner();
+    if (attachment.role === "runner") {
+      await this.touchRunner();
+      this.broadcastToWeb(data);
       return;
     }
-    this.scheduleLivenessCheck();
-  }
 
-  private isRunnerAlive(): boolean {
-    return (
-      this.runner !== null &&
-      this.runner.readyState === WebSocket.OPEN &&
-      this.runnerLastSeen > 0 &&
-      Date.now() - this.runnerLastSeen < RUNNER_STALE_MS
+    const runner = this.getRunnerSocket();
+    if (runner && (await this.isRunnerAlive())) {
+      runner.send(data);
+      return;
+    }
+
+    let requestId: string | undefined;
+    try {
+      const parsed = JSON.parse(data) as { requestId?: string };
+      requestId = parsed.requestId;
+    } catch {
+      /* ignore */
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "chat.error",
+        requestId,
+        payload: { message: "Le host est hors ligne — ouvrez l'app Host sur ce PC." },
+      }),
     );
   }
 
-  private dropRunner() {
-    if (this.runner) {
-      try {
-        this.runner.close(1000, "stale");
-      } catch {
-        /* ignore */
-      }
-      this.runner = null;
+  async webSocketClose(
+    ws: WebSocket,
+    code: number,
+    reason: string,
+    _wasClean: boolean,
+  ): Promise<void> {
+    const attachment = ws.deserializeAttachment() as WsAttachment | null;
+    if (attachment?.role === "runner") {
+      await this.state.storage.delete(RUNNER_LAST_SEEN_KEY);
+      this.broadcastToWeb(
+        JSON.stringify({ type: "host.status", payload: { status: "offline" } }),
+      );
+    } else {
+      this.notifyRunnerWebClients();
     }
-    this.runnerLastSeen = 0;
+    try {
+      ws.close(code, reason);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private getRunnerSocket(): WebSocket | null {
+    for (const ws of this.state.getWebSockets()) {
+      const attachment = ws.deserializeAttachment() as WsAttachment | null;
+      if (attachment?.role === "runner" && ws.readyState === WebSocket.OPEN) {
+        return ws;
+      }
+    }
+    return null;
+  }
+
+  private getWebClientSockets(): WebSocket[] {
+    const clients: WebSocket[] = [];
+    for (const ws of this.state.getWebSockets()) {
+      const attachment = ws.deserializeAttachment() as WsAttachment | null;
+      if (attachment?.role === "web" && ws.readyState === WebSocket.OPEN) {
+        clients.push(ws);
+      }
+    }
+    return clients;
+  }
+
+  private aliveWebClientCount(): number {
+    return this.getWebClientSockets().length;
+  }
+
+  private async touchRunner(): Promise<void> {
+    await this.state.storage.put(RUNNER_LAST_SEEN_KEY, Date.now());
+    await this.scheduleLivenessCheck();
+  }
+
+  private async getRunnerLastSeen(): Promise<number> {
+    return (await this.state.storage.get<number>(RUNNER_LAST_SEEN_KEY)) ?? 0;
+  }
+
+  private async scheduleLivenessCheck(): Promise<void> {
+    if (!this.getRunnerSocket()) return;
+    await this.state.storage.setAlarm(Date.now() + LIVENESS_CHECK_MS);
+  }
+
+  private async checkRunnerLiveness(): Promise<void> {
+    const runner = this.getRunnerSocket();
+    if (!runner) return;
+    if (!(await this.isRunnerAlive())) {
+      await this.dropRunner(runner);
+      return;
+    }
+    await this.scheduleLivenessCheck();
+  }
+
+  private async isRunnerAlive(): Promise<boolean> {
+    const runner = this.getRunnerSocket();
+    if (!runner || runner.readyState !== WebSocket.OPEN) return false;
+    const lastSeen = await this.getRunnerLastSeen();
+    return lastSeen > 0 && Date.now() - lastSeen < RUNNER_STALE_MS;
+  }
+
+  private async dropRunner(runner: WebSocket): Promise<void> {
+    try {
+      runner.close(1000, "stale");
+    } catch {
+      /* ignore */
+    }
+    await this.state.storage.delete(RUNNER_LAST_SEEN_KEY);
     this.broadcastToWeb(
       JSON.stringify({ type: "host.status", payload: { status: "offline" } }),
     );
   }
 
-  private notifyRunnerWebClients() {
+  private notifyRunnerWebClients(): void {
+    const runner = this.getRunnerSocket();
     const count = this.aliveWebClientCount();
-    if (!this.isRunnerAlive()) return;
-    this.runner!.send(
+    if (!runner || runner.readyState !== WebSocket.OPEN) return;
+    runner.send(
       JSON.stringify({
         type: "relay.web_clients",
         payload: { count },
@@ -173,12 +206,9 @@ export class HostRoom implements DurableObject {
     );
   }
 
-  private broadcastToWeb(data: string) {
-    this.pruneWebClients();
-    for (const client of this.webClients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(data);
-      }
+  private broadcastToWeb(data: string): void {
+    for (const client of this.getWebClientSockets()) {
+      client.send(data);
     }
   }
 }
