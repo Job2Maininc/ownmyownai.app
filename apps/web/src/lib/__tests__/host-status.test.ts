@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getHostDisplayStatus, hostStatusLabel } from "../host-status";
+import {
+  getHostDisplayStatus,
+  hostStatusLabel,
+  resolveChatHostStatus,
+} from "../host-status";
 import type { Host } from "@ownmyownai/supabase-types";
 
 function makeHost(overrides: Partial<Host> = {}): Host {
@@ -47,5 +51,41 @@ describe("host-status", () => {
 
   it("traduit busy en Occupé", () => {
     expect(hostStatusLabel("busy")).toBe("Occupé");
+  });
+
+  it("chat hors ligne si heartbeat expiré même si relay dit online", () => {
+    const status = resolveChatHostStatus({
+      relayConnected: true,
+      relayHostStatus: "online",
+      cloudHost: {
+        status: "online",
+        last_seen_at: new Date(Date.now() - 120_000).toISOString(),
+      },
+    });
+    expect(status).toBe("offline");
+  });
+
+  it("chat en ligne si heartbeat récent et relay connecté", () => {
+    const status = resolveChatHostStatus({
+      relayConnected: true,
+      relayHostStatus: "online",
+      cloudHost: {
+        status: "online",
+        last_seen_at: new Date().toISOString(),
+      },
+    });
+    expect(status).toBe("online");
+  });
+
+  it("chat hors ligne si relay signale offline", () => {
+    const status = resolveChatHostStatus({
+      relayConnected: true,
+      relayHostStatus: "offline",
+      cloudHost: {
+        status: "online",
+        last_seen_at: new Date().toISOString(),
+      },
+    });
+    expect(status).toBe("offline");
   });
 });

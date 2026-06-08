@@ -1,6 +1,9 @@
+import type { HostStatus } from "@ownmyownai/protocol";
 import type { Host } from "@ownmyownai/supabase-types";
 
 export type HostDisplayStatus = "online" | "busy" | "offline";
+
+export type CloudHostSnapshot = Pick<Host, "status" | "last_seen_at">;
 
 /** Heartbeat runner toutes les 15 s — au-delà, le host est considéré éteint. */
 export const HOST_STALE_MS = 90_000;
@@ -18,6 +21,35 @@ export function getHostDisplayStatus(host: Host): HostDisplayStatus {
   if (host.status === "busy") return "busy";
   if (host.status === "online") return "online";
   return "offline";
+}
+
+/** Statut affiché dans le chat : heartbeat cloud + état relay en temps réel. */
+export function resolveChatHostStatus(input: {
+  relayConnected: boolean;
+  relayHostStatus: HostStatus;
+  cloudHost: CloudHostSnapshot | null;
+}): HostStatus {
+  if (!isHostHeartbeatFresh(input.cloudHost?.last_seen_at)) {
+    return "offline";
+  }
+
+  const cloudStatus = input.cloudHost
+    ? getHostDisplayStatus(input.cloudHost as Host)
+    : "offline";
+
+  if (!input.relayConnected) {
+    return cloudStatus;
+  }
+
+  if (input.relayHostStatus === "offline") {
+    return "offline";
+  }
+
+  if (input.relayHostStatus === "busy") {
+    return "busy";
+  }
+
+  return cloudStatus === "offline" ? "offline" : "online";
 }
 
 export function hostStatusLabel(status: HostDisplayStatus): string {

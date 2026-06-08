@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { ChatMessage, HostStatus } from "@ownmyownai/protocol";
 import type { Host } from "@ownmyownai/supabase-types";
 import { mintRelayToken } from "@/lib/api";
-import { hostStatusClassName, hostStatusLabel } from "@/lib/host-status";
+import { hostStatusClassName, hostStatusLabel, resolveChatHostStatus } from "@/lib/host-status";
 import { RelayClient } from "@/lib/relay-client";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [historyMeta, setHistoryMeta] = useState<ConversationMeta[]>([]);
   const [conversationNotice, setConversationNotice] = useState<string | null>(null);
   const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
+  const [statusClock, setStatusClock] = useState(0);
   const relayRef = useRef<RelayClient | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
@@ -156,6 +157,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, [hostId]);
 
   useEffect(() => {
+    const id = window.setInterval(() => setStatusClock((tick) => tick + 1), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     hasConnectedRef.current = false;
     const client = new RelayClient({
       mintToken: () => mintRelayToken(hostId),
@@ -205,15 +211,17 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
 
-  const effectiveHostStatus: HostStatus = connected
-    ? hostStatus
-    : cloudHost?.status === "busy"
-      ? "busy"
-      : cloudHost?.status === "online"
-        ? "online"
-        : "offline";
+  const effectiveHostStatus = useMemo(
+    () =>
+      resolveChatHostStatus({
+        relayConnected: connected,
+        relayHostStatus: hostStatus,
+        cloudHost,
+      }),
+    [connected, hostStatus, cloudHost, statusClock],
+  );
 
-  const relayHostReachable = hostStatus === "online" || hostStatus === "busy";
+  const relayHostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
   const hostBusy = effectiveHostStatus === "busy";
   const hostOffline = effectiveHostStatus === "offline";
   const hostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
@@ -395,6 +403,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
           )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+          {hostOffline && connected && (
+            <p className="mb-2 text-sm text-red-400">
+              Ce PC est hors ligne — ouvrez l&apos;app Host sur la machine ou attendez qu&apos;il
+              se reconnecte.
+            </p>
+          )}
           {hostBusy && !streaming && (
             <p className="mb-2 text-sm text-amber-400">
               Ce PC est utilisé par une autre session. Attendez ou fermez l&apos;autre onglet.

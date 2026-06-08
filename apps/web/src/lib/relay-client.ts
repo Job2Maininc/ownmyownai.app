@@ -32,6 +32,7 @@ export interface RelayClientCallbacks {
 const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 const CHAT_IDLE_TIMEOUT_MS = 300_000;
+const CHAT_FIRST_RESPONSE_TIMEOUT_MS = 90_000;
 const CONTEXT_REQUEST_TIMEOUT_MS = 45_000;
 
 export class RelayClient {
@@ -42,6 +43,7 @@ export class RelayClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private activeRequestId: string | null = null;
   private chatIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  private chatFirstResponseTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRequests = new Map<
     string,
     { resolve: (env: WsEnvelope) => void; reject: (err: Error) => void; types: Set<string> }
@@ -146,15 +148,41 @@ export class RelayClient {
     }
   }
 
+  private clearChatFirstResponseTimer() {
+    if (this.chatFirstResponseTimer) {
+      clearTimeout(this.chatFirstResponseTimer);
+      this.chatFirstResponseTimer = null;
+    }
+  }
+
+  private clearChatTimers() {
+    this.clearChatIdleTimer();
+    this.clearChatFirstResponseTimer();
+  }
+
   private resetChatIdleTimer() {
     this.clearChatIdleTimer();
     if (!this.activeRequestId) return;
     this.chatIdleTimer = setTimeout(() => {
       this.activeRequestId = null;
+      this.clearChatFirstResponseTimer();
       this.callbacks.onError?.(
         "Le modèle met trop de temps à répondre (5 min). Vérifiez qu'Ollama tourne et que le modèle est bien installé sur votre PC.",
       );
     }, CHAT_IDLE_TIMEOUT_MS);
+  }
+
+  private startChatFirstResponseTimer() {
+    this.clearChatFirstResponseTimer();
+    if (!this.activeRequestId) return;
+    this.chatFirstResponseTimer = setTimeout(() => {
+      this.activeRequestId = null;
+      this.clearChatIdleTimer();
+      this.callbacks.onHostStatus?.("offline");
+      this.callbacks.onError?.(
+        "Le host ne répond pas — vérifiez que l'app Host est ouverte sur ce PC.",
+      );
+    }, CHAT_FIRST_RESPONSE_TIMEOUT_MS);
   }
 
   private isActiveRequest(envelope: WsEnvelope): boolean {
@@ -200,6 +228,7 @@ export class RelayClient {
       }
       case WS_MESSAGE_TYPES.CHAT_DELTA: {
         if (!this.isActiveRequest(envelope)) return;
+        this.clearChatFirstResponseTimer();
         this.resetChatIdleTimer();
         const payload = envelope.payload as { content?: string };
         if (payload.content) {
@@ -210,13 +239,13 @@ export class RelayClient {
       case WS_MESSAGE_TYPES.CHAT_DONE:
         if (!this.isActiveRequest(envelope)) return;
         this.activeRequestId = null;
-        this.clearChatIdleTimer();
+        this.clearChatTimers();
         this.callbacks.onDone?.();
         break;
       case WS_MESSAGE_TYPES.CHAT_ERROR: {
         if (!this.isActiveRequest(envelope)) return;
         this.activeRequestId = null;
-        this.clearChatIdleTimer();
+        this.clearChatTimers();
         this.callbacks.onError?.(this.payloadMessage(envelope, "Erreur inconnue"));
         break;
       }
@@ -270,6 +299,7 @@ export class RelayClient {
     );
     if (id) {
       this.activeRequestId = id;
+      this.startChatFirstResponseTimer();
       this.resetChatIdleTimer();
     }
     return id;
@@ -408,7 +438,7 @@ export class RelayClient {
   disconnect() {
     this.intentionalDisconnect = true;
     this.activeRequestId = null;
-    this.clearChatIdleTimer();
+    this.clearChatTimers();
     this.pendingRequests.clear();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
