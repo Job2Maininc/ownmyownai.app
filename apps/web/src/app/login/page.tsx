@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { formatAuthError } from "@/lib/auth-errors";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,7 +33,7 @@ export default function LoginPage() {
 
     setLoading(false);
     if (authError) {
-      setError(authError.message);
+      setError(formatAuthError(authError));
       return;
     }
     setSent(true);
