@@ -25,6 +25,10 @@
 | 10 | Redémarrer Host → resync complet au lancement | |
 | 11 | Chat avec base active utilise le contenu à jour | |
 | 12 | Web affiche statut des sources liées (lecture seule) | |
+| 13 | Chat RAG affiche badges sources cliquables (fichier + extrait + score) | |
+| 13 | Instruction système par base : éditable Host, visible web, appliquée au prochain message | |
+| 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
+| 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
 
 ## Contexte lié (Host v0.2.0)
 
@@ -33,6 +37,12 @@
 - [x] Sync au lancement + watcher `notify` avec debounce
 - [x] UI Host : lier fichier / dossier / disque, sync manuel
 - [x] Web : statut liens, suppression document, progression upload
+
+## Fallback modèle (Host)
+
+- [x] `fallbackModel` dans `settings.json` + chaîne auto (défaut → sélection → `llama3.2:3b`)
+- [x] Chat relay : bascule si modèle absent ou premier token &gt; 45 s (`chat.modelFallback` WS)
+- [x] UI Host : sélecteur modèle secours dans le gestionnaire de modèles
 
 ## Build local
 

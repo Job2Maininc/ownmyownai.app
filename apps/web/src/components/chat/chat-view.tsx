@@ -2,9 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import type { ChatMessage, HostStatus } from "@ownmyownai/protocol";
+import type {
+  ChatMessage,
+  HostStatus,
+  KnowledgeBaseSummary,
+  RagCitation,
+} from "@ownmyownai/protocol";
 import type { Host } from "@ownmyownai/supabase-types";
 import { mintRelayToken } from "@/lib/api";
+import {
+  formatMentionHint,
+  parseChatMentions,
+  resolveRagContextIds,
+  stripChatMentions,
+  toMentionScope,
+} from "@/lib/chat-mentions";
+import { downloadConversation } from "@/lib/export-conversation";
 import { hostStatusClassName, hostStatusLabel, resolveChatHostStatus } from "@/lib/host-status";
 import { RelayClient } from "@/lib/relay-client";
 import { createClient } from "@/lib/supabase/client";
@@ -13,10 +26,12 @@ import { Card } from "@/components/ui/card";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { MarkdownMessage } from "./markdown-message";
+import { RagCitationBadges } from "./rag-citation-badges";
 
 interface UiMessage {
   role: "user" | "assistant";
   content: string;
+  citations?: RagCitation[];
 }
 
 interface ConversationMeta {
@@ -38,6 +53,10 @@ function storageKey(hostId: string) {
 
 function contextKey(hostId: string) {
   return `context-active:${hostId}`;
+}
+
+function projectKey(hostId: string) {
+  return `project-active:${hostId}`;
 }
 
 function historyMetaKey(hostId: string) {
@@ -82,6 +101,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     "connecting",
   );
   const [activeContextIds, setActiveContextIds] = useState<string[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [contextBases, setContextBases] = useState<KnowledgeBaseSummary[]>([]);
   const [showContext, setShowContext] = useState(true);
   const [historyMeta, setHistoryMeta] = useState<ConversationMeta[]>([]);
   const [conversationNotice, setConversationNotice] = useState<string | null>(null);
@@ -92,6 +113,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const assistantBuffer = useRef("");
   const assistantMessageIndex = useRef<number | null>(null);
   const pendingUserMessage = useRef<UiMessage | null>(null);
+  const pendingCitations = useRef<RagCitation[] | undefined>(undefined);
   const activeRequestId = useRef<string | null>(null);
   const hydrated = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -99,6 +121,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const models = installedModels.length > 0 ? installedModels : [defaultModel];
   const filteredModels = models.filter((m) =>
     m.toLowerCase().includes(modelSearch.toLowerCase()),
+  );
+
+  const inputMentionHint = useMemo(
+    () => formatMentionHint(parseChatMentions(input)),
+    [input],
   );
 
   const commitAssistantTurn = useCallback((prev: UiMessage[], content: string): UiMessage[] => {
@@ -118,7 +145,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     const idx = assistantMessageIndex.current;
     if (idx === null) return next;
 
-    const assistantMsg: UiMessage = { role: "assistant", content };
+    const existing = next[idx];
+    const assistantMsg: UiMessage = {
+      role: "assistant",
+      content,
+      citations: pendingCitations.current ?? existing?.citations,
+    };
 
     if (next.length <= idx) {
       next.push(assistantMsg);
@@ -132,7 +164,22 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const clearAssistantTurn = useCallback(() => {
     assistantMessageIndex.current = null;
     pendingUserMessage.current = null;
+    pendingCitations.current = undefined;
     assistantBuffer.current = "";
+  }, []);
+
+  const attachCitations = useCallback((citations: RagCitation[]) => {
+    pendingCitations.current = citations;
+    const idx = assistantMessageIndex.current;
+    if (idx === null) return;
+    setMessages((prev) => {
+      if (idx >= prev.length) return prev;
+      const next = [...prev];
+      const current = next[idx];
+      if (current?.role !== "assistant") return prev;
+      next[idx] = { ...current, citations };
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -144,6 +191,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     hydrated.current = true;
     setMessages(loadMessages(hostId));
     setActiveContextIds(loadActiveContextIds(hostId));
+    try {
+      const raw = sessionStorage.getItem(projectKey(hostId));
+      setActiveProjectId(raw ? (JSON.parse(raw) as string) : null);
+    } catch {
+      setActiveProjectId(null);
+    }
     setHistoryMeta(loadHistoryMeta(hostId));
   }, [hostId]);
 
@@ -155,6 +208,14 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   useEffect(() => {
     sessionStorage.setItem(contextKey(hostId), JSON.stringify(activeContextIds));
   }, [hostId, activeContextIds]);
+
+  useEffect(() => {
+    if (activeProjectId) {
+      sessionStorage.setItem(projectKey(hostId), JSON.stringify(activeProjectId));
+    } else {
+      sessionStorage.removeItem(projectKey(hostId));
+    }
+  }, [hostId, activeProjectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -215,6 +276,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         }
       },
       onHostStatus: (status) => setHostStatus(status),
+      onCitations: attachCitations,
       onDelta: (content) => {
         assistantBuffer.current += content;
         const snapshot = assistantBuffer.current;
@@ -247,7 +309,15 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       client.disconnect();
       relayRef.current = null;
     };
-  }, [hostId, clearAssistantTurn, commitAssistantTurn]);
+  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn]);
+
+  useEffect(() => {
+    if (relayStatus !== "connected" || !relayRef.current) return;
+    void relayRef.current
+      .listContextBases()
+      .then(setContextBases)
+      .catch(() => undefined);
+  }, [relayStatus]);
 
   const connected = relayStatus === "connected";
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
@@ -303,11 +373,27 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     activeRequestId.current = null;
   }
 
+  function handleExportConversation() {
+    if (messages.length === 0 || streaming) return;
+    const exportMessages = messages
+      .filter((m) => m.content.trim())
+      .map((m) => ({ role: m.role, content: m.content }));
+    downloadConversation(exportMessages, {
+      model: model.trim() || defaultModel,
+    });
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || streaming || !relayRef.current || !canSend) return;
 
-    const userMsg: UiMessage = { role: "user", content: input.trim() };
+    const rawInput = input.trim();
+    const mentions = parseChatMentions(rawInput);
+    const cleanedContent = stripChatMentions(rawInput);
+    const ragContextIds = resolveRagContextIds(mentions, activeContextIds, contextBases);
+    const mentionScope = toMentionScope(mentions);
+
+    const userMsg: UiMessage = { role: "user", content: cleanedContent || rawInput };
     const newMessages = [...messages, userMsg];
     pendingUserMessage.current = userMsg;
     assistantMessageIndex.current = newMessages.length;
@@ -316,6 +402,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setStreaming(true);
     setError(null);
     assistantBuffer.current = "";
+    pendingCitations.current = undefined;
 
     const chatMessages: ChatMessage[] = newMessages.map((m) => ({
       role: m.role,
@@ -325,7 +412,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     const requestId = relayRef.current.sendChat(
       chatMessages,
       model.trim() || defaultModel,
-      activeContextIds,
+      ragContextIds,
+      undefined,
+      undefined,
+      undefined,
+      mentionScope,
     );
     activeRequestId.current = requestId ?? null;
   }
@@ -356,6 +447,15 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           </Button>
           <Button type="button" variant="ghost" onClick={handleNewConversation}>
             Nouvelle conversation
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={messages.length === 0 || streaming}
+            onClick={handleExportConversation}
+            title="Télécharger le fil actuel en Markdown (.md) — export local uniquement"
+          >
+            Exporter .md
           </Button>
           <span className={`text-sm ${headerStatus.className}`}>{headerStatus.label}</span>
         </div>
@@ -434,7 +534,17 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   }`}
                 >
                   {msg.role === "assistant" ? (
-                    <MarkdownMessage content={msg.content} />
+                    <>
+                      <MarkdownMessage
+                        content={msg.content}
+                        relay={relayRef.current}
+                        contextIds={activeContextIds}
+                        connected={connected}
+                      />
+                      {msg.citations && msg.citations.length > 0 && (
+                        <RagCitationBadges citations={msg.citations} />
+                      )}
+                    </>
                   ) : (
                     <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
                   )}
@@ -462,12 +572,15 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               Ce PC est utilisé par une autre session. Attendez ou fermez l&apos;autre onglet.
             </p>
           )}
+          {inputMentionHint && (
+            <p className="mb-2 text-xs text-brand-400">{inputMentionHint}</p>
+          )}
 
           <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--border)] pt-4">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Votre message…"
+              placeholder="Votre message… (@base:Nom, @fichier:…, @dossier:…)"
               disabled={streaming || !canSend}
               className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
             />
@@ -489,6 +602,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             connected={connected}
             activeIds={activeContextIds}
             onActiveChange={setActiveContextIds}
+            activeProjectId={activeProjectId}
+            onProjectChange={(projectId, kbaseIds) => {
+              setActiveProjectId(projectId);
+              setActiveContextIds(kbaseIds);
+            }}
           />
         )}
       </div>
