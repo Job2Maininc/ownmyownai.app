@@ -64,48 +64,77 @@ function normalizeVersion(raw: string | undefined | null): string | null {
   return raw.trim().replace(/^v/i, "");
 }
 
-export async function resolveHostReleaseInfo(): Promise<HostReleaseInfo | null> {
-  const manifestUrl = supabasePublicManifestUrl();
-  if (manifestUrl) {
-    try {
-      const res = await fetch(manifestUrl, { next: { revalidate: 300 } });
-      if (res.ok) {
-        const manifest = (await res.json()) as LatestManifest;
-        const version = normalizeVersion(manifest.version);
-        if (version) {
-          return {
-            version,
-            pubDate: manifest.pub_date ? new Date(manifest.pub_date) : null,
-            source: "supabase",
-          };
-        }
-      }
-    } catch {
-      /* try fallbacks */
-    }
+/** >0 si `a` est plus récent que `b`. */
+export function compareVersions(a: string, b: string): number {
+  const parts = (value: string) =>
+    value.split(".").map((segment) => {
+      const parsed = Number.parseInt(segment, 10);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    });
+  const left = parts(a);
+  const right = parts(b);
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const diff = (left[index] ?? 0) - (right[index] ?? 0);
+    if (diff !== 0) return diff;
   }
+  return 0;
+}
 
+async function fetchSupabaseReleaseInfo(): Promise<HostReleaseInfo | null> {
+  const manifestUrl = supabasePublicManifestUrl();
+  if (!manifestUrl) return null;
+  try {
+    const res = await fetch(manifestUrl, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    const manifest = (await res.json()) as LatestManifest;
+    const version = normalizeVersion(manifest.version);
+    if (!version) return null;
+    return {
+      version,
+      pubDate: manifest.pub_date ? new Date(manifest.pub_date) : null,
+      source: "supabase",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGithubReleaseInfo(): Promise<HostReleaseInfo | null> {
   try {
     const res = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`,
+      `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=5`,
       { headers: githubAuthHeaders(), next: { revalidate: 300 } },
     );
-    if (res.ok) {
-      const releases = (await res.json()) as Release[];
-      const tag = releases[0]?.tag_name;
-      const version = normalizeVersion(tag);
-      if (version) {
-        return {
-          version,
-          pubDate: releases[0]?.published_at
-            ? new Date(releases[0].published_at)
-            : null,
-          source: "github",
-        };
-      }
+    if (!res.ok) return null;
+    const releases = (await res.json()) as Release[];
+    for (const release of releases) {
+      const version = normalizeVersion(release.tag_name);
+      if (!version) continue;
+      return {
+        version,
+        pubDate: release.published_at ? new Date(release.published_at) : null,
+        source: "github",
+      };
     }
+    return null;
   } catch {
-    /* ignore */
+    return null;
+  }
+}
+
+export async function resolveHostReleaseInfo(): Promise<HostReleaseInfo | null> {
+  const [supabase, github] = await Promise.all([
+    fetchSupabaseReleaseInfo(),
+    fetchGithubReleaseInfo(),
+  ]);
+
+  const candidates = [supabase, github].filter(
+    (entry): entry is HostReleaseInfo => entry !== null,
+  );
+
+  if (candidates.length > 0) {
+    return candidates.sort((a, b) => compareVersions(b.version, a.version))[0];
   }
 
   const configVersion = normalizeVersion(process.env.NEXT_PUBLIC_HOST_APP_VERSION);
@@ -116,9 +145,36 @@ export async function resolveHostReleaseInfo(): Promise<HostReleaseInfo | null> 
   return null;
 }
 
+async function resolveGithubInstallerUrl(version?: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
+      { headers: githubAuthHeaders(), next: { revalidate: 120 } },
+    );
+    if (!res.ok) return null;
+    const releases = (await res.json()) as Release[];
+    for (const release of releases) {
+      if (version && normalizeVersion(release.tag_name) !== version) continue;
+      const setup = release.assets?.find(
+        (asset) => asset.name.endsWith("-setup.exe") && !asset.name.includes("nsis"),
+      );
+      if (setup) return setup.browser_download_url;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function resolveInstallerUrl(): Promise<string | null> {
   const envUrl = process.env.NEXT_PUBLIC_RUNNER_INSTALLER_URL;
   if (envUrl?.endsWith(".exe")) return envUrl;
+
+  const release = await resolveHostReleaseInfo();
+  if (release?.source === "github") {
+    const githubUrl = await resolveGithubInstallerUrl(release.version);
+    if (githubUrl) return githubUrl;
+  }
 
   const supabase = supabasePublicInstallerUrl();
   if (supabase) {
@@ -131,18 +187,8 @@ export async function resolveInstallerUrl(): Promise<string | null> {
   }
 
   try {
-    const res = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
-      { headers: githubAuthHeaders(), next: { revalidate: 120 } },
-    );
-    if (!res.ok) return null;
-    const releases = (await res.json()) as Release[];
-    for (const release of releases) {
-      const setup = release.assets?.find(
-        (a) => a.name.endsWith("-setup.exe") && !a.name.includes("nsis"),
-      );
-      if (setup) return setup.browser_download_url;
-    }
+    const githubUrl = await resolveGithubInstallerUrl();
+    if (githubUrl) return githubUrl;
   } catch {
     return null;
   }
