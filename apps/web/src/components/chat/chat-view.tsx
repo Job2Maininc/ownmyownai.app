@@ -398,7 +398,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         clearAssistantTurn();
       },
       onError: (msg) => {
-        setError(msg);
+        const outdatedHost =
+          msg.includes("déjà utilisé") || msg.includes("autre session de chat");
+        setError(
+          outdatedHost
+            ? "Host obsolète — installez la v0.2.1+ (onglet État → Mises à jour ou page Télécharger), puis redémarrez l'app."
+            : msg,
+        );
         setStreaming(false);
         setQueueHint(null);
         activeRequestId.current = null;
