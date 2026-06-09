@@ -399,6 +399,12 @@
           "markdownDescription": "Enables the cancel_background_job command without any pre-configured scope."
         },
         {
+          "description": "Enables the check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-for-updates",
+          "markdownDescription": "Enables the check_for_updates command without any pre-configured scope."
+        },
+        {
           "description": "Enables the check_ollama command without any pre-configured scope.",
           "type": "string",
           "const": "allow-check-ollama",
@@ -505,6 +511,12 @@
           "type": "string",
           "const": "allow-import-knowledge-base",
           "markdownDescription": "Enables the import_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install_host_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-host-update",
+          "markdownDescription": "Enables the install_host_update command without any pre-configured scope."
         },
         {
           "description": "Enables the link_context_drive command without any pre-configured scope.",
@@ -669,6 +681,12 @@
           "markdownDescription": "Denies the cancel_background_job command without any pre-configured scope."
         },
         {
+          "description": "Denies the check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-for-updates",
+          "markdownDescription": "Denies the check_for_updates command without any pre-configured scope."
+        },
+        {
           "description": "Denies the check_ollama command without any pre-configured scope.",
           "type": "string",
           "const": "deny-check-ollama",
@@ -775,6 +793,12 @@
           "type": "string",
           "const": "deny-import-knowledge-base",
           "markdownDescription": "Denies the import_knowledge_base command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install_host_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-host-update",
+          "markdownDescription": "Denies the install_host_update command without any pre-configured scope."
         },
         {
           "description": "Denies the link_context_drive command without any pre-configured scope.",
