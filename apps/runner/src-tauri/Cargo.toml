@@ -1,6 +1,6 @@
 [package]
 name = "ownmyownai-runner"
-version = "0.2.1"
+version = "0.2.2"
 description = "OwnMyOwnAI Windows Host"
 authors = ["OwnMyOwnAI"]
 edition = "2021"

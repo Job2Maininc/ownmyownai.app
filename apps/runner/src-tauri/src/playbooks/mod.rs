@@ -28,8 +28,10 @@ const BUILTIN: &[PlaybookDef] = &[PlaybookDef {
     description: "Explore un dossier lié et produit un résumé structuré en français.",
     requires_link: true,
     task_template: "Résume le dossier lié : {path}\n\
-        Commence par list_dir sur ce chemin, lis les fichiers importants avec read_file, \
-        puis fournis un résumé structuré en français (objectif, fichiers clés, thèmes, points d'attention).",
+        Commence par list_dir sur ce chemin, lis les fichiers importants avec read_file.\n\
+        Place le résumé final dans un bloc ```artifact (title: Résumé du dossier, type: markdown) \
+        avec objectif, fichiers clés, thèmes et points d'attention en français.\n\
+        Une courte phrase d'introduction peut rester hors du bloc.",
 }];
 
 pub fn list_playbooks() -> Vec<PlaybookSummary> {

@@ -15,7 +15,7 @@ Ollama (Host)  →  stream markdown  →  Relay WS  →  Web chat
 | Couche | Fichier | Rôle |
 |--------|---------|------|
 | Prompt système | `apps/runner/src-tauri/src/assistant_output.rs` | Enseigne au modèle le format ```artifact |
-| Injection | `relay.rs`, `local_chat.rs` | `prepend_output_format_hint()` à chaque chat |
+| Injection | `relay.rs`, `local_chat.rs`, `agent_loop.rs` | `ensure_output_format_hint()` (idempotent) sur chaque chat et agent |
 | Parseur | `apps/web/src/lib/artifacts.ts` | Extrait titres, types, contenu |
 | UI chat | `markdown-message.tsx` | Cartes cliquables `[[ARTIFACT:id]]` |
 | UI panneau | `artifacts-panel.tsx` | Aperçu, copie, téléchargement |

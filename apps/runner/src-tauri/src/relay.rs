@@ -979,7 +979,7 @@ async fn handle_chat_start_inner(
     }
 
     let mut prepend_system: Vec<serde_json::Value> = Vec::new();
-    prepend_system.push(crate::assistant_output::output_format_system_message());
+    prepend_system.push(crate::assistant_output::output_format_system_message()); // chat direct (hors agent loop)
     if crate::settings::user_memory_enabled() {
         if let Some(mem) = build_memory_context(&last_user) {
             prepend_system.push(serde_json::json!({ "role": "system", "content": mem }));
@@ -1128,7 +1128,6 @@ async fn handle_chat_with_local_tools(
     cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let mut agent_messages = messages.to_vec();
-    crate::assistant_output::prepend_output_format_hint(&mut agent_messages);
     let mut offset = agent_messages
         .iter()
         .take_while(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))

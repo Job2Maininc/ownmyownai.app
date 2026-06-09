@@ -18,6 +18,7 @@ pub async fn run_agent_loop(config: AgentConfig) -> Result<String, String> {
     let tools = agent_tool_definitions();
     let roots = collect_allowed_roots();
     let mut messages = config.messages;
+    crate::assistant_output::ensure_output_format_hint(&mut messages);
 
     for step in 1..=MAX_AGENT_STEPS {
         if (config.is_cancelled)() {

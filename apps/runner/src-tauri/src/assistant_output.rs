@@ -88,6 +88,18 @@ pub fn output_format_system_message() -> serde_json::Value {
     })
 }
 
+const OUTPUT_FORMAT_MARKER: &str = "Formats de sortie OwnMyOwnAI";
+
+pub fn has_output_format_hint(messages: &[serde_json::Value]) -> bool {
+    messages.iter().any(|m| {
+        m.get("role").and_then(|r| r.as_str()) == Some("system")
+            && m
+                .get("content")
+                .and_then(|c| c.as_str())
+                .is_some_and(|c| c.contains(OUTPUT_FORMAT_MARKER))
+    })
+}
+
 /// Insère le hint de format juste avant le premier message non-système existant,
 /// ou en tête si la conversation n'a que des messages utilisateur/assistant.
 pub fn prepend_output_format_hint(messages: &mut Vec<serde_json::Value>) {
@@ -96,6 +108,13 @@ pub fn prepend_output_format_hint(messages: &mut Vec<serde_json::Value>) {
         .position(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"))
         .unwrap_or(messages.len());
     messages.insert(insert_at, output_format_system_message());
+}
+
+/// Idempotent — safe to call from relay, local chat, and agent loop.
+pub fn ensure_output_format_hint(messages: &mut Vec<serde_json::Value>) {
+    if !has_output_format_hint(messages) {
+        prepend_output_format_hint(messages);
+    }
 }
 
 #[cfg(test)]
@@ -110,6 +129,15 @@ mod tests {
         assert!(hint.contains("---"));
         assert!(hint.contains("```diff"));
         assert!(hint.contains("Ne pas"));
+    }
+
+    #[test]
+    fn ensure_is_idempotent() {
+        let mut messages = vec![serde_json::json!({ "role": "user", "content": "hello" })];
+        ensure_output_format_hint(&mut messages);
+        ensure_output_format_hint(&mut messages);
+        assert_eq!(messages.len(), 2);
+        assert!(has_output_format_hint(&messages));
     }
 
     #[test]
