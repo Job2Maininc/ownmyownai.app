@@ -1,9 +1,12 @@
 use crate::context::ContextLimits;
+use crate::paths::{
+    default_data_dir, ensure_host_data_layout, host_data_layout_for, models_dir_for,
+    normalize_user_data_dir, settings_file_path as paths_settings_file_path,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-const APP_DIR: &str = "OwnMyOwnAI";
 const SETTINGS_FILE: &str = "settings.json";
 pub const FALLBACK_DEFAULT_MODEL: &str = "llama3.2:3b";
 pub const FALLBACK_VISION_MODEL: &str = "moondream:1.8b";
@@ -208,6 +211,9 @@ impl Default for ScheduledSyncSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostSettings {
+    /// Dossier racine choisi par l'utilisateur (modèles, contexte, historique, créations).
+    #[serde(default = "default_data_dir_string")]
+    pub data_dir: String,
     #[serde(default = "default_models_dir")]
     pub models_dir: String,
     #[serde(default = "default_selected_models")]
@@ -279,8 +285,13 @@ fn default_rag_chunk_tokens() -> u32 {
     400
 }
 
+fn default_data_dir_string() -> String {
+    default_data_dir().to_string_lossy().into_owned()
+}
+
 fn default_models_dir() -> String {
-    default_ollama_models_path()
+    default_data_dir()
+        .join("models")
         .to_string_lossy()
         .into_owned()
 }
@@ -296,6 +307,7 @@ fn default_model_id() -> String {
 impl Default for HostSettings {
     fn default() -> Self {
         Self {
+            data_dir: default_data_dir_string(),
             models_dir: default_models_dir(),
             selected_models: default_selected_models(),
             default_model: default_model_id(),
@@ -420,9 +432,7 @@ pub fn default_ollama_models_path() -> PathBuf {
 }
 
 fn settings_file_path() -> Result<PathBuf, String> {
-    dirs::data_local_dir()
-        .map(|dir| dir.join(APP_DIR).join(SETTINGS_FILE))
-        .ok_or_else(|| "Impossible de résoudre le dossier de données local".into())
+    Ok(paths_settings_file_path())
 }
 
 pub fn get_settings() -> Result<HostSettings, String> {
@@ -449,22 +459,47 @@ pub fn save_settings(settings: &HostSettings) -> Result<(), String> {
 
     validate_scheduled_sync(&settings.scheduled_sync)?;
 
-    let models_path = PathBuf::from(&settings.models_dir);
-    std::fs::create_dir_all(&models_path).map_err(|e| {
-        format!(
-            "Impossible de créer le dossier des modèles ({}): {e}",
-            models_path.display()
-        )
-    })?;
+    let mut normalized = settings.clone();
+    let data_path = if normalized.data_dir.trim().is_empty() {
+        default_data_dir()
+    } else {
+        normalize_user_data_dir(Path::new(normalized.data_dir.trim()))
+    };
+    ensure_host_data_layout(&data_path)?;
+    normalized.data_dir = data_path.to_string_lossy().into_owned();
+    normalized.models_dir = data_path
+        .join("models")
+        .to_string_lossy()
+        .into_owned();
 
     let path = settings_file_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&normalized).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn save_data_dir_only(data_dir: &str) -> Result<HostSettings, String> {
+    let mut settings = get_settings().unwrap_or_default();
+    let data_path = if data_dir.trim().is_empty() {
+        default_data_dir()
+    } else {
+        normalize_user_data_dir(Path::new(data_dir.trim()))
+    };
+    ensure_host_data_layout(&data_path)?;
+    settings.data_dir = data_path.to_string_lossy().into_owned();
+    settings.models_dir = models_dir_for(&data_path).to_string_lossy().into_owned();
+
+    let path = settings_file_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let json = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(settings)
 }
 
 pub fn get_active_project_id() -> Result<Option<String>, String> {
@@ -483,8 +518,60 @@ pub fn resolved_default_model() -> String {
         .unwrap_or_else(|_| FALLBACK_DEFAULT_MODEL.to_string())
 }
 
-pub fn resolved_models_dir() -> PathBuf {
+pub fn resolved_data_dir() -> PathBuf {
     get_settings()
-        .map(|s| PathBuf::from(s.models_dir))
-        .unwrap_or_else(|_| default_ollama_models_path())
+        .ok()
+        .and_then(|s| {
+            let trimmed = s.data_dir.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(trimmed))
+            }
+        })
+        .unwrap_or_else(default_data_dir)
+}
+
+pub fn resolved_models_dir() -> PathBuf {
+    models_dir_for(&resolved_data_dir())
+}
+
+pub fn host_data_layout() -> crate::paths::HostDataLayout {
+    host_data_layout_for(&resolved_data_dir())
+}
+
+pub fn resolved_context_root_dir() -> PathBuf {
+    crate::paths::context_root_dir_for(&resolved_data_dir())
+}
+
+pub fn resolved_context_db_path() -> PathBuf {
+    crate::paths::context_db_path_for(&resolved_data_dir())
+}
+
+pub fn resolved_context_encrypted_db_path() -> PathBuf {
+    crate::paths::context_encrypted_db_path_for(&resolved_data_dir())
+}
+
+pub fn resolved_history_db_path() -> PathBuf {
+    crate::paths::history_db_path_for(&resolved_data_dir())
+}
+
+pub fn resolved_creatives_dir() -> PathBuf {
+    crate::paths::creatives_dir_for(&resolved_data_dir())
+}
+
+pub fn resolved_activity_dir() -> PathBuf {
+    crate::paths::activity_dir_for(&resolved_data_dir())
+}
+
+pub fn resolved_cache_dir() -> PathBuf {
+    crate::paths::cache_dir_for(&resolved_data_dir())
+}
+
+pub fn resolved_cloud_keys_path() -> PathBuf {
+    crate::paths::cloud_keys_path_for(&resolved_data_dir())
+}
+
+pub fn resolved_sync_schedule_log_path() -> PathBuf {
+    crate::paths::sync_schedule_log_path_for(&resolved_data_dir())
 }

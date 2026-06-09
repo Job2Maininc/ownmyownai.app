@@ -45,10 +45,7 @@ fn should_run_now(schedule: &CronSchedule) -> bool {
 }
 
 fn report_file_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(APP_DIR)
-        .join(REPORT_FILE)
+    crate::settings::resolved_sync_schedule_log_path()
 }
 
 #[derive(Debug, Serialize)]

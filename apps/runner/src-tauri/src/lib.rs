@@ -1,8 +1,11 @@
+mod activity;
 mod agent;
 mod assistant_output;
 mod chat_queue;
 mod cloud_keys;
 mod context;
+mod creatives;
+mod paths;
 mod conversation_summary;
 mod mcp;
 mod dpapi;
@@ -52,9 +55,11 @@ use ollama::{
 };
 use providers::{get_cloud_providers_status, list_available_models, CloudProviderStatus};
 use relay::{start_background_services, stop_background_services};
+use paths::default_data_dir;
 use settings::{
-    default_ollama_models_path, get_active_project_id, get_settings, resolved_context_limits,
-    save_settings, set_user_memory_enabled, HostSettings,
+    default_ollama_models_path, get_active_project_id, get_settings, host_data_layout,
+    resolved_context_limits, save_data_dir_only, save_settings, set_user_memory_enabled,
+    HostSettings,
 };
 use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemoryState};
 use jobs::{cancel_job, list_jobs, submit_job, JobKind, JobSnapshot};
@@ -96,6 +101,21 @@ fn save_host_settings_cmd(settings: HostSettings) -> Result<(), String> {
 #[tauri::command(rename = "get_default_models_dir")]
 fn get_default_models_dir_cmd() -> String {
     default_ollama_models_path().to_string_lossy().into_owned()
+}
+
+#[tauri::command(rename = "get_default_data_dir")]
+fn get_default_data_dir_cmd() -> String {
+    default_data_dir().to_string_lossy().into_owned()
+}
+
+#[tauri::command(rename = "get_host_data_layout")]
+fn get_host_data_layout_cmd() -> crate::paths::HostDataLayout {
+    host_data_layout()
+}
+
+#[tauri::command(rename = "save_host_data_dir")]
+fn save_host_data_dir_cmd(data_dir: String) -> Result<HostSettings, String> {
+    save_data_dir_only(&data_dir)
 }
 
 #[tauri::command(rename = "get_credentials")]
@@ -538,6 +558,9 @@ pub fn run() {
             get_host_settings_cmd,
             save_host_settings_cmd,
             get_default_models_dir_cmd,
+            get_default_data_dir_cmd,
+            get_host_data_layout_cmd,
+            save_host_data_dir_cmd,
             get_credentials_cmd,
             complete_pairing_cmd,
             start_background_services_cmd,

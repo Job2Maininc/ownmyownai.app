@@ -32,6 +32,8 @@ use crate::providers::{
 };
 use crate::mcp::{call_tool as call_mcp_tool, list_all_tools, list_servers};
 use crate::playbooks::{self, PlaybookRunParams};
+use crate::activity::log_client_activity;
+use crate::creatives::persist_artifacts_from_messages;
 use crate::settings::set_user_memory_enabled;
 use crate::user_memory::{add_fact, build_memory_context, delete_fact, memory_state};
 use crate::process::{
@@ -815,16 +817,31 @@ async fn execute_chat_start(
     write: &SharedRelayWrite,
 ) -> Result<(), String> {
     session_started();
+    log_client_activity(
+        "chat.session_started",
+        serde_json::json!({ "requestId": envelope.requestId }),
+    );
     let _ = send_relay_host_status(write).await;
 
     let cancel = register_chat_cancel(&envelope.requestId);
     let result = handle_chat_start_inner(envelope, write, cancel).await;
     if let Err(ref message) = result {
         let _ = send_chat_error(write, envelope, message).await;
+        log_client_activity(
+            "chat.error",
+            serde_json::json!({
+                "requestId": envelope.requestId,
+                "message": message,
+            }),
+        );
     }
 
     unregister_chat_cancel(&envelope.requestId);
     session_ended();
+    log_client_activity(
+        "chat.session_ended",
+        serde_json::json!({ "requestId": envelope.requestId }),
+    );
     Ok(())
 }
 
@@ -1403,6 +1420,15 @@ fn persist_chat_turn(envelope: &WsEnvelope, assistant_content: &str) -> Result<(
         model,
         &context_ids,
         &pairs,
+    );
+    let _ = persist_artifacts_from_messages(Some(thread_id), &pairs);
+    log_client_activity(
+        "chat.saved",
+        serde_json::json!({
+            "threadId": thread_id,
+            "model": model,
+            "messageCount": pairs.len(),
+        }),
     );
     Ok(())
 }
@@ -2491,6 +2517,15 @@ async fn handle_history_save(
 
     match save_thread(thread_id, title, model, &context_ids, &pairs) {
         Ok(id) => {
+            let _ = persist_artifacts_from_messages(Some(&id), &pairs);
+            log_client_activity(
+                "history.saved",
+                serde_json::json!({
+                    "threadId": id,
+                    "title": title,
+                    "messageCount": pairs.len(),
+                }),
+            );
             send_ws_response(
                 write,
                 "history.saved",

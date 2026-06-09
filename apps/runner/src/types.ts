@@ -10,7 +10,16 @@ export interface StoredCredentials {
   supabase_url?: string;
 }
 
+export interface HostDataLayout {
+  dataDir: string;
+  modelsDir: string;
+  contextDir: string;
+  creativesDir: string;
+  activityDir: string;
+}
+
 export interface HostSettings {
+  dataDir?: string;
   modelsDir: string;
   selectedModels: string[];
   defaultModel: string;

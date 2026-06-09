@@ -220,13 +220,18 @@ fn init_db_schema(conn: &Connection) -> Result<(), String> {
           last_sync_error TEXT,
           FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases(id) ON DELETE CASCADE
         );
+        ",
+    )
+    .map_err(|e| e.to_string())?;
+    migrate_schema_v2(conn)?;
+    conn.execute_batch(
+        "
         CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_link_relative
           ON documents(link_id, relative_path)
           WHERE link_id IS NOT NULL AND relative_path IS NOT NULL;
         ",
     )
     .map_err(|e| e.to_string())?;
-    migrate_schema_v2(conn)?;
     migrate_schema_v3_projects(conn)?;
     migrate_schema_v4_codebase_index(conn)?;
     migrate_schema_v4_kb_system_instruction(conn)?;

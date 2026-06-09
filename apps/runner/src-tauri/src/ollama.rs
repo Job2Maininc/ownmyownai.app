@@ -678,10 +678,7 @@ async fn install_ollama(app: Option<&AppHandle>) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        let cache_dir = dirs::data_local_dir()
-            .ok_or_else(|| "Impossible d'accéder au dossier AppData".to_string())?
-            .join("OwnMyOwnAI")
-            .join("cache");
+        let cache_dir = crate::settings::resolved_cache_dir();
 
         std::fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
         let setup_path = cache_dir.join("OllamaSetup.exe");

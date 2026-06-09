@@ -4,11 +4,12 @@ import { listen } from "@tauri-apps/api/event";
 import Dashboard from "./components/Dashboard";
 import InstallProgress from "./components/InstallProgress";
 import ModelSetup from "./components/ModelSetup";
+import StorageSetup from "./components/StorageSetup";
 import { formatInvokeError } from "./lib/tauri-errors";
 import { ensureOllamaRunning } from "./lib/ollama-setup";
 import type { HostSettings, OllamaStatus, SetupProgress, StoredCredentials } from "./types";
 
-type Step = "welcome" | "models" | "ollama" | "pairing" | "online";
+type Step = "welcome" | "storage" | "models" | "ollama" | "pairing" | "online";
 
 function modelIsPresent(installed: string[], modelId: string): boolean {
   const base = modelId.split(":")[0];
@@ -152,14 +153,14 @@ export default function App() {
     setStep("pairing");
   }
 
-  const stepIndex = { welcome: 0, models: 1, ollama: 2, pairing: 3, online: 4 }[step];
+  const stepIndex = { welcome: 0, storage: 1, models: 2, ollama: 3, pairing: 4, online: 5 }[step];
   const showSteps = step !== "online";
 
   return (
     <main className={`app ${step === "online" ? "app--dashboard" : ""}`}>
       {showSteps && (
         <div className="steps">
-          {[0, 1, 2, 3, 4].map((i) => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i} className={`step ${i <= stepIndex ? "active" : ""}`} />
           ))}
         </div>
@@ -170,8 +171,8 @@ export default function App() {
           <>
             <h1>OwnMyOwnAI Host</h1>
             <p className="muted">
-              Installez Ollama, choisissez vos modèles IA et liez ce PC à votre compte.
-              Vous pourrez suivre la progression des téléchargements étape par étape.
+              Choisissez où stocker vos données, installez Ollama, sélectionnez vos modèles
+              IA et liez ce PC à votre compte.
             </p>
             <button
               type="button"
@@ -179,12 +180,22 @@ export default function App() {
               style={{ width: "100%", marginTop: 16 }}
               onClick={() => {
                 setError(null);
-                setStep("models");
+                setStep("storage");
               }}
             >
               Commencer
             </button>
           </>
+        )}
+
+        {step === "storage" && (
+          <StorageSetup
+            error={error}
+            onContinue={() => {
+              setError(null);
+              setStep("models");
+            }}
+          />
         )}
 
         {step === "models" && (
@@ -257,7 +268,7 @@ export default function App() {
 
         {step === "online" && <Dashboard appUrl={appUrl} onUnpaired={handleUnpaired} />}
 
-        {error && step !== "online" && step !== "models" && (
+        {error && step !== "online" && step !== "models" && step !== "storage" && (
           <p className="error-banner">{error}</p>
         )}
       </div>

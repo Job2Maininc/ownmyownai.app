@@ -33,9 +33,7 @@ impl CloudProviderId {
 }
 
 fn cloud_keys_file_path() -> Result<PathBuf, String> {
-    dirs::data_local_dir()
-        .map(|dir| dir.join(APP_DIR).join(CLOUD_KEYS_FILE))
-        .ok_or_else(|| "Impossible de résoudre le dossier de données local".into())
+    Ok(crate::settings::resolved_cloud_keys_path())
 }
 
 fn read_cloud_keys_file() -> Result<serde_json::Map<String, serde_json::Value>, String> {

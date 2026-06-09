@@ -47,27 +47,16 @@ pub use watcher::start_context_watcher;
 
 use std::path::PathBuf;
 
-const APP_DIR: &str = "OwnMyOwnAI";
-
 pub fn context_root_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(APP_DIR)
-        .join("context")
+    crate::settings::resolved_context_root_dir()
 }
 
 pub fn context_db_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(APP_DIR)
-        .join("context.db")
+    crate::settings::resolved_context_db_path()
 }
 
 pub fn context_encrypted_db_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(APP_DIR)
-        .join("context.db.enc")
+    crate::settings::resolved_context_encrypted_db_path()
 }
 
 pub fn init_context_db() -> Result<(), String> {

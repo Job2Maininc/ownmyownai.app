@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   RECOMMENDED_MODELS,
   compatibilityLabel,
@@ -29,12 +28,13 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const loadSettings = useCallback(async () => {
     try {
       const settings = await invoke<HostSettings>("get_host_settings");
-      setModelsDir(settings.modelsDir);
+      const layout = await invoke<{ modelsDir: string }>("get_host_data_layout");
+      setModelsDir(layout.modelsDir || settings.modelsDir);
       setSelectedModels(settings.selectedModels);
       setDefaultModel(settings.defaultModel);
     } catch {
-      const fallback = await invoke<string>("get_default_models_dir");
-      setModelsDir(fallback);
+      const layout = await invoke<{ modelsDir: string }>("get_host_data_layout");
+      setModelsDir(layout.modelsDir);
     }
   }, []);
 
@@ -72,18 +72,6 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
       setAdviceModel(id);
       return [...prev, id];
     });
-  }
-
-  async function browseModelsDir() {
-    const picked = await open({
-      directory: true,
-      multiple: false,
-      title: "Choisir le dossier des modèles IA",
-      defaultPath: modelsDir || undefined,
-    });
-    if (typeof picked === "string") {
-      setModelsDir(picked);
-    }
   }
 
   async function handleContinue() {
@@ -134,22 +122,10 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         </p>
       )}
 
-      <label className="field-label" style={{ marginTop: 16 }}>
-        Dossier des modèles
-      </label>
-      <div className="path-row">
-        <input
-          value={modelsDir}
-          onChange={(e) => setModelsDir(e.target.value)}
-          placeholder="C:\Users\…\.ollama\models"
-        />
-        <button type="button" className="btn-secondary" onClick={browseModelsDir}>
-          Parcourir…
-        </button>
-      </div>
-      <p className="muted path-hint">
-        Les modèles peuvent occuper plusieurs Go. Choisissez un disque avec assez
-        d&apos;espace libre.
+      <p className="muted path-hint" style={{ marginTop: 12 }}>
+        Modèles IA : <code className="inline-code">{modelsDir || "…"}</code>
+        <br />
+        Défini à l&apos;étape précédente dans votre dossier de données.
       </p>
 
       <label className="filter-toggle">

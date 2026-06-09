@@ -40,10 +40,7 @@ pub struct ChatThreadSummary {
 }
 
 fn history_db_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("OwnMyOwnAI")
-        .join("chat_history.db")
+    crate::settings::resolved_history_db_path()
 }
 
 fn with_db<F, T>(f: F) -> Result<T, String>
