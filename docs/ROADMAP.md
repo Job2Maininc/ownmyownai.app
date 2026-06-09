@@ -15,7 +15,7 @@ OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 
 | Fonctionnalité | Statut |
 |----------------|--------|
-| Multi-session (`allowMultiSession` dans `settings.json`) | Feature flag runner |
+| Sessions simultanées + file d'attente FIFO (`chat_queue.rs`) | Toujours actif — plusieurs PC/onglets, une génération Ollama à la fois |
 | Routage multi-modèle par tâche (`modelRouting` dans `settings.json`) | Petit modèle résumé, gros rédaction — intent + fallback |
 | Historique conversations | Host SQLite + sync WS ; métadonnées locales en secours |
 | Branches de conversation | Fork depuis message N ; arbre local (Host + localStorage) |
@@ -29,4 +29,4 @@ OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 - Historique complet runner (SQLite optionnel)
 - Extraction PDF robuste (crate dédiée ou OCR)
 - Tests E2E pairing avec mock Supabase
-- Session partagée multi-onglets (Web Locks API)
+- ~~Session partagée multi-onglets (Web Locks API)~~ — remplacé par file d'attente Host + onglets indépendants
