@@ -1,14 +1,12 @@
+import type { RagCitation } from "@ownmyownai/protocol";
+
 export type TabSessionRole = "active" | "passive";
 
 export interface ChatTabSnapshotMessage {
   role: "user" | "assistant";
   content: string;
-  citations?: Array<{
-    documentId: string;
-    filename: string;
-    chunkIndex: number;
-    preview: string;
-  }>;
+  thinking?: string;
+  citations?: RagCitation[];
 }
 
 export interface ChatTabSnapshot {

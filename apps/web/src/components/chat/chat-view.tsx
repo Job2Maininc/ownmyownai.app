@@ -112,7 +112,10 @@ function loadLegacySessionMessages(hostId: string): UiMessage[] {
 
 function toUiMessages(messages: ChatMessage[]): UiMessage[] {
   return messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
+    .filter(
+      (m): m is ChatMessage & { role: "user" | "assistant" } =>
+        m.role === "user" || m.role === "assistant",
+    )
     .map((m) => ({ role: m.role, content: m.content }));
 }
 

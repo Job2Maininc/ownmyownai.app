@@ -18,6 +18,8 @@ Edge Functions déployées :
 - `runner-heartbeat`
 - `mint-relay-token` (JWT requis)
 - `runner-mint-relay-token`
+- `create-conversation-share` (JWT requis — partage lecture seule)
+- `get-conversation-share` (public, token dans le body)
 
 ### Secrets Supabase à configurer (Dashboard → Edge Functions → Secrets)
 
