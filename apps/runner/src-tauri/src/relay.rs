@@ -40,6 +40,7 @@ use crate::process::{
 use crate::settings::{resolved_context_limits, resolved_default_model, air_gapped_enabled};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::time::{sleep, Duration, Interval};
@@ -54,9 +55,38 @@ type SharedRelayWrite = Arc<tokio::sync::Mutex<RelayWrite>>;
 
 static SERVICES_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVICES_STOP: AtomicBool = AtomicBool::new(false);
-static CHAT_CANCEL: AtomicBool = AtomicBool::new(false);
-static ACTIVE_CHAT_REQUEST: Mutex<Option<String>> = Mutex::new(None);
+static CHAT_CANCEL_FLAGS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
 static RELAY_WRITE: OnceLock<Mutex<Option<SharedRelayWrite>>> = OnceLock::new();
+
+fn chat_cancel_flags() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+    CHAT_CANCEL_FLAGS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_chat_cancel(request_id: &Option<String>) -> Arc<AtomicBool> {
+    let flag = Arc::new(AtomicBool::new(false));
+    if let Some(id) = request_id.as_ref().filter(|s| !s.is_empty()) {
+        if let Ok(mut map) = chat_cancel_flags().lock() {
+            map.insert(id.clone(), flag.clone());
+        }
+    }
+    flag
+}
+
+fn unregister_chat_cancel(request_id: &Option<String>) {
+    if let Some(id) = request_id.as_ref().filter(|s| !s.is_empty()) {
+        if let Ok(mut map) = chat_cancel_flags().lock() {
+            map.remove(id);
+        }
+    }
+}
+
+fn host_reports_busy() -> bool {
+    if crate::settings::allow_multi_session() {
+        crate::jobs::has_active_jobs()
+    } else {
+        host_status::is_session_active() || crate::jobs::has_active_jobs()
+    }
+}
 
 fn relay_write_slot() -> &'static Mutex<Option<SharedRelayWrite>> {
     RELAY_WRITE.get_or_init(|| Mutex::new(None))
@@ -235,7 +265,7 @@ async fn send_heartbeat(
         supabase_url.trim_end_matches('/')
     );
 
-    let status = if host_status::is_session_active() || crate::jobs::has_active_jobs() {
+    let status = if host_reports_busy() {
         "busy"
     } else {
         "online"
@@ -266,7 +296,7 @@ async fn send_heartbeat(
 }
 
 fn relay_host_status() -> &'static str {
-    if host_status::is_session_active() || crate::jobs::has_active_jobs() {
+    if host_reports_busy() {
         "busy"
     } else {
         "online"
@@ -276,7 +306,10 @@ fn relay_host_status() -> &'static str {
 async fn send_relay_host_status(write: &SharedRelayWrite) -> Result<(), String> {
     let envelope = WsEnvelope {
         msg_type: "host.status".into(),
-        payload: serde_json::json!({ "status": relay_host_status() }),
+        payload: serde_json::json!({
+            "status": relay_host_status(),
+            "allowMultiSession": crate::settings::allow_multi_session(),
+        }),
         requestId: None,
     };
     write
@@ -598,17 +631,18 @@ async fn run_relay_loop(
 }
 
 fn handle_chat_cancel(envelope: &WsEnvelope) {
-    let active = ACTIVE_CHAT_REQUEST
-        .lock()
-        .ok()
-        .and_then(|g| g.clone());
-    let matches = match (&envelope.requestId, active) {
-        (Some(cancel_id), Some(active_id)) => cancel_id == &active_id,
-        (None, Some(_)) => true,
-        _ => false,
-    };
-    if matches {
-        CHAT_CANCEL.store(true, Ordering::SeqCst);
+    if let Some(id) = envelope.requestId.as_ref().filter(|s| !s.is_empty()) {
+        if let Ok(map) = chat_cancel_flags().lock() {
+            if let Some(flag) = map.get(id) {
+                flag.store(true, Ordering::SeqCst);
+            }
+        }
+        return;
+    }
+    if let Ok(map) = chat_cancel_flags().lock() {
+        for flag in map.values() {
+            flag.store(true, Ordering::SeqCst);
+        }
     }
 }
 
@@ -735,27 +769,20 @@ async fn handle_chat_start(
         return send_chat_error(
             write,
             envelope,
-            "Ce PC est déjà utilisé par un autre onglet ou une autre session de chat.",
+            "Ce PC est déjà utilisé par une autre session. Activez « Sessions simultanées » dans l'app Host (onglet État), ou attendez la fin de la génération en cours.",
         )
         .await;
     }
 
     let _ = send_relay_host_status(write).await;
 
-    CHAT_CANCEL.store(false, Ordering::SeqCst);
-    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
-        *active = envelope.requestId.clone();
-    }
-
-    let result = handle_chat_start_inner(envelope, write).await;
+    let cancel = register_chat_cancel(&envelope.requestId);
+    let result = handle_chat_start_inner(envelope, write, cancel).await;
     if let Err(ref message) = result {
         let _ = send_chat_error(write, envelope, message).await;
     }
 
-    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
-        *active = None;
-    }
-    CHAT_CANCEL.store(false, Ordering::SeqCst);
+    unregister_chat_cancel(&envelope.requestId);
     session_ended();
     Ok(())
 }
@@ -763,6 +790,7 @@ async fn handle_chat_start(
 async fn handle_chat_start_inner(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
+    cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let payload = &envelope.payload;
     let messages = payload
@@ -904,6 +932,7 @@ async fn handle_chat_start_inner(
             &context_ids,
             &messages,
             project_id.as_deref(),
+            cancel,
         )
         .await;
     }
@@ -995,15 +1024,15 @@ async fn handle_chat_start_inner(
     }
 
     if is_cloud {
-        stream_cloud_chat(envelope, write, &model, &messages).await
+        stream_cloud_chat(envelope, write, &model, &messages, cancel).await
     } else {
         crate::local_metrics::begin_request(&model);
         if thinking_mode {
             let response = stream_chat_thinking(&model, &messages).await?;
-            stream_thinking_chat(envelope, write, response, &mut String::new()).await
+            stream_thinking_chat(envelope, write, response, &mut String::new(), &cancel).await
         } else {
             let response = stream_chat(&model, &messages).await?;
-            stream_openai_chat(envelope, write, response, &mut String::new()).await
+            stream_openai_chat(envelope, write, response, &mut String::new(), &cancel).await
         }
     }
 }
@@ -1013,12 +1042,14 @@ async fn stream_cloud_chat(
     write: &SharedRelayWrite,
     model: &str,
     messages: &[serde_json::Value],
+    cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let model_owned = model.to_string();
     let messages_owned = messages.to_vec();
+    let cancel_task = cancel.clone();
     let stream_task = tokio::spawn(async move {
-        relay_chat_stream(&model_owned, &messages_owned, &CHAT_CANCEL, |delta| {
+        relay_chat_stream(&model_owned, &messages_owned, &cancel_task, |delta| {
             let _ = tx.send(delta.to_string());
             Ok(())
         })
@@ -1027,7 +1058,7 @@ async fn stream_cloud_chat(
 
     let mut assistant_content = String::new();
     while let Some(delta) = rx.recv().await {
-        if CHAT_CANCEL.load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
             break;
         }
         assistant_content.push_str(&delta);
@@ -1052,6 +1083,7 @@ async fn handle_chat_with_local_tools(
     context_ids: &[String],
     messages: &[serde_json::Value],
     project_id: Option<&str>,
+    cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let mut agent_messages = messages.to_vec();
     let mut offset = 0usize;
@@ -1088,9 +1120,10 @@ async fn handle_chat_with_local_tools(
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let write_fwd = write.clone();
     let request_id = envelope.requestId.clone();
+    let cancel_fwd = cancel.clone();
     let forward = tokio::spawn(async move {
         while let Some(delta) = rx.recv().await {
-            if CHAT_CANCEL.load(Ordering::SeqCst) {
+            if cancel_fwd.load(Ordering::SeqCst) {
                 break;
             }
             let _ = send_chat_delta(&write_fwd, &request_id, &delta).await;
@@ -1119,21 +1152,22 @@ async fn handle_chat_with_local_tools(
         });
     });
 
-    let cancel = Arc::new(|| CHAT_CANCEL.load(Ordering::SeqCst));
+    let cancel_agent = cancel.clone();
+    let is_cancelled = Arc::new(move || cancel_agent.load(Ordering::SeqCst));
 
     let result = run_agent_loop(AgentConfig {
         model: model.to_string(),
         messages: agent_messages,
         context_ids: context_ids.to_vec(),
         on_step,
-        is_cancelled: cancel,
+        is_cancelled,
     })
     .await;
 
     drop(tx);
     let _ = forward.await;
 
-    if CHAT_CANCEL.load(Ordering::SeqCst) {
+    if cancel.load(Ordering::SeqCst) {
         return send_chat_done(write, &envelope.requestId).await;
     }
 
@@ -1153,11 +1187,12 @@ async fn stream_openai_chat(
     write: &SharedRelayWrite,
     response: reqwest::Response,
     assistant_content: &mut String,
+    cancel: &AtomicBool,
 ) -> Result<(), String> {
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
-        if CHAT_CANCEL.load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
             return finish_chat_with_persist(envelope, write, assistant_content).await;
         }
 
@@ -1165,7 +1200,7 @@ async fn stream_openai_chat(
         let text = String::from_utf8_lossy(&chunk);
 
         for line in text.lines() {
-            if CHAT_CANCEL.load(Ordering::SeqCst) {
+            if cancel.load(Ordering::SeqCst) {
                 return finish_chat_with_persist(envelope, write, assistant_content).await;
             }
 
@@ -1194,12 +1229,13 @@ async fn stream_thinking_chat(
     write: &SharedRelayWrite,
     response: reqwest::Response,
     assistant_content: &mut String,
+    cancel: &AtomicBool,
 ) -> Result<(), String> {
     let mut stream = response.bytes_stream();
     let mut line_buffer = String::new();
 
     while let Some(chunk) = stream.next().await {
-        if CHAT_CANCEL.load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
             return finish_chat_with_persist(envelope, write, assistant_content).await;
         }
 
@@ -1213,7 +1249,7 @@ async fn stream_thinking_chat(
                 continue;
             }
 
-            if CHAT_CANCEL.load(Ordering::SeqCst) {
+            if cancel.load(Ordering::SeqCst) {
                 return finish_chat_with_persist(envelope, write, assistant_content).await;
             }
 
@@ -1850,28 +1886,22 @@ async fn handle_playbook_run(
         return send_chat_error(
             write,
             envelope,
-            "Ce PC est déjà utilisé par un autre onglet ou une autre session de chat.",
+            "Ce PC est déjà utilisé par une autre session. Activez « Sessions simultanées » dans l'app Host (onglet État), ou attendez la fin de la génération en cours.",
         )
         .await;
     }
 
     let _ = send_relay_host_status(write).await;
-    CHAT_CANCEL.store(false, Ordering::SeqCst);
-    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
-        *active = envelope.requestId.clone();
-    }
+    let cancel = register_chat_cancel(&envelope.requestId);
 
-    let result = handle_playbook_run_inner(envelope, write).await;
+    let result = handle_playbook_run_inner(envelope, write, cancel).await;
     if let Err(ref message) = result {
         let _ = send_chat_error(write, envelope, message).await;
     } else {
         let _ = send_chat_done(write, &envelope.requestId).await;
     }
 
-    if let Ok(mut active) = ACTIVE_CHAT_REQUEST.lock() {
-        *active = None;
-    }
-    CHAT_CANCEL.store(false, Ordering::SeqCst);
+    unregister_chat_cancel(&envelope.requestId);
     session_ended();
     Ok(())
 }
@@ -1879,6 +1909,7 @@ async fn handle_playbook_run(
 async fn handle_playbook_run_inner(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
+    cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let _ = send_chat_delta(
         write,
@@ -1951,7 +1982,8 @@ async fn handle_playbook_run_inner(
         }
     });
 
-    let is_cancelled = Arc::new(|| CHAT_CANCEL.load(Ordering::SeqCst));
+    let cancel_playbook = cancel.clone();
+    let is_cancelled = Arc::new(move || cancel_playbook.load(Ordering::SeqCst));
     let run_result = playbooks::run_playbook(
         PlaybookRunParams {
             playbook_id: playbook_id.to_string(),

@@ -152,6 +152,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
   const [statusClock, setStatusClock] = useState(0);
   const [tabRole, setTabRole] = useState<TabSessionRole>("active");
+  const [allowMultiSession, setAllowMultiSession] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const relayRef = useRef<RelayClient | null>(null);
   const tabSessionRef = useRef<TabSessionManager | null>(null);
@@ -349,9 +350,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     return () => window.clearInterval(id);
   }, []);
 
-  const isActiveTab = tabRole === "active";
+  const isActiveTab = allowMultiSession || tabRole === "active";
 
   useEffect(() => {
+    if (allowMultiSession) {
+      setTabRole("active");
+      return;
+    }
     const manager = new TabSessionManager(hostId, {
       onRoleChange: (role) => {
         setTabRole(role);
@@ -373,7 +378,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       manager.dispose();
       tabSessionRef.current = null;
     };
-  }, [hostId]);
+  }, [hostId, allowMultiSession]);
 
   useEffect(() => {
     if (!isActiveTab) return;
@@ -404,7 +409,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           );
         }
       },
-      onHostStatus: (status) => setHostStatus(status),
+      onHostStatus: (status, meta) => {
+        setHostStatus(status);
+        if (meta?.allowMultiSession !== undefined) {
+          setAllowMultiSession(meta.allowMultiSession);
+        }
+      },
       onCitations: attachCitations,
       onThinkingDelta: (thinking) => {
         thinkingBuffer.current += thinking;
@@ -579,7 +589,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   );
 
   const relayHostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
-  const hostBusy = effectiveHostStatus === "busy";
+  const hostBusy = effectiveHostStatus === "busy" && !allowMultiSession;
   const hostOffline = effectiveHostStatus === "offline";
   const hostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
   const canSend =
@@ -1098,7 +1108,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           )}
           {hostBusy && !streaming && (
             <p className="mb-2 text-sm text-amber-400">
-              Ce PC est utilisé par une autre session. Attendez ou fermez l&apos;autre onglet.
+              Ce PC est utilisé par une autre session. Attendez la fin de la génération, ou activez
+              « Sessions simultanées » dans l&apos;app Host (onglet État).
             </p>
           )}
           {inputMentionHint && (

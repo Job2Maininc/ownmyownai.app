@@ -172,6 +172,8 @@ export type ChatCitationsPayload = z.infer<typeof ChatCitationsPayloadSchema>;
 
 export const HostStatusPayloadSchema = z.object({
   status: HostStatusSchema,
+  /** Si true, plusieurs clients (PC ou onglets) peuvent chatter en parallèle. */
+  allowMultiSession: z.boolean().optional(),
 });
 export type HostStatusPayload = z.infer<typeof HostStatusPayloadSchema>;
 

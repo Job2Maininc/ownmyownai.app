@@ -97,6 +97,8 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [openError, setOpenError] = useState<string | null>(null);
   const [airGapped, setAirGapped] = useState(false);
   const [togglingAirGapped, setTogglingAirGapped] = useState(false);
+  const [allowMultiSession, setAllowMultiSession] = useState(false);
+  const [togglingMultiSession, setTogglingMultiSession] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -114,7 +116,10 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
 
   useEffect(() => {
     invoke<HostSettings>("get_host_settings")
-      .then((s) => setAirGapped(!!s.airGapped))
+      .then((s) => {
+        setAirGapped(!!s.airGapped);
+        setAllowMultiSession(!!s.allowMultiSession);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -200,6 +205,23 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
       setOpenError(String(e));
     } finally {
       setTogglingAirGapped(false);
+    }
+  }
+
+  async function handleMultiSessionToggle(enabled: boolean) {
+    setTogglingMultiSession(true);
+    setOpenError(null);
+    try {
+      const settings = await invoke<HostSettings>("get_host_settings");
+      await invoke("save_host_settings", {
+        settings: { ...settings, allowMultiSession: enabled },
+      });
+      setAllowMultiSession(enabled);
+      await refresh();
+    } catch (e) {
+      setOpenError(String(e));
+    } finally {
+      setTogglingMultiSession(false);
     }
   }
 
@@ -306,6 +328,26 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
               : formatRelativeTime(status?.lastHeartbeatAt ?? null)
           }
         />
+      </section>
+
+      <section className="panel">
+        <h2>Accès simultané</h2>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={allowMultiSession}
+            disabled={togglingMultiSession || airGappedMode}
+            onChange={(e) => void handleMultiSessionToggle(e.target.checked)}
+          />
+          <span>Sessions simultanées (plusieurs PC ou onglets)</span>
+        </label>
+        <p className="panel__meta muted">
+          {airGappedMode
+            ? "Indisponible en mode air-gapped."
+            : allowMultiSession
+              ? "Plusieurs navigateurs peuvent envoyer des messages en même temps. Les réponses peuvent se mélanger si Ollama est saturé."
+              : "Par défaut, une seule session de chat à la fois sur ce PC."}
+        </p>
       </section>
 
       {status?.diskFreeGb != null && (

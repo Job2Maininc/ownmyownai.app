@@ -665,6 +665,20 @@ input {
   background: rgba(16, 185, 129, 0.08);
 }
 
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
 .model-filters {
   display: flex;
   flex-wrap: wrap;
