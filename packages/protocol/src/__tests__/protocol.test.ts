@@ -3,6 +3,7 @@ import {
   ChatAgentStepPayloadSchema,
   ChatCitationsPayloadSchema,
   ChatStartPayloadSchema,
+  ChatQueuedPayloadSchema,
   ChatThinkingDeltaPayloadSchema,
   CloudProviderStatusSchema,
   CreateSharePayloadSchema,
@@ -253,5 +254,14 @@ describe("protocol", () => {
     expect(call.qualifiedName).toBe("mcp/builtin-fs/list_dir");
     expect(WS_MESSAGE_TYPES.MCP_CALL).toBe("mcp.call");
     expect(WS_MESSAGE_TYPES.MCP_RESULT).toBe("mcp.result");
+  });
+
+  it("parse chat.queued payload", () => {
+    const payload = ChatQueuedPayloadSchema.parse({
+      position: 2,
+      waitingAhead: 1,
+    });
+    expect(payload.position).toBe(2);
+    expect(WS_MESSAGE_TYPES.CHAT_QUEUED).toBe("chat.queued");
   });
 });

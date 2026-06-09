@@ -18,8 +18,6 @@ export interface HostSettings {
   fallbackModel?: string;
   /** Mode air-gapped : relay et cloud désactivés. */
   airGapped?: boolean;
-  /** Plusieurs clients web (PC ou onglets) peuvent chatter en parallèle. */
-  allowMultiSession?: boolean;
 }
 
 export interface SetupProgress {

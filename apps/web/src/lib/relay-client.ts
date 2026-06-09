@@ -37,7 +37,8 @@ export interface RelayToken {
 export interface RelayClientCallbacks {
   mintToken: () => Promise<RelayToken>;
   onStatus?: (status: RelayStatus) => void;
-  onHostStatus?: (status: HostStatus, meta?: { allowMultiSession?: boolean }) => void;
+  onHostStatus?: (status: HostStatus, meta?: { queueDepth?: number }) => void;
+  onQueued?: (position: number, waitingAhead: number) => void;
   onDelta?: (content: string) => void;
   onThinkingDelta?: (thinking: string) => void;
   onCitations?: (citations: RagCitation[]) => void;
@@ -253,7 +254,7 @@ export class RelayClient {
       case WS_MESSAGE_TYPES.HOST_STATUS: {
         const payload = envelope.payload as {
           status?: HostStatus;
-          allowMultiSession?: boolean;
+          queueDepth?: number;
         };
         if (
           payload.status === "online" ||
@@ -261,9 +262,15 @@ export class RelayClient {
           payload.status === "offline"
         ) {
           this.callbacks.onHostStatus?.(payload.status, {
-            allowMultiSession: payload.allowMultiSession,
+            queueDepth: payload.queueDepth,
           });
         }
+        break;
+      }
+      case WS_MESSAGE_TYPES.CHAT_QUEUED: {
+        if (!this.isActiveRequest(envelope)) return;
+        const payload = envelope.payload as { position?: number; waitingAhead?: number };
+        this.callbacks.onQueued?.(payload.position ?? 1, payload.waitingAhead ?? 0);
         break;
       }
       case WS_MESSAGE_TYPES.CHAT_DELTA: {

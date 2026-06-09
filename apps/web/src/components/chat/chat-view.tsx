@@ -39,7 +39,6 @@ import { downloadConversation } from "@/lib/export-conversation";
 import { hostStatusClassName, hostStatusLabel, resolveChatHostStatus } from "@/lib/host-status";
 import { formatShortcutLabel } from "@/lib/keyboard-shortcuts";
 import { RelayClient } from "@/lib/relay-client";
-import { TabSessionManager, type TabSessionRole } from "@/lib/tab-session";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -151,11 +150,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [conversationNotice, setConversationNotice] = useState<string | null>(null);
   const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
   const [statusClock, setStatusClock] = useState(0);
-  const [tabRole, setTabRole] = useState<TabSessionRole>("active");
-  const [allowMultiSession, setAllowMultiSession] = useState(false);
+  const [queueHint, setQueueHint] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const relayRef = useRef<RelayClient | null>(null);
-  const tabSessionRef = useRef<TabSessionManager | null>(null);
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
   const thinkingBuffer = useRef("");
@@ -350,53 +347,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     return () => window.clearInterval(id);
   }, []);
 
-  const isActiveTab = allowMultiSession || tabRole === "active";
-
   useEffect(() => {
-    if (allowMultiSession) {
-      setTabRole("active");
-      return;
-    }
-    const manager = new TabSessionManager(hostId, {
-      onRoleChange: (role) => {
-        setTabRole(role);
-        if (role === "passive") {
-          setRelayStatus("offline");
-          hasConnectedRef.current = false;
-        }
-      },
-      onSnapshot: (snapshot) => {
-        setMessages(snapshot.messages);
-        setStreaming(snapshot.streaming);
-        setModel(snapshot.model);
-        setActiveContextIds(snapshot.activeContextIds);
-      },
-    });
-    tabSessionRef.current = manager;
-    manager.start();
-    return () => {
-      manager.dispose();
-      tabSessionRef.current = null;
-    };
-  }, [hostId, allowMultiSession]);
-
-  useEffect(() => {
-    if (!isActiveTab) return;
-    tabSessionRef.current?.broadcast({
-      messages,
-      streaming,
-      model,
-      activeContextIds,
-    });
-  }, [isActiveTab, messages, streaming, model, activeContextIds]);
-
-  useEffect(() => {
-    if (!isActiveTab) {
-      relayRef.current?.disconnect();
-      relayRef.current = null;
-      return;
-    }
-
     hasConnectedRef.current = false;
     const client = new RelayClient({
       mintToken: () => mintRelayToken(hostId),
@@ -409,11 +360,17 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           );
         }
       },
-      onHostStatus: (status, meta) => {
-        setHostStatus(status);
-        if (meta?.allowMultiSession !== undefined) {
-          setAllowMultiSession(meta.allowMultiSession);
+      onHostStatus: (status) => setHostStatus(status),
+      onQueued: (position, waitingAhead) => {
+        if (position <= 1) {
+          setQueueHint(null);
+          return;
         }
+        setQueueHint(
+          waitingAhead > 0
+            ? `En file d'attente — ${waitingAhead} requête(s) devant vous…`
+            : "En file d'attente…",
+        );
       },
       onCitations: attachCitations,
       onThinkingDelta: (thinking) => {
@@ -423,6 +380,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         );
       },
       onDelta: (content) => {
+        setQueueHint(null);
         assistantBuffer.current += content;
         setMessages((prev) =>
           commitAssistantTurn(prev, assistantBuffer.current, thinkingBuffer.current),
@@ -435,12 +393,14 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           setMessages((prev) => commitAssistantTurn(prev, content, thinking));
         }
         setStreaming(false);
+        setQueueHint(null);
         activeRequestId.current = null;
         clearAssistantTurn();
       },
       onError: (msg) => {
         setError(msg);
         setStreaming(false);
+        setQueueHint(null);
         activeRequestId.current = null;
         const content = assistantBuffer.current;
         if (content.trim() || thinkingBuffer.current.trim()) {
@@ -458,7 +418,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       client.disconnect();
       relayRef.current = null;
     };
-  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn, isActiveTab]);
+  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn]);
 
   const connected = relayStatus === "connected";
 
@@ -476,7 +436,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   );
 
   useEffect(() => {
-    if (!connected || !isActiveTab || !relayRef.current) return;
+    if (!connected || !relayRef.current) return;
 
     let cancelled = false;
 
@@ -504,10 +464,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     return () => {
       cancelled = true;
     };
-  }, [connected, isActiveTab, hostId, refreshHostBranches]);
+  }, [connected, hostId, refreshHostBranches]);
 
   useEffect(() => {
-    if (!connected || !isActiveTab || !relayRef.current || messages.length === 0 || activeThreadId) {
+    if (!connected || !relayRef.current || messages.length === 0 || activeThreadId) {
       return;
     }
     void relayRef.current
@@ -529,13 +489,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     model,
     activeContextIds,
     connected,
-    isActiveTab,
     hostId,
     refreshHostBranches,
   ]);
 
   useEffect(() => {
-    if (!connected || !isActiveTab || !activeThreadId || !relayRef.current || messages.length === 0) {
+    if (!connected || !activeThreadId || !relayRef.current || messages.length === 0) {
       return;
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -563,18 +522,17 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     model,
     activeContextIds,
     connected,
-    isActiveTab,
     rootThreadId,
     refreshHostBranches,
   ]);
 
   useEffect(() => {
-    if (!isActiveTab || relayStatus !== "connected" || !relayRef.current) return;
+    if (relayStatus !== "connected" || !relayRef.current) return;
     void relayRef.current
       .listContextBases()
       .then(setContextBases)
       .catch(() => undefined);
-  }, [relayStatus, isActiveTab]);
+  }, [relayStatus]);
 
   const reconnecting = relayStatus === "connecting" && hasConnectedRef.current;
 
@@ -589,16 +547,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   );
 
   const relayHostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
-  const hostBusy = effectiveHostStatus === "busy" && !allowMultiSession;
   const hostOffline = effectiveHostStatus === "offline";
   const hostReachable = effectiveHostStatus === "online" || effectiveHostStatus === "busy";
-  const canSend =
-    isActiveTab &&
-    connected &&
-    relayHostReachable &&
-    hostReachable &&
-    !hostOffline &&
-    (!hostBusy || streaming);
+  const canSend = connected && relayHostReachable && hostReachable && !hostOffline;
 
   const handleNewConversation = useCallback(() => {
     if (conversationTree) {
@@ -620,7 +571,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, [applyTree, clearAssistantTurn, conversationTree, hostId]);
 
   async function handleForkAt(messageIndex: number) {
-    if (streaming || !isActiveTab) return;
+    if (streaming) return;
 
     if (connected && relayRef.current && activeThreadId) {
       try {
@@ -665,7 +616,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }
 
   async function handleSwitchBranch(branchId: string) {
-    if (streaming || !isActiveTab) return;
+    if (streaming) return;
 
     if (connected && relayRef.current && hostBranches.some((b) => b.id === branchId)) {
       try {
@@ -802,7 +753,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         label: "Nouvelle conversation",
         keywords: "reset effacer historique",
         group: "Chat",
-        disabled: !isActiveTab || streaming,
+        disabled: streaming,
         onSelect: handleNewConversation,
       },
       {
@@ -817,7 +768,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         label: "Exporter la conversation (.md)",
         keywords: "markdown telecharger download",
         group: "Chat",
-        disabled: !isActiveTab || messages.length === 0 || streaming,
+        disabled: messages.length === 0 || streaming,
         onSelect: handleExportConversation,
       },
       {
@@ -825,7 +776,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         label: "Partager en lecture seule",
         keywords: "lien temporaire share",
         group: "Chat",
-        disabled: !isActiveTab || messages.length === 0 || streaming,
+        disabled: messages.length === 0 || streaming,
         onSelect: () => setShowShareDialog(true),
       },
       {
@@ -848,7 +799,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       handleExportConversation,
       handleNewConversation,
       handleStop,
-      isActiveTab,
       messages.length,
       router,
       showSidebar,
@@ -863,21 +813,16 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     sendMessage();
   }
 
-  const headerStatus = !isActiveTab
-    ? { label: "Lecture seule — autre onglet actif", className: "text-amber-400" }
-    : reconnecting
-      ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
-      : !connected
-        ? { label: "Connexion…", className: "text-[var(--muted)]" }
-        : hostBusy && !streaming
-          ? {
-              label: "PC occupé — autre onglet actif",
-              className: "text-amber-400",
-            }
-          : {
-              label: `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
-              className: hostStatusClassName(effectiveHostStatus),
-            };
+  const headerStatus = reconnecting
+    ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
+    : !connected
+      ? { label: "Connexion…", className: "text-[var(--muted)]" }
+      : queueHint
+        ? { label: queueHint, className: "text-amber-400" }
+        : {
+            label: `Host ${hostStatusLabel(effectiveHostStatus).toLowerCase()}`,
+            className: hostStatusClassName(effectiveHostStatus),
+          };
 
   return (
     <main className="mx-auto flex h-screen max-w-5xl flex-col px-4 py-4">
@@ -888,7 +833,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         <div className="flex items-center gap-3">
           <PlaybookPicker
             relay={relayRef.current}
-            connected={connected && isActiveTab}
+            connected={connected}
             model={model}
             contextIds={activeContextIds}
             disabled={!canSend || streaming}
@@ -901,7 +846,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             type="button"
             variant="ghost"
             onClick={handleNewConversation}
-            disabled={!isActiveTab || streaming}
+            disabled={streaming}
           >
             Nouvelle conversation
           </Button>
@@ -911,7 +856,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               <select
                 value={activeBranchId}
                 onChange={(e) => void handleSwitchBranch(e.target.value)}
-                disabled={streaming || !isActiveTab}
+                disabled={streaming}
                 className="max-w-[220px] rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
                 aria-label="Choisir une branche de conversation"
               >
@@ -926,7 +871,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           <Button
             type="button"
             variant="ghost"
-            disabled={!isActiveTab || messages.length === 0 || streaming}
+            disabled={messages.length === 0 || streaming}
             onClick={handleExportConversation}
             title="Télécharger le fil actuel en Markdown (.md) — export local uniquement"
           >
@@ -935,7 +880,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           <Button
             type="button"
             variant="ghost"
-            disabled={!isActiveTab || messages.length === 0 || streaming}
+            disabled={messages.length === 0 || streaming}
             onClick={() => setShowShareDialog(true)}
             title="Créer un lien temporaire en lecture seule (sans documents RAG)"
           >
@@ -958,13 +903,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               value={modelSearch}
               onChange={(e) => setModelSearch(e.target.value)}
               className="w-24 rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm"
-              disabled={streaming || !isActiveTab}
+              disabled={streaming}
             />
             <select
               id="model-select"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              disabled={streaming || !isActiveTab}
+              disabled={streaming}
               className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
             >
               {filteredModels.map((m) => (
@@ -981,7 +926,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               id="thinking-mode"
               value={thinkingMode ? "reflection" : "normal"}
               onChange={(e) => setThinkingMode(e.target.value === "reflection")}
-              disabled={streaming || !isActiveTab}
+              disabled={streaming}
               className="rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
               title="Réflexion : modèles thinking Ollama (qwen3, deepseek-r1…)"
             >
@@ -997,7 +942,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           )}
 
           <div className="flex-1 space-y-4 overflow-y-auto pb-4">
-            {isActiveTab && relayStatus === "connecting" && <ChatConnectingSkeleton />}
+            {relayStatus === "connecting" && <ChatConnectingSkeleton />}
             {branchOptions.length > 1 && messages.length === 0 && (
               <Card>
                 <p className="mb-2 text-sm font-medium">Branches enregistrées</p>
@@ -1008,7 +953,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                         type="button"
                         className="text-left hover:text-brand-400"
                         onClick={() => void handleSwitchBranch(branch.id)}
-                        disabled={streaming || !isActiveTab}
+                        disabled={streaming}
                       >
                         {branch.label} — {branch.count} msg(s)
                       </button>
@@ -1017,7 +962,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 </ul>
               </Card>
             )}
-            {messages.length === 0 && isActiveTab && relayStatus === "connected" && (
+            {messages.length === 0 && relayStatus === "connected" && (
               <Card>
                 <p className="text-center text-[var(--muted)]">
                   Posez une question — la réponse est générée sur votre PC.
@@ -1069,7 +1014,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   ) : (
                     <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
                   )}
-                  {isActiveTab && !streaming && messages.length > 1 && i < messages.length - 1 && (
+                  {!streaming && messages.length > 1 && i < messages.length - 1 && (
                     <button
                       type="button"
                       onClick={() => void handleForkAt(i)}
@@ -1093,12 +1038,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           {conversationNotice && (
             <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
           )}
-          {!isActiveTab && (
-            <p className="mb-2 text-sm text-amber-400">
-              Ce chat est actif dans un autre onglet. Vous pouvez suivre la conversation en
-              lecture seule — fermez l&apos;autre onglet pour reprendre la main.
-            </p>
-          )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
           {hostOffline && connected && (
             <p className="mb-2 text-sm text-red-400">
@@ -1106,11 +1045,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               se reconnecte.
             </p>
           )}
-          {hostBusy && !streaming && (
-            <p className="mb-2 text-sm text-amber-400">
-              Ce PC est utilisé par une autre session. Attendez la fin de la génération, ou activez
-              « Sessions simultanées » dans l&apos;app Host (onglet État).
-            </p>
+          {queueHint && !streaming && (
+            <p className="mb-2 text-sm text-amber-400">{queueHint}</p>
           )}
           {inputMentionHint && (
             <p className="mb-2 text-xs text-brand-400">{inputMentionHint}</p>
@@ -1126,13 +1062,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   sendMessage();
                 }
               }}
-              placeholder={
-                isActiveTab
-                  ? `Votre message… (${SEND_SHORTCUT_LABEL} pour envoyer · @base:Nom, @fichier:…)`
-                  : "Lecture seule — autre onglet actif"
-              }
+              placeholder={`Votre message… (${SEND_SHORTCUT_LABEL} pour envoyer · @base:Nom, @fichier:…)`}
               disabled={streaming || !canSend}
-              aria-keyshortcuts={isActiveTab ? SEND_SHORTCUT_LABEL : undefined}
+              aria-keyshortcuts={SEND_SHORTCUT_LABEL}
               className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
             />
             {streaming ? (
@@ -1170,7 +1102,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             {sidebarTab === "context" ? (
               <ContextPanel
                 relay={relayRef.current}
-                connected={connected && isActiveTab}
+                connected={connected}
                 activeIds={activeContextIds}
                 onActiveChange={setActiveContextIds}
                 activeProjectId={activeProjectId}

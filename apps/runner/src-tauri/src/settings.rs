@@ -218,9 +218,6 @@ pub struct HostSettings {
     pub model_routing: ModelTaskRouting,
     #[serde(default)]
     pub context_limits: ContextLimitsSettings,
-    /// Si true, plusieurs onglets web peuvent chatter en parallèle sur ce host.
-    #[serde(default)]
-    pub allow_multi_session: bool,
     #[serde(default = "default_rag_top_k")]
     pub rag_top_k: u32,
     #[serde(default = "default_rag_chunk_tokens")]
@@ -304,7 +301,6 @@ impl Default for HostSettings {
             default_model: default_model_id(),
             model_routing: ModelTaskRouting::default(),
             context_limits: ContextLimitsSettings::default(),
-            allow_multi_session: false,
             rag_top_k: default_rag_top_k(),
             rag_chunk_tokens: default_rag_chunk_tokens(),
             thinking_model: None,
@@ -399,12 +395,6 @@ pub fn resolved_sync_scan_settings() -> SyncScanSettings {
             sync_debounce_ms: s.context_limits.sync_debounce_ms,
         })
         .unwrap_or_default()
-}
-
-pub fn allow_multi_session() -> bool {
-    get_settings()
-        .map(|s| s.allow_multi_session)
-        .unwrap_or(false)
 }
 
 pub fn resolved_rag_top_k() -> usize {

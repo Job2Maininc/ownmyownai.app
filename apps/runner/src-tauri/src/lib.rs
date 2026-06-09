@@ -1,4 +1,5 @@
 mod agent;
+mod chat_queue;
 mod cloud_keys;
 mod context;
 mod conversation_summary;

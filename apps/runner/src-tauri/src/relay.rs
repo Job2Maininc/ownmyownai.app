@@ -81,11 +81,7 @@ fn unregister_chat_cancel(request_id: &Option<String>) {
 }
 
 fn host_reports_busy() -> bool {
-    if crate::settings::allow_multi_session() {
-        crate::jobs::has_active_jobs()
-    } else {
-        host_status::is_session_active() || crate::jobs::has_active_jobs()
-    }
+    crate::jobs::has_active_jobs()
 }
 
 fn relay_write_slot() -> &'static Mutex<Option<SharedRelayWrite>> {
@@ -265,7 +261,7 @@ async fn send_heartbeat(
         supabase_url.trim_end_matches('/')
     );
 
-    let status = if host_reports_busy() {
+    let status = if crate::jobs::has_active_jobs() {
         "busy"
     } else {
         "online"
@@ -308,7 +304,7 @@ async fn send_relay_host_status(write: &SharedRelayWrite) -> Result<(), String> 
         msg_type: "host.status".into(),
         payload: serde_json::json!({
             "status": relay_host_status(),
-            "allowMultiSession": crate::settings::allow_multi_session(),
+            "queueDepth": crate::chat_queue::queue_depth(),
         }),
         requestId: None,
     };
@@ -365,10 +361,7 @@ async fn run_relay_loop(
                             "chat.start" => {
                                 let write_task = write.clone();
                                 let envelope = envelope.clone();
-                                tokio::spawn(async move {
-                                    let _ = handle_chat_start(&envelope, &write_task).await;
-                                    let _ = send_relay_host_status(&write_task).await;
-                                });
+                                enqueue_chat_job(ChatJobKind::Chat, envelope, write_task);
                             }
                             "chat.cancel" => {
                                 handle_chat_cancel(&envelope);
@@ -566,10 +559,7 @@ async fn run_relay_loop(
                             "playbook.run" => {
                                 let write_task = write.clone();
                                 let envelope = envelope.clone();
-                                tokio::spawn(async move {
-                                    let _ = handle_playbook_run(&envelope, &write_task).await;
-                                    let _ = send_relay_host_status(&write_task).await;
-                                });
+                                enqueue_chat_job(ChatJobKind::Playbook, envelope, write_task);
                             }
                             "job.start" => {
                                 let write_task = write.clone();
@@ -632,6 +622,13 @@ async fn run_relay_loop(
 
 fn handle_chat_cancel(envelope: &WsEnvelope) {
     if let Some(id) = envelope.requestId.as_ref().filter(|s| !s.is_empty()) {
+        if crate::chat_queue::cancel_pending(id) {
+            let request_id = id.clone();
+            tokio::spawn(async move {
+                broadcast_ws("chat.done", serde_json::json!({}), Some(request_id)).await;
+            });
+            return;
+        }
         if let Ok(map) = chat_cancel_flags().lock() {
             if let Some(flag) = map.get(id) {
                 flag.store(true, Ordering::SeqCst);
@@ -644,6 +641,60 @@ fn handle_chat_cancel(envelope: &WsEnvelope) {
             flag.store(true, Ordering::SeqCst);
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ChatJobKind {
+    Chat,
+    Playbook,
+}
+
+fn enqueue_chat_job(kind: ChatJobKind, envelope: WsEnvelope, write: SharedRelayWrite) {
+    let request_id = envelope.requestId.clone();
+    let write_for_job = write.clone();
+    let envelope_for_job = envelope;
+
+    let position = crate::chat_queue::enqueue(crate::chat_queue::ChatJob {
+        request_id: request_id.clone(),
+        run: Box::pin(async move {
+            let result = match kind {
+                ChatJobKind::Chat => execute_chat_start(&envelope_for_job, &write_for_job).await,
+                ChatJobKind::Playbook => execute_playbook_run(&envelope_for_job, &write_for_job).await,
+            };
+            let _ = result;
+            let _ = send_relay_host_status(&write_for_job).await;
+        }),
+    });
+
+    if position > 1 {
+        let write_notify = write;
+        let rid = request_id;
+        tokio::spawn(async move {
+            let _ = send_chat_queued(&write_notify, &rid, position).await;
+        });
+    }
+}
+
+async fn send_chat_queued(
+    write: &SharedRelayWrite,
+    request_id: &Option<String>,
+    position: usize,
+) -> Result<(), String> {
+    let waiting_ahead = position.saturating_sub(1);
+    let envelope = WsEnvelope {
+        msg_type: "chat.queued".into(),
+        payload: serde_json::json!({
+            "position": position,
+            "waitingAhead": waiting_ahead,
+        }),
+        requestId: request_id.clone(),
+    };
+    write
+        .lock()
+        .await
+        .send(Message::Text(serde_json::to_string(&envelope).map_err(|e| e.to_string())?))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn send_chat_error(
@@ -761,19 +812,11 @@ async fn send_chat_done(
         .map_err(|e| e.to_string())
 }
 
-async fn handle_chat_start(
+async fn execute_chat_start(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
 ) -> Result<(), String> {
-    if !session_started() {
-        return send_chat_error(
-            write,
-            envelope,
-            "Ce PC est déjà utilisé par une autre session. Activez « Sessions simultanées » dans l'app Host (onglet État), ou attendez la fin de la génération en cours.",
-        )
-        .await;
-    }
-
+    session_started();
     let _ = send_relay_host_status(write).await;
 
     let cancel = register_chat_cancel(&envelope.requestId);
@@ -1878,19 +1921,11 @@ async fn handle_playbook_list(
     .await
 }
 
-async fn handle_playbook_run(
+async fn execute_playbook_run(
     envelope: &WsEnvelope,
     write: &SharedRelayWrite,
 ) -> Result<(), String> {
-    if !session_started() {
-        return send_chat_error(
-            write,
-            envelope,
-            "Ce PC est déjà utilisé par une autre session. Activez « Sessions simultanées » dans l'app Host (onglet État), ou attendez la fin de la génération en cours.",
-        )
-        .await;
-    }
-
+    session_started();
     let _ = send_relay_host_status(write).await;
     let cancel = register_chat_cancel(&envelope.requestId);
 

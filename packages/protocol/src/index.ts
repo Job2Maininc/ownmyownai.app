@@ -172,10 +172,16 @@ export type ChatCitationsPayload = z.infer<typeof ChatCitationsPayloadSchema>;
 
 export const HostStatusPayloadSchema = z.object({
   status: HostStatusSchema,
-  /** Si true, plusieurs clients (PC ou onglets) peuvent chatter en parallèle. */
-  allowMultiSession: z.boolean().optional(),
+  /** Nombre de requêtes chat en attente côté Host. */
+  queueDepth: z.number().int().nonnegative().optional(),
 });
 export type HostStatusPayload = z.infer<typeof HostStatusPayloadSchema>;
+
+export const ChatQueuedPayloadSchema = z.object({
+  position: z.number().int().positive(),
+  waitingAhead: z.number().int().nonnegative().optional(),
+});
+export type ChatQueuedPayload = z.infer<typeof ChatQueuedPayloadSchema>;
 
 /** Statut d'un fournisseur cloud optionnel côté Host (clé en keyring, jamais exposée au web). */
 export const CloudProviderStatusSchema = z.object({
@@ -331,6 +337,7 @@ export const WS_MESSAGE_TYPES = {
   CHAT_ERROR: "chat.error",
   CHAT_MODEL_FALLBACK: "chat.modelFallback",
   CHAT_CANCEL: "chat.cancel",
+  CHAT_QUEUED: "chat.queued",
   HOST_STATUS: "host.status",
   MODEL_PULL: "model.pull",
   MODEL_PULL_PROGRESS: "model.pull.progress",
