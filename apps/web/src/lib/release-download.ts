@@ -85,7 +85,7 @@ async function fetchSupabaseReleaseInfo(): Promise<HostReleaseInfo | null> {
   const manifestUrl = supabasePublicManifestUrl();
   if (!manifestUrl) return null;
   try {
-    const res = await fetch(manifestUrl, { next: { revalidate: 300 } });
+    const res = await fetch(manifestUrl, { cache: "no-store" });
     if (!res.ok) return null;
     const manifest = (await res.json()) as LatestManifest;
     const version = normalizeVersion(manifest.version);
