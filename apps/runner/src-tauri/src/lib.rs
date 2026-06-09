@@ -379,7 +379,52 @@ async fn link_context_folder_cmd(
 async fn link_context_drive_cmd(kb_id: String, drive_path: String) -> Result<ContextLink, String> {
     init_context_db()?;
     ensure_embedding_model(None).await?;
-    link_context_folder(&kb_id, drive_path, true, "drive").await
+    let normalized = normalize_drive_path(&drive_path);
+    link_context_folder(&kb_id, normalized, true, "drive").await
+}
+
+#[tauri::command(rename = "list_windows_drives")]
+fn list_windows_drives_cmd() -> Vec<DriveInfo> {
+    list_windows_drives()
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriveInfo {
+    path: String,
+    label: String,
+}
+
+fn normalize_drive_path(path: &str) -> String {
+    let trimmed = path.trim().trim_end_matches(['\\', '/']);
+    if trimmed.len() == 2 && trimmed.as_bytes().get(1) == Some(&b':') {
+        format!("{trimmed}\\")
+    } else {
+        path.trim().to_string()
+    }
+}
+
+fn list_windows_drives() -> Vec<DriveInfo> {
+    #[cfg(target_os = "windows")]
+    {
+        ('A'..='Z')
+            .filter_map(|letter| {
+                let path = format!("{letter}:\\");
+                if std::path::Path::new(&path).exists() {
+                    Some(DriveInfo {
+                        label: format!("Disque {letter}:"),
+                        path,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![]
+    }
 }
 
 #[tauri::command(rename = "link_context_repo")]
@@ -591,6 +636,7 @@ pub fn run() {
             link_context_file_cmd,
             link_context_folder_cmd,
             link_context_drive_cmd,
+            list_windows_drives_cmd,
             link_context_repo_cmd,
             unlink_context_link_cmd,
             sync_context_link_cmd,

@@ -71,6 +71,9 @@ pub fn normalize_allowed_extensions(exts: &[String]) -> Result<Vec<String>, Stri
     if exts.is_empty() {
         return Err("Au moins une extension requise".into());
     }
+    if exts.iter().any(|e| e.trim() == "*") {
+        return Ok(vec!["*".to_string()]);
+    }
     let mut out = Vec::new();
     for ext in exts {
         let e = ext.trim().trim_start_matches('.').to_lowercase();

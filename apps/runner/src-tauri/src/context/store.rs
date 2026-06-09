@@ -260,10 +260,17 @@ fn migrate_schema_v8_extension_policy(conn: &Connection) -> Result<(), String> {
 
 fn parse_allowed_extensions(raw: Option<String>) -> Vec<String> {
     match raw {
-        Some(json) if !json.is_empty() => serde_json::from_str(&json)
-            .ok()
-            .and_then(|v: Vec<String>| normalize_allowed_extensions(&v).ok())
-            .unwrap_or_else(resolved_default_allowed_extensions),
+        Some(json) if !json.is_empty() => {
+            if let Ok(v) = serde_json::from_str::<Vec<String>>(&json) {
+                if v.iter().any(|e| e == "*") {
+                    return vec!["*".to_string()];
+                }
+                if let Ok(normalized) = normalize_allowed_extensions(&v) {
+                    return normalized;
+                }
+            }
+            resolved_default_allowed_extensions()
+        }
         _ => resolved_default_allowed_extensions(),
     }
 }

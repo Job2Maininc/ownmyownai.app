@@ -43,6 +43,7 @@ commands.allow = [
   "link_context_file",
   "link_context_folder",
   "link_context_drive",
+  "list_windows_drives",
   "link_context_repo",
   "unlink_context_link",
   "sync_context_link",

@@ -37,15 +37,58 @@ interface ContextLink {
   allowedExtensions: string[];
 }
 
+interface DriveInfo {
+  path: string;
+  label: string;
+}
+
 const EXTRACTABLE_EXTENSIONS = ["txt", "md", "pdf", "docx", "png", "jpg", "jpeg"] as const;
 
-const SUPPORTED_FILTERS = [
-  { name: "Documents", extensions: ["txt", "md", "pdf", "docx"] },
-];
+const SOURCE_TYPES = [
+  {
+    id: "file",
+    title: "Fichiers",
+    hint: "Un ou plusieurs fichiers sur votre PC",
+    icon: "📄",
+  },
+  {
+    id: "folder",
+    title: "Dossier",
+    hint: "Un dossier et ses sous-dossiers",
+    icon: "📁",
+  },
+  {
+    id: "repo",
+    title: "Dépôt Git",
+    hint: "Code source avec index des symboles",
+    icon: "🔀",
+  },
+  {
+    id: "drive",
+    title: "Disque entier",
+    hint: "C:, D:, clé USB — tous types de fichiers",
+    icon: "💾",
+  },
+] as const;
 
 function truncatePath(path: string, max = 48) {
   if (path.length <= max) return path;
   return `…${path.slice(-max + 1)}`;
+}
+
+function linkTypeLabel(linkType: string) {
+  switch (linkType) {
+    case "file":
+      return "Fichiers";
+    case "folder":
+      return "Dossier";
+    case "repo":
+      return "Dépôt Git";
+    case "drive":
+      return "Disque";
+    default:
+      return linkType;
+  }
 }
 
 async function waitForBackgroundJob(jobId: string): Promise<void> {
@@ -99,7 +142,7 @@ function syncStatusLabel(link: ContextLink) {
     case "syncing":
       return "Indexation…";
     case "ready":
-      return link.lastSyncAt ? `Synchronisé (${link.lastSyncAt})` : "Synchronisé";
+      return link.lastSyncAt ? "Indexé" : "Prêt";
     case "error":
       return "Erreur";
     default:
@@ -117,15 +160,21 @@ export default function ContextManager() {
   const [instructionDirty, setInstructionDirty] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const [drives, setDrives] = useState<DriveInfo[]>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const refreshBases = useCallback(async () => {
     try {
       const list = await invoke<KnowledgeBase[]>("list_knowledge_bases");
       setBases(list);
+      if (!selectedId && list.length > 0) {
+        setSelectedId(list[0].id);
+      }
     } catch (e) {
       setError(String(e));
     }
-  }, []);
+  }, [selectedId]);
 
   const refreshDocs = useCallback(async (kbId: string) => {
     try {
@@ -158,6 +207,26 @@ export default function ContextManager() {
     setInstructionDirty(false);
   }, [selectedId, refreshDocs, refreshLinks, bases]);
 
+  async function ensureSelectedBase(): Promise<string | null> {
+    if (selectedId) return selectedId;
+    const name = newName.trim() || "Ma base IA";
+    setError(null);
+    try {
+      await invoke("ensure_embedding_model");
+      const kb = await invoke<KnowledgeBase>("create_knowledge_base", {
+        name,
+        description: "",
+      });
+      setNewName("");
+      await refreshBases();
+      setSelectedId(kb.id);
+      return kb.id;
+    } catch (e) {
+      setError(String(e));
+      return null;
+    }
+  }
+
   async function saveSystemInstruction() {
     if (!selectedId) return;
     setError(null);
@@ -174,16 +243,8 @@ export default function ContextManager() {
   }
 
   async function createBase() {
-    const name = newName.trim() || "Nouvelle base";
-    setError(null);
-    try {
-      await invoke("ensure_embedding_model");
-      await invoke("create_knowledge_base", { name, description: "" });
-      setNewName("");
-      await refreshBases();
-    } catch (e) {
-      setError(String(e));
-    }
+    const kbId = await ensureSelectedBase();
+    if (kbId) setSelectedId(kbId);
   }
 
   async function deleteBase(id: string) {
@@ -229,9 +290,8 @@ export default function ContextManager() {
 
   async function linkFiles(kbId: string) {
     const paths = await open({
-      title: "Lier des fichiers",
+      title: "Choisir des fichiers",
       multiple: true,
-      filters: SUPPORTED_FILTERS,
     });
     if (!paths) return;
     const list = Array.isArray(paths) ? paths : [paths];
@@ -252,7 +312,7 @@ export default function ContextManager() {
 
   async function linkFolder(kbId: string) {
     const path = await open({
-      title: "Lier un dossier",
+      title: "Choisir un dossier",
       directory: true,
       multiple: false,
     });
@@ -274,7 +334,7 @@ export default function ContextManager() {
 
   async function linkRepo(kbId: string) {
     const path = await open({
-      title: "Lier un dépôt Git",
+      title: "Choisir un dépôt Git",
       directory: true,
       multiple: false,
     });
@@ -294,22 +354,19 @@ export default function ContextManager() {
     }
   }
 
-  async function linkDrive(kbId: string) {
-    const path = await open({
-      title: "Lier un disque ou une racine",
-      directory: true,
-      multiple: false,
-    });
-    if (!path || typeof path !== "string") return;
+  async function linkDrivePath(kbId: string, drivePath: string) {
     const ok = window.confirm(
-      `Indexer tout le contenu sous « ${path} » peut prendre du temps et est limité à 500 fichiers.\n\nContinuer ?`,
+      `Indexer le contenu de « ${drivePath} » ?\n\n` +
+        "Tous les types de fichiers seront analysés (sauf archives et binaires système). " +
+        "L'indexation est limitée aux 500 premiers fichiers trouvés.",
     );
     if (!ok) return;
     setSyncing(true);
     setError(null);
+    setShowDrivePicker(false);
     try {
       await invoke("ensure_embedding_model");
-      await invoke("link_context_drive", { kbId, drivePath: path });
+      await invoke("link_context_drive", { kbId, drivePath });
       await refreshLinks(kbId);
       await refreshDocs(kbId);
       await refreshBases();
@@ -317,6 +374,37 @@ export default function ContextManager() {
       setError(String(e));
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function openDrivePicker(kbId: string) {
+    setError(null);
+    try {
+      const list = await invoke<DriveInfo[]>("list_windows_drives");
+      setDrives(list);
+      setShowDrivePicker(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function handleSourcePick(sourceId: (typeof SOURCE_TYPES)[number]["id"]) {
+    const kbId = await ensureSelectedBase();
+    if (!kbId) return;
+
+    switch (sourceId) {
+      case "file":
+        await linkFiles(kbId);
+        break;
+      case "folder":
+        await linkFolder(kbId);
+        break;
+      case "repo":
+        await linkRepo(kbId);
+        break;
+      case "drive":
+        await openDrivePicker(kbId);
+        break;
     }
   }
 
@@ -347,6 +435,7 @@ export default function ContextManager() {
   }
 
   async function toggleExtension(link: ContextLink, ext: string) {
+    if (link.allowedExtensions.includes("*")) return;
     const current = new Set(link.allowedExtensions ?? [...EXTRACTABLE_EXTENSIONS]);
     if (current.has(ext)) {
       if (current.size <= 1) {
@@ -393,16 +482,18 @@ export default function ContextManager() {
   return (
     <section className="panel">
       <div className="panel__head">
-        <h2>Bases de contexte</h2>
+        <h2>Base de données IA</h2>
       </div>
       <p className="muted">
-        Liez des fichiers ou dossiers (Google Drive local, disque…) — lus sur place, jamais envoyés au cloud.
+        Choisissez d&apos;où l&apos;IA lit vos données. Tout reste sur votre PC — rien n&apos;est
+        envoyé au cloud.
       </p>
+
       <div className="context-create">
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="Nom de la nouvelle base"
+          placeholder="Nom de la base (ex. Mon projet)"
         />
         <button type="button" className="btn-secondary" onClick={() => void createBase()}>
           Créer
@@ -411,29 +502,152 @@ export default function ContextManager() {
           Importer ZIP
         </button>
       </div>
-      <ul className="context-list">
-        {bases.map((kb) => (
-          <li key={kb.id} className={selectedId === kb.id ? "context-list__item--active" : ""}>
-            <button type="button" className="context-list__btn" onClick={() => setSelectedId(kb.id)}>
-              <strong>{kb.name}</strong>
-              <span className="muted">
-                {kb.docCount} doc(s) · {kb.status}
+
+      {bases.length > 0 && (
+        <ul className="context-list">
+          {bases.map((kb) => (
+            <li key={kb.id} className={selectedId === kb.id ? "context-list__item--active" : ""}>
+              <button type="button" className="context-list__btn" onClick={() => setSelectedId(kb.id)}>
+                <strong>{kb.name}</strong>
+                <span className="muted">
+                  {kb.docCount} doc(s) · {kb.status}
+                </span>
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => void exportBase(kb.id)}>
+                Export
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => void deleteBase(kb.id)}>
+                Suppr.
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="source-picker">
+        <h3>Choisissez la source de votre base de données IA</h3>
+        <p className="muted source-picker__lead">
+          Sélectionnez un type de source ci-dessous. L&apos;indexation démarre automatiquement après
+          votre choix.
+        </p>
+        <div className="source-picker__grid">
+          {SOURCE_TYPES.map((source) => (
+            <button
+              key={source.id}
+              type="button"
+              className="source-card"
+              disabled={syncing}
+              onClick={() => void handleSourcePick(source.id)}
+            >
+              <span className="source-card__icon" aria-hidden>
+                {source.icon}
               </span>
+              <strong>{source.title}</strong>
+              <span className="muted">{source.hint}</span>
             </button>
-            <button type="button" className="btn-ghost" onClick={() => void exportBase(kb.id)}>
-              Export
+          ))}
+        </div>
+        {syncing && <p className="muted">Indexation en cours…</p>}
+      </div>
+
+      {showDrivePicker && (
+        <div className="drive-picker">
+          <h4>Quel disque indexer ?</h4>
+          <div className="drive-picker__grid">
+            {drives.map((drive) => (
+              <button
+                key={drive.path}
+                type="button"
+                className="btn-secondary drive-picker__btn"
+                disabled={syncing || !selectedId}
+                onClick={() => selectedId && void linkDrivePath(selectedId, drive.path)}
+              >
+                {drive.label}
+                <span className="muted">{drive.path}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="btn-secondary drive-picker__btn"
+              disabled={syncing || !selectedId}
+              onClick={() => {
+                setShowDrivePicker(false);
+                if (selectedId) void linkFolder(selectedId);
+              }}
+            >
+              Autre dossier…
+              <span className="muted">Parcourir manuellement</span>
             </button>
-            <button type="button" className="btn-ghost" onClick={() => void deleteBase(kb.id)}>
-              Suppr.
-            </button>
-          </li>
-        ))}
-      </ul>
-      {selectedId && (
-        <div className="context-docs">
+          </div>
+          <button type="button" className="btn-ghost" onClick={() => setShowDrivePicker(false)}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {selectedId && links.length > 0 && (
+        <div className="context-sources">
+          <h3>Sources connectées</h3>
+          <ul className="context-sources__list">
+            {links.map((link) => (
+              <li key={link.id} className="context-sources__item">
+                <div className="context-sources__head">
+                  <strong>{linkTypeLabel(link.linkType)}</strong>
+                  <span className="muted">{truncatePath(link.path)}</span>
+                </div>
+                <p className="muted">
+                  {syncStatusLabel(link)} · {link.docCount} doc(s)
+                  {link.linkType === "repo" && (link.symbolCount ?? 0) > 0
+                    ? ` · ${link.symbolCount} symbole(s)`
+                    : ""}
+                  {link.allowedExtensions.includes("*") ? " · tous types de fichiers" : ""}
+                </p>
+                {link.lastSyncError && <p className="error-line">{link.lastSyncError}</p>}
+                {link.linkType !== "repo" && !link.allowedExtensions.includes("*") && (
+                  <div className="context-create" role="group" aria-label="Types de fichiers indexés">
+                    {EXTRACTABLE_EXTENSIONS.map((ext) => (
+                      <label key={ext} className="muted" style={{ marginRight: "0.5rem" }}>
+                        <input
+                          type="checkbox"
+                          checked={link.allowedExtensions.includes(ext)}
+                          disabled={syncing}
+                          onChange={() => void toggleExtension(link, ext)}
+                        />{" "}
+                        .{ext}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="context-create">
+                  <button type="button" className="btn-ghost" onClick={() => void syncLink(link.id)}>
+                    Réindexer
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={() => void toggleLink(link)}>
+                    {link.enabled ? "Pause" : "Reprendre"}
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={() => void unlinkLink(link.id)}>
+                    Supprimer
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="btn-ghost context-advanced-toggle"
+        onClick={() => setShowAdvanced((v) => !v)}
+      >
+        {showAdvanced ? "Masquer les options avancées" : "Options avancées"}
+      </button>
+
+      {showAdvanced && selectedId && (
+        <div className="context-advanced">
           <h3>Instruction système</h3>
           <p className="muted">
-            Injectée avant le contexte RAG à chaque message (visible en lecture seule sur le web).
+            Texte injecté avant chaque réponse de l&apos;IA (optionnel).
           </p>
           <textarea
             className="context-instruction"
@@ -454,92 +668,12 @@ export default function ContextManager() {
             Enregistrer l&apos;instruction
           </button>
 
-          <h3>Sources liées</h3>
-          <div className="context-create">
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={syncing}
-              onClick={() => void linkFiles(selectedId)}
-            >
-              Fichier(s)
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={syncing}
-              onClick={() => void linkFolder(selectedId)}
-            >
-              Dossier
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={syncing}
-              onClick={() => void linkRepo(selectedId)}
-            >
-              Dépôt Git
-            </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              disabled={syncing}
-              onClick={() => void linkDrive(selectedId)}
-            >
-              Disque…
-            </button>
-          </div>
-          {syncing && <p className="muted">Synchronisation en cours…</p>}
-          <ul>
-            {links.length === 0 && (
-              <li className="muted">Aucun lien — ajoutez un dossier Google Drive local par exemple.</li>
-            )}
-            {links.map((link) => (
-              <li key={link.id}>
-                <strong>{link.linkType}</strong> — {truncatePath(link.path)}
-                <br />
-                <span className="muted">
-                  {syncStatusLabel(link)} · {link.docCount} doc(s)
-                  {link.linkType === "repo" && (link.symbolCount ?? 0) > 0
-                    ? ` · ${link.symbolCount} symbole(s)`
-                    : ""}
-                </span>
-                {link.lastSyncError && (
-                  <span className="error-line"> — {link.lastSyncError}</span>
-                )}
-                {link.linkType !== "repo" && (
-                  <div className="context-create" role="group" aria-label="Extensions indexées">
-                    {EXTRACTABLE_EXTENSIONS.map((ext) => (
-                      <label key={ext} className="muted" style={{ marginRight: "0.5rem" }}>
-                        <input
-                          type="checkbox"
-                          checked={(link.allowedExtensions ?? [...EXTRACTABLE_EXTENSIONS]).includes(ext)}
-                          disabled={syncing}
-                          onChange={() => void toggleExtension(link, ext)}
-                        />{" "}
-                        .{ext}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                <div className="context-create">
-                  <button type="button" className="btn-ghost" onClick={() => void syncLink(link.id)}>
-                    Sync
-                  </button>
-                  <button type="button" className="btn-ghost" onClick={() => void toggleLink(link)}>
-                    {link.enabled ? "Pause" : "Reprendre"}
-                  </button>
-                  <button type="button" className="btn-ghost" onClick={() => void unlinkLink(link.id)}>
-                    Suppr. lien
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-
           <h3>Documents indexés</h3>
           <p className="muted">Vous pouvez aussi ajouter des fichiers depuis le chat web.</p>
           <ul>
+            {documents.length === 0 && (
+              <li className="muted">Aucun document indexé pour l&apos;instant.</li>
+            )}
             {documents.map((d) => (
               <li key={d.id}>
                 {d.sourceType === "linked" ? "🔗 " : "📤 "}
@@ -554,6 +688,7 @@ export default function ContextManager() {
           </ul>
         </div>
       )}
+
       {error && <p className="error-line">{error}</p>}
     </section>
   );

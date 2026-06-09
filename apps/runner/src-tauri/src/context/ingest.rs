@@ -320,6 +320,9 @@ pub fn file_mtime(path: &Path) -> Result<i64, String> {
 }
 
 pub fn is_allowed_extension(path: &Path, allowed: &[String]) -> bool {
+    if allowed.iter().any(|a| a == "*") {
+        return path.is_file();
+    }
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -349,9 +352,25 @@ fn extract_text(filename: &str, data: &[u8]) -> Result<String, String> {
             "Les images sont indexées via le modèle vision — installez moondream ou llava.".into(),
         );
     }
+    if looks_like_text(data) {
+        let text = String::from_utf8_lossy(data);
+        let cleaned = normalize_whitespace(&text);
+        if cleaned.chars().filter(|c| !c.is_whitespace()).count() >= 20 {
+            return Ok(cleaned);
+        }
+    }
     Err(format!(
         "Format non supporté : {filename}. Formats acceptés : texte, code, .pdf, .docx, .png, .jpg"
     ))
+}
+
+fn looks_like_text(data: &[u8]) -> bool {
+    if data.is_empty() {
+        return false;
+    }
+    let sample_len = data.len().min(8192);
+    let nulls = data[..sample_len].iter().filter(|&&b| b == 0).count();
+    nulls * 100 < sample_len
 }
 
 fn is_code_filename(lower: &str) -> bool {

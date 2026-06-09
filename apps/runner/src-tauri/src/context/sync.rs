@@ -80,11 +80,36 @@ pub fn scan_link(link: &ContextLink, scan: &SyncScanSettings, limits: &ContextLi
 }
 
 fn is_scannable_file(path: &Path, link_type: &str, allowed: &[String]) -> bool {
+    if allowed.iter().any(|a| a == "*") {
+        return should_scan_untyped_file(path);
+    }
     if link_type == "repo" {
         super::codebase_index::is_code_file(path) || is_allowed_extension(path, allowed)
     } else {
         is_allowed_extension(path, allowed)
     }
+}
+
+fn should_scan_untyped_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    const SKIP_EXTENSIONS: &[&str] = &[
+        "exe", "dll", "msi", "iso", "img", "bin", "dat", "pak", "db", "sqlite", "zip", "rar",
+        "7z", "gz", "tar", "bz2", "woff", "woff2", "ttf", "otf", "eot", "mp3", "mp4", "avi",
+        "mov", "mkv", "wav", "flac", "webm",
+    ];
+    if let Some(ext) = name.rsplit('.').next() {
+        if SKIP_EXTENSIONS.contains(&ext) {
+            return false;
+        }
+    }
+    true
 }
 
 fn scan_directory(
@@ -314,7 +339,12 @@ pub async fn link_context_folder(
     if !PathBuf::from(&path).exists() {
         return Err(format!("Chemin introuvable : {path}"));
     }
-    let link = super::store::create_context_link(kb_id, link_type, &path, recursive, None)?;
+    let extensions = if link_type == "drive" {
+        Some(vec!["*".to_string()])
+    } else {
+        None
+    };
+    let link = super::store::create_context_link(kb_id, link_type, &path, recursive, extensions)?;
     sync_link(&link.id).await?;
     get_context_link(&link.id)
 }

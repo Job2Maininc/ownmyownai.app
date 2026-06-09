@@ -856,3 +856,126 @@ input {
   grid-column: 1 / -1;
   font-size: 12px;
 }
+
+.source-picker {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.source-picker h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.source-picker__lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.source-picker__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 12px;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  transition: border-color 0.15s ease;
+}
+
+.source-card:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.source-card__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.source-card strong {
+  font-size: 14px;
+}
+
+.source-card .muted {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.drive-picker {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.drive-picker h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.drive-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.drive-picker__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+}
+
+.context-sources {
+  margin-top: 18px;
+}
+
+.context-sources h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.context-sources__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.context-sources__item {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.context-sources__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-advanced-toggle {
+  margin-top: 16px;
+}
+
+.context-advanced {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
