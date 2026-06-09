@@ -1,0 +1,8 @@
+apps/runner/src-tauri/target
+apps/runner/src-tauri/target-*
+**/target
+**/target-*
+node_modules
+.git
+.cursor
+agent-transcripts
