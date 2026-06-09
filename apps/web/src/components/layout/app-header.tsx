@@ -83,35 +83,35 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
     [router],
   );
 
-  if (!email) return <>{children}</>;
-
   return (
     <CommandPaletteProvider defaultCommands={defaultCommands}>
-      <header className="border-b border-[var(--border)] bg-black/20">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/dashboard" className="font-semibold text-brand-400 hover:underline">
-              OwnMyOwnAI
-            </Link>
-            <Link href="/dashboard" className="text-[var(--muted)] hover:text-white">
-              Mes PCs
-            </Link>
-            <Link href="/host/link" className="text-[var(--muted)] hover:text-white">
-              Lier un PC
-            </Link>
-            <Link href="/download" className="text-[var(--muted)] hover:text-white">
-              Télécharger
-            </Link>
-          </nav>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-[var(--muted)] sm:inline">{email}</span>
-            <CommandPaletteTrigger />
-            <Button type="button" variant="ghost" onClick={() => void handleSignOut()}>
-              Déconnexion
-            </Button>
+      {email ? (
+        <header className="border-b border-[var(--border)] bg-black/20">
+          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+            <nav className="flex items-center gap-4 text-sm">
+              <Link href="/dashboard" className="font-semibold text-brand-400 hover:underline">
+                OwnMyOwnAI
+              </Link>
+              <Link href="/dashboard" className="text-[var(--muted)] hover:text-white">
+                Mes PCs
+              </Link>
+              <Link href="/host/link" className="text-[var(--muted)] hover:text-white">
+                Lier un PC
+              </Link>
+              <Link href="/download" className="text-[var(--muted)] hover:text-white">
+                Télécharger
+              </Link>
+            </nav>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="hidden text-[var(--muted)] sm:inline">{email}</span>
+              <CommandPaletteTrigger />
+              <Button type="button" variant="ghost" onClick={() => void handleSignOut()}>
+                Déconnexion
+              </Button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      ) : null}
       {children}
     </CommandPaletteProvider>
   );
