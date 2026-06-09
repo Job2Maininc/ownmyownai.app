@@ -63,4 +63,36 @@ Dites-moi si vous voulez des changements.`;
     expect(hasOpenArtifactFence("```artifact\ntitle: X\n---\n# en cours")).toBe(true);
     expect(hasOpenArtifactFence("```artifact\ntitle: X\n---\n# ok\n```")).toBe(false);
   });
+
+  it("supporte plusieurs artefacts dans un même message", () => {
+    const input = `Intro hors bloc.
+
+\`\`\`artifact
+title: Doc A
+---
+# A
+\`\`\`
+
+Et aussi :
+
+\`\`\`artifact:Doc B
+## B
+\`\`\`
+
+Suite conversationnelle.`;
+
+    const { displayContent, artifacts } = extractArtifacts(input, "msg-multi");
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts[0].title).toBe("Doc A");
+    expect(artifacts[1].title).toBe("Doc B");
+    expect(displayContent).toContain("Intro hors bloc.");
+    expect(displayContent).toContain("Suite conversationnelle.");
+    expect(displayContent).not.toContain("```artifact");
+  });
+
+  it("infère type markdown sans tableau", () => {
+    const input = "```artifact\n---\n# Titre seul\nParagraphe.\n```";
+    const { artifacts } = extractArtifacts(input, "msg-md");
+    expect(artifacts[0].type).toBe("markdown");
+  });
 });

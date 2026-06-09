@@ -108,8 +108,6 @@ pub async fn broadcast_ws(
     }
 }
 
-const ARTIFACTS_SYSTEM_HINT: &str = "When producing standalone documents (reports, markdown, tables) for the user to copy or download locally, wrap them in a fenced block:\n\n```artifact\ntitle: Short title\n---\n(full markdown content)\n```\n\nKeep conversational text outside the block.";
-
 pub fn services_running() -> bool {
     SERVICES_RUNNING.load(Ordering::SeqCst)
 }
@@ -981,6 +979,7 @@ async fn handle_chat_start_inner(
     }
 
     let mut prepend_system: Vec<serde_json::Value> = Vec::new();
+    prepend_system.push(crate::assistant_output::output_format_system_message());
     if crate::settings::user_memory_enabled() {
         if let Some(mem) = build_memory_context(&last_user) {
             prepend_system.push(serde_json::json!({ "role": "system", "content": mem }));
@@ -1129,7 +1128,11 @@ async fn handle_chat_with_local_tools(
     cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let mut agent_messages = messages.to_vec();
-    let mut offset = 0usize;
+    crate::assistant_output::prepend_output_format_hint(&mut agent_messages);
+    let mut offset = agent_messages
+        .iter()
+        .take_while(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))
+        .count();
     if let Some(pid) = project_id {
         if let Ok(project) = get_project(pid, project_id) {
             let instr = project.system_instruction.trim();

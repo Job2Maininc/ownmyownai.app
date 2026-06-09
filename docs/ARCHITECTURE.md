@@ -22,6 +22,15 @@ JWT claims: `{ sub, host_id, role: "web" | "runner", exp }`
 
 Messages: envelope `{ type, payload, requestId? }` — see `@ownmyownai/protocol`.
 
+## Assistant output formats
+
+Structured deliverables are embedded in assistant markdown (no extra WS types):
+
+- **Artefacts** — `` ```artifact `` fences → side panel (copy / download `.md`). See `docs/ARTIFACTS.md`.
+- **Patches** — `` ```diff `` / `` ```patch `` → preview / apply via Host.
+
+The Host injects format instructions from `assistant_output.rs` on every chat request.
+
 ## Rules for agents
 
 - Never call Ollama from web; only runner proxies inference.

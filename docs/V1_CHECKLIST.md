@@ -29,6 +29,7 @@
 | 13b | Instruction système par base : éditable Host, visible web, appliquée au prochain message | |
 | 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
 | 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
+| 15b | Artefacts : prompt Host injecté ; bloc ```artifact → panneau latéral copie/téléchargement .md | `assistant_output.rs` + `artifacts.ts` |
 | 16 | Partage conversation : lien temporaire, contenu seul (pas RAG) | |
 | 17 | Palette commandes (`Ctrl+K`) + envoi chat (`Ctrl+Entrée`) | |
 | 18 | Artefacts : ouvrir, copier ou télécharger en local (.md) depuis le panneau latéral | |

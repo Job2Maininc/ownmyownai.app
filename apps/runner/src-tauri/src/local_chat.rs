@@ -42,6 +42,7 @@ pub async fn run_local_chat(
     }
 
     let mut messages: Vec<serde_json::Value> = messages.into_iter().take(20).collect();
+    crate::assistant_output::prepend_output_format_hint(&mut messages);
 
     if !context_ids.is_empty() {
         let last_user = messages
