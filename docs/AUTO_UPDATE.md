@@ -40,8 +40,21 @@ npm run tauri -- signer generate -w "$env:USERPROFILE\.tauri\ownmyownai-host.key
 ## Release
 
 ```bash
-git tag v0.1.17
-git push origin v0.1.17
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Le workflow **Release Windows Host** build l&apos;installateur NSIS, signe les artefacts et publie sur Supabase + GitHub Releases.
+
+**Important** : un simple `git push` sur `main` ne publie **pas** le Host. Seuls les tags `v*` déclenchent le workflow release.
+
+## Dépannage — « l&apos;app ne se met pas à jour »
+
+| Symptôme | Cause | Action |
+|----------|-------|--------|
+| Rien ne se passe | Secret `TAURI_SIGNING_PRIVATE_KEY` absent sur GitHub | Générer la clé minisign et l&apos;ajouter aux secrets du dépôt |
+| `latest.json` sans `platforms` | Release « sans auto-update signé » | Republier avec la clé de signature (artefact `.nsis.zip` + `.sig`) |
+| Version installée > version publiée | Vous tournez en dev / build local (ex. 0.2.0) alors que Supabase est en 0.1.19 | Créer un tag `v0.2.0` et laisser CI publier |
+| Mode dev (`tauri dev`) | L&apos;updater est désactivé en debug | Tester avec l&apos;installateur NSIS release |
+
+Dans l&apos;app Host → onglet **État** → section **Mises à jour** : bouton **Vérifier** et lien vers la page Télécharger si l&apos;auto-update n&apos;est pas configuré.

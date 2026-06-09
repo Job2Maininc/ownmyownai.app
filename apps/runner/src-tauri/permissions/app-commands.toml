@@ -52,4 +52,6 @@ commands.allow = [
   "is_gh_available",
   "review_git_diff",
   "list_audit_log",
+  "check_for_updates",
+  "install_host_update",
 ]

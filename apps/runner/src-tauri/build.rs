@@ -47,6 +47,8 @@ fn main() {
                 "cancel_background_job",
                 "start_agent_job",
                 "list_audit_log",
+                "check_for_updates",
+                "install_host_update",
             ]),
         ),
     )

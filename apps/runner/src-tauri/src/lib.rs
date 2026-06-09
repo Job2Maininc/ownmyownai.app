@@ -511,6 +511,16 @@ fn cancel_local_chat_cmd() {
     cancel_local_chat();
 }
 
+#[tauri::command(rename = "check_for_updates")]
+async fn check_for_updates_cmd(app: tauri::AppHandle) -> Result<updater::UpdateCheckResult, String> {
+    Ok(updater::check_for_updates(&app).await)
+}
+
+#[tauri::command(rename = "install_host_update")]
+async fn install_host_update_cmd(app: tauri::AppHandle) -> Result<(), String> {
+    updater::check_and_install(&app).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -579,6 +589,8 @@ pub fn run() {
             restart_background_services_cmd,
             local_chat_cmd,
             cancel_local_chat_cmd,
+            check_for_updates_cmd,
+            install_host_update_cmd,
         ])
         .setup(|app| {
             set_app_handle(app.handle().clone());

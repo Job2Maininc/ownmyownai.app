@@ -51,6 +51,14 @@ export interface LastRequestMetrics {
   completedAt: string;
 }
 
+export interface UpdateCheckResult {
+  currentVersion: string;
+  remoteVersion: string | null;
+  updateAvailable: boolean;
+  autoUpdateReady: boolean;
+  message: string;
+}
+
 export interface HostStatusSnapshot {
   hostId: string | null;
   ollamaInstalled: boolean;

@@ -8,7 +8,12 @@ import PrReviewPanel from "./PrReviewPanel";
 import ProjectManager from "./ProjectManager";
 import LocalChat from "./LocalChat";
 import ModelManager from "./ModelManager";
-import type { HostSettings, HostStatusSnapshot, LastRequestMetrics } from "../types";
+import type {
+  HostSettings,
+  HostStatusSnapshot,
+  LastRequestMetrics,
+  UpdateCheckResult,
+} from "../types";
 
 type DashboardTab = "status" | "chat" | "models" | "context" | "review" | "projects" | "audit";
 
@@ -98,6 +103,9 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [airGapped, setAirGapped] = useState(false);
   const [togglingAirGapped, setTogglingAirGapped] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -111,6 +119,22 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   useEffect(() => {
     void getVersion().then(setAppVersion).catch(() => undefined);
   }, []);
+
+  const refreshUpdateStatus = useCallback(async () => {
+    setCheckingUpdate(true);
+    try {
+      const info = await invoke<UpdateCheckResult>("check_for_updates");
+      setUpdateInfo(info);
+    } catch {
+      setUpdateInfo(null);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUpdateStatus();
+  }, [refreshUpdateStatus]);
 
   useEffect(() => {
     invoke<HostSettings>("get_host_settings")
@@ -384,6 +408,62 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
             Aucun client. Ouvrez le chat web depuis votre navigateur.
           </p>
         )}
+      </section>
+
+      <section className="panel" aria-label="Mises à jour">
+        <div className="panel__head">
+          <h2>Mises à jour</h2>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => void refreshUpdateStatus()}
+            disabled={checkingUpdate || installingUpdate}
+          >
+            {checkingUpdate ? "…" : "Vérifier"}
+          </button>
+        </div>
+        <p className="panel__meta">
+          Installée : <strong>{appVersion ?? updateInfo?.currentVersion ?? "—"}</strong>
+          {updateInfo?.remoteVersion ? (
+            <>
+              {" "}
+              · Publiée : <strong>{updateInfo.remoteVersion}</strong>
+            </>
+          ) : null}
+        </p>
+        <p className="panel__meta muted">
+          {updateInfo?.message ??
+            "Vérification automatique au démarrage puis toutes les heures."}
+        </p>
+        {updateInfo?.updateAvailable ? (
+          <div className="dashboard__actions" style={{ marginTop: 12 }}>
+            {updateInfo.autoUpdateReady ? (
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ width: "100%" }}
+                disabled={installingUpdate}
+                onClick={() => {
+                  setInstallingUpdate(true);
+                  void invoke("install_host_update")
+                    .catch((e) => setOpenError(String(e)))
+                    .finally(() => setInstallingUpdate(false));
+                }}
+              >
+                {installingUpdate ? "Installation…" : "Installer maintenant"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ width: "100%" }}
+                onClick={() => void openInBrowser(`${appUrl}/download`)}
+              >
+                Télécharger l&apos;installateur
+              </button>
+            )}
+          </div>
+        ) : null}
       </section>
 
       {status?.hostId ? (
