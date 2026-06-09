@@ -56,7 +56,7 @@ function MetricsPanel({ metrics }: { metrics: LastRequestMetrics }) {
       </div>
       <p className="panel__meta muted">
         Modèle {metrics.model}
-        {metrics.completionTokens > 0
+        {(metrics.completionTokens ?? 0) > 0
           ? ` · ${metrics.completionTokens} tokens générés`
           : ""}
         {" · "}
@@ -437,10 +437,6 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
           {unpairing ? "Déliaison…" : "Délier ce PC"}
         </button>
       </div>
-    </div>
-  );
-}
-   </div>
     </div>
   );
 }
