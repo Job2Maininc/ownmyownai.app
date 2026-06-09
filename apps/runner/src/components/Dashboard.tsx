@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import AuditTrail from "./AuditTrail";
@@ -96,6 +97,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [openError, setOpenError] = useState<string | null>(null);
   const [airGapped, setAirGapped] = useState(false);
   const [togglingAirGapped, setTogglingAirGapped] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -104,6 +106,10 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    void getVersion().then(setAppVersion).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -214,6 +220,8 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
           </h1>
         </div>
         <p className="dashboard__subtitle">
+          {appVersion ? `Host v${appVersion}` : "Host"}
+          {" · "}
           {airGappedMode
             ? "Chat local uniquement — relay et cloud désactivés"
             : status?.activeSessions
