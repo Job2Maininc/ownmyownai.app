@@ -1,44 +1,44 @@
 :root {
-  /* Surfaces */
-  --background: #131712;
-  --foreground: #f2f5f0;
-  --surface: #1a211c;
-  --surface-hover: #222b25;
+  /* Surfaces — thème clair grand public */
+  --background: #f7faf8;
+  --foreground: #1a2e26;
+  --surface: #ffffff;
+  --surface-hover: #f0f5f2;
   --card: var(--surface);
-  --muted: #9ba89e;
-  --border: #2a332c;
+  --muted: #5f7068;
+  --border: #dce5df;
 
   /* Brand accent */
-  --accent: #4ec9a0;
-  --accent-hover: #3db88f;
-  --accent-dim: #1a3d32;
-  --accent-foreground: #0d1510;
-  --warm: #e8b88a;
+  --accent: #0a9b6e;
+  --accent-hover: #088a62;
+  --accent-dim: #e3f5ed;
+  --accent-foreground: #ffffff;
+  --warm: #f0c49a;
 
   /* Semantic */
-  --success: #4ec9a0;
-  --warn: #e5b567;
-  --error: #e88b8b;
-  --info: #6ba3e8;
+  --success: #0a9b6e;
+  --warn: #c4841a;
+  --error: #d64545;
+  --info: #3b82c4;
 
   /* Typography */
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* Radii */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  /* Radii — plus doux, style clés en main */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 3px rgba(26, 46, 38, 0.06);
+  --shadow-md: 0 8px 32px rgba(26, 46, 38, 0.08);
 
   /* Motion */
   --transition-fast: 200ms ease-out;
 
-  /* Runner aliases (backward compat) */
+  /* Runner aliases */
   --bg: var(--background);
   --fg: var(--foreground);
 }

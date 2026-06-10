@@ -16,14 +16,16 @@ OwnMyOwnAI est une IA locale, privée et simple. La marque doit rassurer et rest
 | Local | Métaphore maison + nœud sur votre machine |
 | Humain | Pas de terminal aesthetic |
 
-## Couleurs
+## Couleurs — thème clair grand public
 
 Source unique : `tokens.css` / `tokens.json`.
 
-- Fond : `#131712` (charbon vert chaud)
-- Accent : `#4EC9A0` (teal doux)
-- Chaleur : `#E8B88A` (highlights secondaires)
-- Texte bouton primary : `#0D1510` sur fond accent
+- Fond : `#F7FAF8` (blanc cassé chaud)
+- Surface : `#FFFFFF` (cartes)
+- Texte : `#1A2E26`
+- Accent : `#0A9B6E` (vert accessible)
+- Accent doux : `#E3F5ED` (fonds hero)
+- Texte bouton primary : `#FFFFFF` sur fond accent
 
 ## Typographie
 
@@ -42,10 +44,10 @@ Paires vérifiées (ratio ≥ 4.5:1 pour le corps, ≥ 3:1 pour les grands texte
 
 | Avant-plan | Fond | Usage |
 |------------|------|-------|
-| `#F2F5F0` | `#131712` | Texte corps |
-| `#9BA89E` | `#131712` | Texte secondaire |
-| `#0D1510` | `#4EC9A0` | Bouton primary |
-| `#4EC9A0` | `#131712` | Liens, accents |
+| `#1A2E26` | `#F7FAF8` | Texte corps |
+| `#5F7068` | `#F7FAF8` | Texte secondaire |
+| `#FFFFFF` | `#0A9B6E` | Bouton primary |
+| `#0A9B6E` | `#FFFFFF` | Liens, accents sur cartes |
 
 ## Do / Don't
 

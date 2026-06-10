@@ -13,16 +13,16 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#131712",
-          borderRadius: 8,
+          background: "#E3F5ED",
+          borderRadius: 10,
         }}
       >
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <circle cx="16" cy="16" r="10" stroke="#4EC9A0" strokeWidth="1.5" opacity="0.5" />
-          <circle cx="16" cy="16" r="3.5" fill="#4EC9A0" />
+          <circle cx="16" cy="16" r="10" stroke="#0A9B6E" strokeWidth="1.5" opacity="0.45" />
+          <circle cx="16" cy="16" r="3.5" fill="#0A9B6E" />
           <path
             d="M16 6 A10 10 0 0 1 24 14"
-            stroke="#4EC9A0"
+            stroke="#0A9B6E"
             strokeWidth="2"
             strokeLinecap="round"
           />

@@ -6,17 +6,17 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50: "#ecfdf8",
-          100: "#d4f5ea",
-          200: "#a8ebd4",
-          300: "#7dd9bd",
-          400: "#5fd4ad",
-          500: "#4ec9a0",
-          600: "#3db88f",
-          700: "#2d9a75",
-          800: "#1a3d32",
-          900: "#132a22",
-          950: "#0d1510",
+          50: "#ecfdf5",
+          100: "#d4f5e8",
+          200: "#a8e8d0",
+          300: "#6fd4b0",
+          400: "#3bc493",
+          500: "#0a9b6e",
+          600: "#088a62",
+          700: "#067a56",
+          800: "#055f44",
+          900: "#044a36",
+          950: "#022e22",
         },
         surface: {
           DEFAULT: "var(--surface)",
@@ -34,6 +34,7 @@ const config: Config = {
       },
       boxShadow: {
         card: "var(--shadow-md)",
+        soft: "var(--shadow-sm)",
       },
     },
   },

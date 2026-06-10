@@ -10,35 +10,53 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Marketing atmosphere */
+/* Marketing — ambiance claire */
 .brand-blob {
   position: fixed;
   border-radius: 50%;
-  filter: blur(80px);
+  filter: blur(90px);
   pointer-events: none;
   z-index: 0;
 }
 
 .brand-blob--1 {
-  width: 400px;
-  height: 400px;
-  top: -100px;
-  right: -80px;
+  width: 480px;
+  height: 480px;
+  top: -120px;
+  right: -100px;
   background: var(--accent-dim);
-  opacity: 0.35;
+  opacity: 0.85;
 }
 
 .brand-blob--2 {
-  width: 300px;
-  height: 300px;
-  bottom: 10%;
-  left: -60px;
-  background: color-mix(in srgb, var(--warm) 30%, transparent);
-  opacity: 0.2;
+  width: 360px;
+  height: 360px;
+  bottom: 5%;
+  left: -80px;
+  background: color-mix(in srgb, var(--warm) 50%, white);
+  opacity: 0.5;
 }
 
 .brand-hero-gradient {
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, var(--accent-dim) 0%, transparent 70%);
+  background: linear-gradient(180deg, var(--accent-dim) 0%, var(--background) 55%);
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  box-shadow: var(--shadow-sm);
+}
+
+.brand-section-alt {
+  background: color-mix(in srgb, var(--accent-dim) 45%, var(--background));
 }
 
 /* Status pills */
@@ -122,7 +140,8 @@ body {
   margin: 8px 0;
   padding: 8px;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
   overflow-x: auto;
 }
 
@@ -152,7 +171,7 @@ body {
   overflow: auto;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgb(0 0 0 / 0.35);
+  background: var(--surface-hover);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -164,22 +183,22 @@ body {
 }
 
 .diff-line--add {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--brand-300, #7dd9bd);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--brand-700);
 }
 
 .diff-line--remove {
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-  color: #f0b4b4;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
 }
 
 .diff-line--meta {
   color: var(--muted);
-  background: rgb(255 255 255 / 0.03);
+  background: var(--surface-hover);
 }
 
 .diff-line--ctx {
-  color: #b8c4be;
+  color: var(--muted);
 }
 
 .diff-placeholder {
@@ -203,7 +222,7 @@ body {
 }
 
 .prose-table th {
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--surface-hover);
 }
 
 .chat-sidebar-tabs {
@@ -218,7 +237,7 @@ body {
   border: 1px solid var(--border);
   padding: 6px 8px;
   font-size: 12px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--surface);
 }
 
 .chat-sidebar-tabs button[aria-selected="true"] {
@@ -246,7 +265,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--surface-hover);
 }
 
 .artifact-card {
@@ -270,7 +289,7 @@ body {
   display: block;
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--brand-400, #5fd4ad);
+  color: var(--brand-600);
 }
 
 .artifact-card__title {
@@ -343,13 +362,15 @@ body {
   width: 100%;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--background) 70%, black);
-  padding: 0.5rem 1rem;
+  background: var(--surface);
+  padding: 0.625rem 1rem;
   font-size: 0.9375rem;
   outline: none;
-  transition: border-color var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .input-field:focus {
-  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
+

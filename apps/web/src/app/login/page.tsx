@@ -66,7 +66,7 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-6">
+      <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6">
         <p className="text-sm text-[var(--muted)]">Vérification de la session…</p>
       </main>
     );
@@ -74,12 +74,12 @@ export default function LoginPage() {
 
   if (sent) {
     return (
-      <main className="relative flex min-h-screen flex-col items-center justify-center px-6">
+      <main className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--background)] px-6">
         <div className="brand-blob brand-blob--1" aria-hidden />
-        <Card className="relative z-10 w-full max-w-md text-center">
+        <Card className="relative z-10 w-full max-w-md text-center shadow-card">
           <h1 className="mb-2 text-xl font-semibold">Vérifiez votre boîte mail</h1>
           <p className="text-[var(--muted)]">
-            Un lien de connexion a été envoyé à <strong>{email}</strong>.
+            Un lien de connexion a été envoyé à <strong className="text-[var(--foreground)]">{email}</strong>.
           </p>
         </Card>
       </main>
@@ -87,15 +87,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center px-6">
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--background)] px-6">
       <div className="brand-blob brand-blob--1" aria-hidden />
       <div className="relative z-10 mb-8">
         <BrandMark href="/" />
       </div>
-      <Card className="relative z-10 w-full max-w-md">
+      <Card className="relative z-10 w-full max-w-md shadow-card">
         <h1 className="mb-2 text-xl font-semibold">Connexion</h1>
         <p className="mb-6 text-sm text-[var(--muted)]">
-          Recevez un lien magique par e-mail — pas de mot de passe.
+          Entrez votre e-mail — on vous envoie un lien magique, sans mot de passe.
         </p>
         <form onSubmit={handleLogin} className="space-y-4">
           <input
@@ -112,7 +112,7 @@ export default function LoginPage() {
           </Button>
         </form>
         <p className="mt-4 text-center text-sm text-[var(--muted)]">
-          <Link href="/" className="text-brand-500 hover:underline">
+          <Link href="/" className="font-medium text-brand-600 hover:underline">
             Retour à l&apos;accueil
           </Link>
         </p>
