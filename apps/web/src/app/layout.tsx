@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   title: "OwnMyOwnAI",
   description: "Votre IA sur votre PC — simple, privée, sous votre contrôle.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://ownmyownai.app"),
+  icons: {
+    icon: "/brand/icon.png",
+    apple: "/brand/icon.png",
+  },
   openGraph: {
     title: "OwnMyOwnAI",
     description: "Votre IA vit chez vous. Simple · Privé · Local",

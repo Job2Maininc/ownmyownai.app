@@ -34,9 +34,10 @@ Source unique : `tokens.css` / `tokens.json`.
 
 ## Logo
 
-- **Pictogramme** : cercle (espace) + point central (PC) + arc (connexion locale)
-- **Wordmark** : OwnMyOwn + AI en accent
-- Fichiers : `apps/web/public/brand/`
+- **Pictogramme** : maison arrondie + nœud IA vert (icône app)
+- **Wordmark** : OwnMyOwn + AI en accent (typographie Plus Jakarta Sans)
+- Fichiers : `apps/web/public/brand/icon.png`, `hero.png`
+- Composant : `BrandMark` (icône PNG + texte)
 
 ## Contraste (WCAG AA)
 

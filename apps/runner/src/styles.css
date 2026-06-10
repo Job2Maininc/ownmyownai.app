@@ -1053,6 +1053,10 @@ input {
   text-align: center;
 }
 
+.brand-mark__icon {
+  border-radius: 12px;
+}
+
 .brand-mark__text {
   font-size: 18px;
   font-weight: 600;

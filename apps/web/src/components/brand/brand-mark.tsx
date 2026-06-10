@@ -3,15 +3,12 @@ import Link from "next/link";
 
 type BrandMarkProps = {
   variant?: "full" | "icon";
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   href?: string;
   className?: string;
 };
 
-const sizes = {
-  sm: { icon: 24, full: { width: 140, height: 24 } },
-  md: { icon: 32, full: { width: 180, height: 32 } },
-};
+const iconSizes = { sm: 28, md: 36, lg: 44 } as const;
 
 export function BrandMark({
   variant = "full",
@@ -19,32 +16,48 @@ export function BrandMark({
   href,
   className = "",
 }: BrandMarkProps) {
+  const iconPx = iconSizes[size];
+
+  const icon = (
+    <Image
+      src="/brand/icon.png"
+      alt=""
+      width={iconPx}
+      height={iconPx}
+      className="shrink-0 rounded-xl"
+      priority
+    />
+  );
+
   const content =
     variant === "icon" ? (
-      <Image
-        src="/brand/icon.svg"
-        alt="OwnMyOwnAI"
-        width={sizes[size].icon}
-        height={sizes[size].icon}
-        priority
-      />
+      icon
     ) : (
-      <Image
-        src="/brand/logo.svg"
-        alt="OwnMyOwnAI"
-        width={sizes[size].full.width}
-        height={sizes[size].full.height}
-        priority
-      />
+      <span className="inline-flex items-center gap-2.5">
+        {icon}
+        <span
+          className={`font-semibold tracking-tight text-[var(--foreground)] ${
+            size === "sm" ? "text-base" : size === "lg" ? "text-2xl" : "text-lg"
+          }`}
+        >
+          OwnMyOwn<span className="text-brand-500">AI</span>
+        </span>
+      </span>
     );
+
+  const label = variant === "icon" ? "OwnMyOwnAI" : undefined;
 
   if (href) {
     return (
-      <Link href={href} className={`inline-flex items-center ${className}`}>
+      <Link href={href} className={`inline-flex items-center ${className}`} aria-label="OwnMyOwnAI">
         {content}
       </Link>
     );
   }
 
-  return <span className={`inline-flex items-center ${className}`}>{content}</span>;
+  return (
+    <span className={`inline-flex items-center ${className}`} aria-label={label}>
+      {content}
+    </span>
+  );
 }

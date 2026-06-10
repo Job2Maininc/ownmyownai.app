@@ -1,9 +1,14 @@
 import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
-export default function Icon() {
+export default async function Icon() {
+  const iconBuffer = await readFile(join(process.cwd(), "public", "brand", "icon.png"));
+  const iconBase64 = `data:image/png;base64,${iconBuffer.toString("base64")}`;
+
   return new ImageResponse(
     (
       <div
@@ -14,19 +19,11 @@ export default function Icon() {
           alignItems: "center",
           justifyContent: "center",
           background: "#E3F5ED",
-          borderRadius: 10,
+          borderRadius: 8,
         }}
       >
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <circle cx="16" cy="16" r="10" stroke="#0A9B6E" strokeWidth="1.5" opacity="0.45" />
-          <circle cx="16" cy="16" r="3.5" fill="#0A9B6E" />
-          <path
-            d="M16 6 A10 10 0 0 1 24 14"
-            stroke="#0A9B6E"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={iconBase64} width={28} height={28} alt="" />
       </div>
     ),
     { ...size },

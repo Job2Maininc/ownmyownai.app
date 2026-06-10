@@ -88,14 +88,16 @@ export default async function HomePage() {
               )}
             </div>
           </div>
-          <Image
-            src="/brand/hero-illustration.svg"
-            alt="Illustration : une maison connectée sur votre PC"
-            width={400}
-            height={320}
-            className="w-full max-w-xs drop-shadow-card md:max-w-sm"
-            priority
-          />
+          <div className="w-full max-w-md overflow-hidden rounded-lg shadow-card">
+            <Image
+              src="/brand/hero.png"
+              alt="Personne utilisant son IA depuis chez elle, dans un cadre lumineux et accueillant"
+              width={960}
+              height={540}
+              className="h-auto w-full"
+              priority
+            />
+          </div>
         </div>
       </section>
 
