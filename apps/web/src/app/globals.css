@@ -647,6 +647,62 @@ body {
   border: 0;
 }
 
+.indexing-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: #fafafa;
+  padding: 0.625rem 0.75rem;
+}
+
+.indexing-progress--compact {
+  padding: 0.5rem 0.625rem;
+}
+
+.indexing-progress__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.indexing-progress__label {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.indexing-progress__percent {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.indexing-progress__track {
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #e5e5e5;
+}
+
+.indexing-progress__fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #171717;
+  transition: width 0.35s ease-out;
+}
+
+.indexing-progress__message {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-sidebar-tabs {
   display: flex;
   gap: 4px;

@@ -7,9 +7,11 @@ import type { Host } from "@ownmyownai/supabase-types";
 import { deleteHost, renameHost, updateDefaultModel } from "@/app/dashboard/actions";
 import {
   getHostDisplayStatus,
+  getHostIndexingProgress,
   hostStatusLabel,
   hostStatusPillVariant,
 } from "@/lib/host-status";
+import { IndexingProgressBar } from "@/components/chat/indexing-progress-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -32,13 +34,9 @@ export function HostCard({ host: initialHost }: HostCardProps) {
 
   const installedModels = Array.isArray(host.installed_models) ? host.installed_models : [];
   const displayStatus = getHostDisplayStatus(host);
-  const chatDisabled = displayStatus === "offline" || displayStatus === "busy";
-  const chatTitle =
-    displayStatus === "offline"
-      ? "Host hors ligne"
-      : displayStatus === "busy"
-        ? "Host occupé — chat en cours"
-        : undefined;
+  const indexing = getHostIndexingProgress(host);
+  const chatDisabled = displayStatus === "offline";
+  const chatTitle = displayStatus === "offline" ? "Host hors ligne" : undefined;
 
   async function handleRename() {
     const trimmed = name.trim();
@@ -195,7 +193,11 @@ export function HostCard({ host: initialHost }: HostCardProps) {
         </div>
       )}
 
-      {displayStatus === "online" && (
+      {indexing && (
+        <IndexingProgressBar progress={indexing.progress} message={indexing.message} />
+      )}
+
+      {(displayStatus === "online" || displayStatus === "busy") && (
         <div>
           <Button
             type="button"

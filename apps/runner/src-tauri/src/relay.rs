@@ -43,9 +43,10 @@ use crate::settings::{resolved_context_limits, resolved_default_model, air_gappe
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use tokio::time::{sleep, Duration, Interval};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::time::{sleep, Interval};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 type RelayWrite = futures_util::stream::SplitSink<
@@ -83,7 +84,7 @@ fn unregister_chat_cancel(request_id: &Option<String>) {
 }
 
 fn host_reports_busy() -> bool {
-    crate::jobs::has_active_jobs()
+    crate::jobs::host_availability_busy()
 }
 
 fn relay_write_slot() -> &'static Mutex<Option<SharedRelayWrite>> {
@@ -261,11 +262,12 @@ async fn send_heartbeat(
         supabase_url.trim_end_matches('/')
     );
 
-    let status = if crate::jobs::has_active_jobs() {
+    let status = if host_reports_busy() {
         "busy"
     } else {
         "online"
     };
+    let indexing = crate::jobs::indexing_progress_snapshot();
 
     let res = client
         .post(&url)
@@ -279,6 +281,7 @@ async fn send_heartbeat(
             "disk_free_gb": disk_free_gb_for_models_dir(),
             "context_summary": get_context_summary(),
             "last_metrics": crate::local_metrics::heartbeat_payload(),
+            "indexing_progress": indexing,
         }))
         .send()
         .await
@@ -291,6 +294,48 @@ async fn send_heartbeat(
     Ok(())
 }
 
+static LAST_INDEXING_HEARTBEAT_MS: AtomicU64 = AtomicU64::new(0);
+const INDEXING_HEARTBEAT_MIN_INTERVAL: Duration = Duration::from_secs(4);
+
+/// Heartbeat cloud immédiat (fin d'indexation, etc.).
+pub async fn push_cloud_heartbeat_now() {
+    if let Some(creds) = get_credentials().ok().flatten() {
+        if let Ok(url) = resolve_supabase_url(&creds) {
+            match send_heartbeat(&creds, &url).await {
+                Ok(()) => set_heartbeat_ok(),
+                Err(e) => set_heartbeat_error(e),
+            }
+        }
+    }
+}
+
+/// Pousse un heartbeat cloud pendant l'indexation pour mettre à jour la barre de progression web.
+pub async fn maybe_push_indexing_heartbeat() {
+    let indexing = crate::jobs::indexing_progress_snapshot();
+    if !indexing.active {
+        return;
+    }
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let last = LAST_INDEXING_HEARTBEAT_MS.load(Ordering::Relaxed);
+    if now_ms.saturating_sub(last) < INDEXING_HEARTBEAT_MIN_INTERVAL.as_millis() as u64 {
+        return;
+    }
+    LAST_INDEXING_HEARTBEAT_MS.store(now_ms, Ordering::Relaxed);
+
+    if let Some(creds) = get_credentials().ok().flatten() {
+        if let Ok(url) = resolve_supabase_url(&creds) {
+            match send_heartbeat(&creds, &url).await {
+                Ok(()) => set_heartbeat_ok(),
+                Err(e) => set_heartbeat_error(e),
+            }
+        }
+    }
+}
+
 fn relay_host_status() -> &'static str {
     if host_reports_busy() {
         "busy"
@@ -300,11 +345,13 @@ fn relay_host_status() -> &'static str {
 }
 
 async fn send_relay_host_status(write: &SharedRelayWrite) -> Result<(), String> {
+    let indexing = crate::jobs::indexing_progress_snapshot();
     let envelope = WsEnvelope {
         msg_type: "host.status".into(),
         payload: serde_json::json!({
             "status": relay_host_status(),
             "queueDepth": crate::chat_queue::queue_depth(),
+            "indexingProgress": indexing,
         }),
         requestId: None,
     };

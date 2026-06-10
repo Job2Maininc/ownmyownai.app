@@ -34,10 +34,29 @@ export interface RelayToken {
   relay_url: string;
 }
 
+export interface IndexingProgressPayload {
+  active: boolean;
+  progress: number;
+  message: string;
+  kind?: string;
+}
+
+export interface JobProgressPayload {
+  jobId: string;
+  kind: string;
+  status: string;
+  message: string;
+  progress: number;
+}
+
 export interface RelayClientCallbacks {
   mintToken: () => Promise<RelayToken>;
   onStatus?: (status: RelayStatus) => void;
-  onHostStatus?: (status: HostStatus, meta?: { queueDepth?: number }) => void;
+  onHostStatus?: (
+    status: HostStatus,
+    meta?: { queueDepth?: number; indexingProgress?: IndexingProgressPayload | null },
+  ) => void;
+  onJobProgress?: (payload: JobProgressPayload) => void;
   onQueued?: (position: number, waitingAhead: number) => void;
   onDelta?: (content: string) => void;
   onThinkingDelta?: (thinking: string) => void;
@@ -255,6 +274,7 @@ export class RelayClient {
         const payload = envelope.payload as {
           status?: HostStatus;
           queueDepth?: number;
+          indexingProgress?: IndexingProgressPayload;
         };
         if (
           payload.status === "online" ||
@@ -263,6 +283,31 @@ export class RelayClient {
         ) {
           this.callbacks.onHostStatus?.(payload.status, {
             queueDepth: payload.queueDepth,
+            indexingProgress: payload.indexingProgress?.active
+              ? payload.indexingProgress
+              : null,
+          });
+        }
+        break;
+      }
+      case WS_MESSAGE_TYPES.JOB_PROGRESS: {
+        const payload = envelope.payload as {
+          jobId?: string;
+          kind?: string;
+          status?: string;
+          message?: string;
+          progress?: number;
+        };
+        if (
+          payload.kind?.startsWith("context.") &&
+          typeof payload.progress === "number"
+        ) {
+          this.callbacks.onJobProgress?.({
+            jobId: payload.jobId ?? "",
+            kind: payload.kind ?? "",
+            status: payload.status ?? "",
+            message: payload.message ?? "",
+            progress: payload.progress,
           });
         }
         break;

@@ -44,6 +44,8 @@ import { ArtifactsPanel } from "./artifacts-panel";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage as ChatMessageBubble, ChatTypingIndicator } from "./chat-message";
 import { ChatToolbar } from "./chat-toolbar";
+import { IndexingProgressBar } from "./indexing-progress-bar";
+import type { IndexingProgressPayload } from "@/lib/relay-client";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { ShareDialog } from "./share-dialog";
@@ -146,7 +148,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [rootThreadId, setRootThreadId] = useState<string | null>(null);
   const [hostBranches, setHostBranches] = useState<ChatThreadSummary[]>([]);
   const [conversationNotice, setConversationNotice] = useState<string | null>(null);
-  const [cloudHost, setCloudHost] = useState<Pick<Host, "status" | "last_seen_at"> | null>(null);
+  const [cloudHost, setCloudHost] = useState<
+    Pick<Host, "status" | "last_seen_at" | "indexing_progress"> | null
+  >(null);
+  const [liveIndexing, setLiveIndexing] = useState<IndexingProgressPayload | null>(null);
   const [statusClock, setStatusClock] = useState(0);
   const [queueHint, setQueueHint] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -310,11 +315,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     async function loadCloudHost() {
       const { data } = await supabase
         .from("hosts")
-        .select("status, last_seen_at")
+        .select("status, last_seen_at, indexing_progress")
         .eq("id", hostId)
         .single();
       if (data) {
-        setCloudHost(data as Pick<Host, "status" | "last_seen_at">);
+        setCloudHost(
+          data as Pick<Host, "status" | "last_seen_at" | "indexing_progress">,
+        );
       }
     }
 
@@ -329,7 +336,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "hosts", filter: `id=eq.${hostId}` },
         (payload) => {
-          setCloudHost(payload.new as Pick<Host, "status" | "last_seen_at">);
+          setCloudHost(
+            payload.new as Pick<Host, "status" | "last_seen_at" | "indexing_progress">,
+          );
         },
       )
       .subscribe();
@@ -358,7 +367,25 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           );
         }
       },
-      onHostStatus: (status) => setHostStatus(status),
+      onHostStatus: (status, meta) => {
+        setHostStatus(status);
+        if (meta?.indexingProgress !== undefined) {
+          setLiveIndexing(meta.indexingProgress);
+        }
+      },
+      onJobProgress: (payload) => {
+        if (!payload.kind.startsWith("context.")) return;
+        if (payload.status === "done" || payload.status === "cancelled" || payload.status === "error") {
+          setLiveIndexing(null);
+          return;
+        }
+        setLiveIndexing({
+          active: true,
+          progress: payload.progress,
+          message: payload.message,
+          kind: payload.kind,
+        });
+      },
       onQueued: (position, waitingAhead) => {
         if (position <= 1) {
           setQueueHint(null);
@@ -826,6 +853,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const showTypingIndicator =
     streaming && messages[messages.length - 1]?.role !== "assistant";
 
+  const indexingBanner =
+    liveIndexing?.active === true
+      ? liveIndexing
+      : cloudHost?.indexing_progress?.active
+        ? cloudHost.indexing_progress
+        : null;
+
   return (
     <main className="chat-shell">
       <ChatToolbar
@@ -861,6 +895,16 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <p className="chat-alerts text-xs text-[var(--link)]">
               Contexte actif : {activeContextIds.length} base(s)
             </p>
+          )}
+
+          {indexingBanner && (
+            <div className="chat-alerts">
+              <IndexingProgressBar
+                progress={indexingBanner.progress}
+                message={indexingBanner.message}
+                compact
+              />
+            </div>
           )}
 
           <div className="chat-messages">

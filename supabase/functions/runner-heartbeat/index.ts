@@ -45,6 +45,12 @@ Deno.serve(async (req) => {
       doc_count: number;
       status: string;
     }>;
+    indexing_progress?: {
+      active?: boolean;
+      progress?: number;
+      message?: string;
+      kind?: string;
+    } | null;
   };
   const status = body.status === "busy" ? "busy" : "online";
 
@@ -55,6 +61,7 @@ Deno.serve(async (req) => {
     installed_models?: string[];
     disk_free_gb?: number;
     context_summary?: unknown[];
+    indexing_progress?: unknown;
   } = {
     status,
     last_seen_at: new Date().toISOString(),
@@ -82,6 +89,25 @@ Deno.serve(async (req) => {
         typeof e.name === "string" &&
         typeof e.doc_count === "number",
     );
+  }
+
+  if (body.indexing_progress === null) {
+    update.indexing_progress = null;
+  } else if (body.indexing_progress && typeof body.indexing_progress === "object") {
+    const ip = body.indexing_progress;
+    if (ip.active === true) {
+      update.indexing_progress = {
+        active: true,
+        progress:
+          typeof ip.progress === "number"
+            ? Math.min(100, Math.max(0, Math.round(ip.progress)))
+            : 0,
+        message: typeof ip.message === "string" ? ip.message.slice(0, 500) : "",
+        kind: typeof ip.kind === "string" ? ip.kind.slice(0, 64) : undefined,
+      };
+    } else {
+      update.indexing_progress = null;
+    }
   }
 
   const { error } = await supabase.from("hosts").update(update).eq("id", hostId);

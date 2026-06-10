@@ -1,5 +1,5 @@
 import type { HostStatus } from "@ownmyownai/protocol";
-import type { Host } from "@ownmyownai/supabase-types";
+import type { Host, HostIndexingProgress } from "@ownmyownai/supabase-types";
 
 export type HostDisplayStatus = "online" | "busy" | "offline";
 
@@ -12,6 +12,21 @@ export function isHostHeartbeatFresh(lastSeenAt: string | null | undefined): boo
   if (!lastSeenAt) return false;
   const lastSeen = new Date(lastSeenAt).getTime();
   return !Number.isNaN(lastSeen) && Date.now() - lastSeen < HOST_STALE_MS;
+}
+
+export function getHostIndexingProgress(host: Host): HostIndexingProgress | null {
+  const ip = host.indexing_progress;
+  if (!ip?.active) return null;
+  return {
+    active: true,
+    progress: Math.min(100, Math.max(0, Math.round(ip.progress))),
+    message: ip.message ?? "",
+    kind: ip.kind,
+  };
+}
+
+export function isHostIndexing(host: Host): boolean {
+  return getHostIndexingProgress(host) !== null;
 }
 
 export function getHostDisplayStatus(host: Host): HostDisplayStatus {

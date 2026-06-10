@@ -79,6 +79,63 @@ pub fn has_active_jobs() -> bool {
         .unwrap_or(false)
 }
 
+/// Seuls les jobs agent bloquent la disponibilité « chat » côté cloud — pas l'indexation.
+pub fn host_availability_busy() -> bool {
+    jobs_map()
+        .lock()
+        .ok()
+        .map(|jobs| {
+            jobs.values().any(|j| {
+                matches!(j.kind, JobKind::AgentRun { .. })
+                    && (j.status == "running" || j.status == "queued")
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn is_indexing_kind(kind: &JobKind) -> bool {
+    matches!(
+        kind,
+        JobKind::ContextSync { .. } | JobKind::ContextSyncAll
+    )
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexingProgressSnapshot {
+    pub active: bool,
+    pub progress: u8,
+    pub message: String,
+    pub kind: Option<String>,
+}
+
+pub fn indexing_progress_snapshot() -> IndexingProgressSnapshot {
+    let active_job = jobs_map().lock().ok().and_then(|jobs| {
+        jobs.iter()
+            .filter(|(_, j)| {
+                is_indexing_kind(&j.kind)
+                    && (j.status == "running" || j.status == "queued")
+            })
+            .max_by_key(|(_, j)| j.progress)
+            .map(|(id, j)| snapshot(id, j))
+    });
+
+    match active_job {
+        Some(job) => IndexingProgressSnapshot {
+            active: true,
+            progress: job.progress,
+            message: job.message,
+            kind: Some(job.kind),
+        },
+        None => IndexingProgressSnapshot {
+            active: false,
+            progress: 0,
+            message: String::new(),
+            kind: None,
+        },
+    }
+}
+
 pub fn active_job_label() -> Option<String> {
     jobs_map().lock().ok().and_then(|jobs| {
         jobs.iter()
@@ -116,12 +173,31 @@ fn find_duplicate_sync(link_id: Option<&str>) -> Option<String> {
 }
 
 fn set_job_state(id: &str, status: &str, message: &str, progress: u8) {
-    if let Ok(mut jobs) = jobs_map().lock() {
+    let indexing_snap = if let Ok(mut jobs) = jobs_map().lock() {
         if let Some(record) = jobs.get_mut(id) {
             record.status = status.into();
             record.message = message.into();
             record.progress = progress;
+            if is_indexing_kind(&record.kind)
+                && (status == "running" || status == "queued")
+            {
+                Some(snapshot(id, record))
+            } else {
+                None
+            }
+        } else {
+            None
         }
+    } else {
+        None
+    };
+
+    if let Some(snap) = indexing_snap {
+        emit_job_event("background-job-update", &snap);
+        tauri::async_runtime::spawn(async move {
+            broadcast_job_progress(&snap, None).await;
+            crate::relay::maybe_push_indexing_heartbeat().await;
+        });
     }
 }
 
@@ -156,6 +232,11 @@ async fn finish_job(id: &str, status: &str, ws_type: &str, message: &str) {
         .ok()
         .and_then(|jobs| jobs.get(id).map(|r| snapshot(id, r)));
 
+    let was_indexing = snap
+        .as_ref()
+        .map(|s| s.kind.starts_with("context."))
+        .unwrap_or(false);
+
     if let Some(snap) = snap {
         emit_job_event("background-job-update", &snap);
         crate::relay::broadcast_ws(
@@ -180,6 +261,12 @@ async fn finish_job(id: &str, status: &str, ws_type: &str, message: &str) {
         jobs.remove(id);
     }
     host_status::emit_status();
+
+    if was_indexing {
+        tauri::async_runtime::spawn(async {
+            crate::relay::push_cloud_heartbeat_now().await;
+        });
+    }
 }
 
 async fn run_job(id: String) {

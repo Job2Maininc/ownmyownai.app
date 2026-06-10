@@ -18,6 +18,7 @@ function makeHost(overrides: Partial<Host> = {}): Host {
     installed_models: [],
     disk_free_gb: null,
     context_summary: [],
+    indexing_progress: null,
     status: "online",
     last_seen_at: new Date().toISOString(),
     created_at: new Date().toISOString(),

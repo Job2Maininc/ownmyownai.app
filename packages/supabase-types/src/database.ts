@@ -15,6 +15,13 @@ export interface ContextSummaryEntry {
   sync_status?: string;
 }
 
+export interface HostIndexingProgress {
+  active: boolean;
+  progress: number;
+  message: string;
+  kind?: string;
+}
+
 export interface Host {
   id: string;
   user_id: string;
@@ -25,6 +32,7 @@ export interface Host {
   installed_models: string[];
   disk_free_gb: number | null;
   context_summary: ContextSummaryEntry[];
+  indexing_progress: HostIndexingProgress | null;
   status: HostStatus;
   last_seen_at: string | null;
   created_at: string;
@@ -70,6 +78,7 @@ export interface Database {
           installed_models?: string[];
           disk_free_gb?: number | null;
           context_summary?: ContextSummaryEntry[];
+          indexing_progress?: HostIndexingProgress | null;
           status?: HostStatus;
           last_seen_at?: string | null;
         };
