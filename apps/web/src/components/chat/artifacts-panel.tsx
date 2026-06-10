@@ -63,8 +63,8 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: ArtifactsPanel
                 type="button"
                 className={`w-full rounded border px-2 py-1.5 text-left text-sm ${
                   active?.id === artifact.id
-                    ? "border-brand-500 bg-brand-600/20"
-                    : "border-[var(--border)] bg-black/20 hover:border-brand-500/60"
+                    ? "border-neutral-400 bg-neutral-100"
+                    : "border-[var(--border)] bg-neutral-50 hover:border-neutral-300"
                 }`}
                 onClick={() => onSelect(artifact.id)}
               >
@@ -95,7 +95,7 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: ArtifactsPanel
             </div>
           </div>
 
-          {copyNotice && <p className="mb-2 text-xs text-brand-400">{copyNotice}</p>}
+          {copyNotice && <p className="mb-2 text-xs text-[var(--link)]">{copyNotice}</p>}
 
           <div
             className="artifacts-panel__preview prose-chat text-sm"

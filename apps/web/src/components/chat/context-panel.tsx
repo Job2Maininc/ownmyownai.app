@@ -273,7 +273,7 @@ export function ContextPanel({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className={`rounded px-2 py-0.5 text-xs ${activeProjectId === project.id ? "bg-brand-600/40" : "bg-black/30"}`}
+                    className={`rounded px-2 py-0.5 text-xs ${activeProjectId === project.id ? "bg-neutral-100" : "bg-white"}`}
                     onClick={() => void handleOpenProject(project.id)}
                   >
                     {activeProjectId === project.id ? "Actif" : "Ouvrir"}
@@ -305,7 +305,7 @@ export function ContextPanel({
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="Nouvelle base"
-          className="flex-1 rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm"
+          className="flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-sm"
           disabled={!connected}
         />
         <Button type="button" variant="secondary" disabled={!connected} onClick={() => void handleCreate()}>
@@ -319,7 +319,7 @@ export function ContextPanel({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className={`rounded px-2 py-0.5 text-xs ${activeIds.includes(kb.id) ? "bg-brand-600/40" : "bg-black/30"}`}
+                className={`rounded px-2 py-0.5 text-xs ${activeIds.includes(kb.id) ? "bg-neutral-100" : "bg-white"}`}
                 onClick={() => toggleActive(kb.id)}
               >
                 {activeIds.includes(kb.id) ? "Actif" : "Activer"}
@@ -386,7 +386,7 @@ export function ContextPanel({
                     )}
                   </div>
                 ) : (
-                  <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] hover:border-brand-500">
+                  <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] hover:border-neutral-400">
                     Glisser-déposer ou cliquer (.txt, .md, .pdf, .docx)
                     <input
                       type="file"
@@ -414,7 +414,7 @@ export function ContextPanel({
                         {d.status === "ready" && d.chunkCount > 0 && (
                           <button
                             type="button"
-                            className="text-brand-400 hover:underline"
+                            className="link"
                             onClick={() => void handleViewChunks(d.id)}
                           >
                             {chunksDocId === d.id ? "Masquer" : "Extraits"}
@@ -452,7 +452,7 @@ export function ContextPanel({
                             {editable && relay && (
                               <button
                                 type="button"
-                                className="shrink-0 text-brand-400 hover:underline"
+                                className="shrink-0 link"
                                 onClick={() => openInlineEdit(doc, c.preview)}
                               >
                                 Reformuler

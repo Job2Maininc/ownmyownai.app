@@ -151,12 +151,12 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                           onMouseEnter={() => setActiveIndex(index)}
                           onClick={() => runCommand(command)}
                           className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
-                            active ? "bg-brand-600/20 text-white" : "hover:bg-white/5"
+                            active ? "bg-neutral-100 text-white" : "hover:bg-white/5"
                           }`}
                         >
                           <span>{command.label}</span>
                           {command.shortcut ? (
-                            <kbd className="rounded border border-[var(--border)] bg-black/30 px-1.5 py-0.5 text-xs text-[var(--muted)]">
+                            <kbd className="rounded border border-[var(--border)] bg-white px-1.5 py-0.5 text-xs text-[var(--muted)]">
                               {command.shortcut}
                             </kbd>
                           ) : null}

@@ -103,7 +103,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="flex-1 rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm outline-none focus:border-brand-500"
+                className="flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-sm outline-none focus:border-neutral-400"
                 autoFocus
                 disabled={saving}
               />
@@ -124,7 +124,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
           ) : (
             <button
               type="button"
-              className="font-medium hover:text-brand-400"
+              className="font-medium hover:text-[var(--link)]"
               title="Renommer"
               onClick={() => setEditing(true)}
             >
@@ -167,7 +167,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
             value={host.default_model}
             disabled={updatingModel}
             onChange={(e) => void handleDefaultModelChange(e.target.value)}
-            className="rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm"
+            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-sm"
           >
             {installedModels.map((m) => (
               <option key={m} value={m}>
@@ -186,7 +186,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
             <span
               key={m}
               className={`rounded px-2 py-0.5 text-xs ${
-                m === host.default_model ? "bg-brand-600/30" : "bg-black/30"
+                m === host.default_model ? "bg-neutral-100" : "bg-white"
               }`}
             >
               {m}

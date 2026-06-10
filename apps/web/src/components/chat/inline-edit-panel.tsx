@@ -85,7 +85,7 @@ export function InlineEditPanel({
           value={selectedText}
           onChange={(e) => setSelectedText(e.target.value)}
           rows={4}
-          className="mt-1 w-full rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-xs"
+          className="mt-1 w-full rounded border border-[var(--border)] bg-white px-2 py-1 text-xs"
           disabled={loading || applying}
         />
       </label>
@@ -94,7 +94,7 @@ export function InlineEditPanel({
         <input
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
-          className="mt-1 w-full rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-xs"
+          className="mt-1 w-full rounded border border-[var(--border)] bg-white px-2 py-1 text-xs"
           disabled={loading || applying}
         />
       </label>

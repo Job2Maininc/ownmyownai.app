@@ -38,7 +38,7 @@ export function OnboardingBanner({ hasHosts }: OnboardingBannerProps) {
       <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-[var(--muted)]">
         {STEPS.map((step) => (
           <li key={step.label}>
-            <Link href={step.href} className="text-brand-400 hover:underline">
+            <Link href={step.href} className="link">
               {step.label}
             </Link>
           </li>

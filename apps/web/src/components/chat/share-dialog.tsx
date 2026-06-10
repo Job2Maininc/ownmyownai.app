@@ -77,7 +77,7 @@ export function ShareDialog({ hostId, messages, onClose }: ShareDialogProps) {
               id="share-url"
               readOnly
               value={shareUrl}
-              className="mb-2 w-full rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 font-mono text-xs"
+              className="mb-2 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 font-mono text-xs"
             />
             {expiresAt && (
               <p className="mb-3 text-xs text-[var(--muted)]">

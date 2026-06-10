@@ -124,7 +124,7 @@ export function HostList({ initialHosts }: HostListProps) {
             key={id}
             type="button"
             className={`rounded px-2 py-1 text-xs ${
-              filter === id ? "bg-brand-600/30" : "bg-black/30"
+              filter === id ? "bg-neutral-100" : "bg-white"
             }`}
             onClick={() => setFilter(id)}
           >

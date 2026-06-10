@@ -101,7 +101,7 @@ export function DiffPatchPanel({
             value={path}
             onChange={(e) => setPath(e.target.value)}
             placeholder="C:\projets\mon-repo\src\lib.rs"
-            className="mt-1 w-full rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-xs"
+            className="mt-1 w-full rounded border border-[var(--border)] bg-white px-2 py-1 text-xs"
             disabled={loading || applying || !!preview}
           />
         </label>
@@ -139,7 +139,7 @@ export function DiffPatchPanel({
       </div>
 
       {preview && (
-        <p className="mt-2 text-xs text-brand-400">
+        <p className="mt-2 text-xs text-[var(--link)]">
           {preview.hunks} hunk(s) — +{preview.linesAdded} / -{preview.linesRemoved} ligne(s) sur{" "}
           <span className="font-mono">{preview.path}</span>
         </p>

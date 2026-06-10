@@ -20,7 +20,7 @@ export function Button({
   };
   const variants = {
     primary:
-      "bg-brand-500 text-white shadow-soft hover:bg-brand-600 hover:shadow-card",
+      "bg-neutral-900 text-white shadow-soft hover:bg-neutral-800 hover:shadow-card",
     secondary:
       "border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] shadow-soft hover:bg-[var(--surface-hover)]",
     ghost: "rounded-md text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]",

@@ -40,7 +40,7 @@ export function BrandMark({
             size === "sm" ? "text-base" : size === "lg" ? "text-2xl" : "text-lg"
           }`}
         >
-          OwnMyOwn<span className="text-brand-500">AI</span>
+          OwnMyOwn<span className="text-[var(--foreground)]">AI</span>
         </span>
       </span>
     );

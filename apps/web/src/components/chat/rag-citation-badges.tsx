@@ -29,11 +29,11 @@ export function RagCitationBadges({ citations }: RagCitationBadgesProps) {
                 }
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
                   isOpen
-                    ? "border-brand-500 bg-brand-600/20 text-brand-300"
-                    : "border-[var(--border)] bg-black/20 text-[var(--muted)] hover:border-brand-500/50 hover:text-brand-300"
+                    ? "border-neutral-400 bg-neutral-100 text-[var(--foreground)]"
+                    : "border-[var(--border)] bg-neutral-50 text-[var(--muted)] hover:border-neutral-300 hover:text-[var(--success)]"
                 }`}
               >
-                <span className="font-medium text-brand-400">[{citation.index}]</span>
+                <span className="font-medium text-[var(--link)]">[{citation.index}]</span>
                 <span>{citation.source}</span>
                 <span className="text-[10px] opacity-70">
                   {(citation.score * 100).toFixed(0)}%

@@ -833,7 +833,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   return (
     <main className="mx-auto flex h-screen max-w-5xl flex-col px-4 py-4">
       <header className="mb-4 flex items-center justify-between border-b border-[var(--border)] pb-4">
-        <Link href="/dashboard" className="text-sm text-brand-500 hover:underline">
+        <Link href="/dashboard" className="text-sm link">
           ← Mes PCs
         </Link>
         <div className="flex items-center gap-3">
@@ -863,7 +863,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 value={activeBranchId}
                 onChange={(e) => void handleSwitchBranch(e.target.value)}
                 disabled={streaming}
-                className="max-w-[220px] rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+                className="max-w-[220px] rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
                 aria-label="Choisir une branche de conversation"
               >
                 {branchOptions.map((branch) => (
@@ -908,7 +908,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               placeholder="Filtrer…"
               value={modelSearch}
               onChange={(e) => setModelSearch(e.target.value)}
-              className="w-24 rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm"
+              className="w-24 rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-sm"
               disabled={streaming}
             />
             <select
@@ -916,7 +916,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               value={model}
               onChange={(e) => setModel(e.target.value)}
               disabled={streaming}
-              className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
             >
               {filteredModels.map((m) => (
                 <option key={m} value={m}>
@@ -933,7 +933,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               value={thinkingMode ? "reflection" : "normal"}
               onChange={(e) => setThinkingMode(e.target.value === "reflection")}
               disabled={streaming}
-              className="rounded-lg border border-[var(--border)] bg-black/30 px-2 py-1.5 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+              className="rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
               title="Réflexion : modèles thinking Ollama (qwen3, deepseek-r1…)"
             >
               <option value="normal">Normal</option>
@@ -942,7 +942,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           </div>
 
           {activeContextIds.length > 0 && (
-            <p className="mb-2 text-xs text-brand-400">
+            <p className="mb-2 text-xs text-[var(--link)]">
               Contexte actif : {activeContextIds.length} base(s)
             </p>
           )}
@@ -957,7 +957,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                     <li key={branch.id}>
                       <button
                         type="button"
-                        className="text-left hover:text-brand-400"
+                        className="text-left hover:text-[var(--link)]"
                         onClick={() => void handleSwitchBranch(branch.id)}
                         disabled={streaming}
                       >
@@ -984,7 +984,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   key={`${msg.role}-${i}`}
                   className={`group relative rounded-lg px-4 py-3 ${
                     msg.role === "user"
-                      ? "ml-8 bg-brand-600/20"
+                      ? "ml-8 bg-neutral-100"
                       : "mr-8 border border-[var(--border)] bg-[var(--card)]"
                   }`}
                 >
@@ -992,10 +992,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                     <>
                       {msg.thinking?.trim() && (
                         <details
-                          className="mb-3 rounded border border-[var(--border)] bg-black/20 px-3 py-2 text-xs text-[var(--muted)]"
+                          className="mb-3 rounded border border-[var(--border)] bg-neutral-50 px-3 py-2 text-xs text-[var(--muted)]"
                           open={streaming && i === messages.length - 1}
                         >
-                          <summary className="cursor-pointer select-none font-medium text-brand-400">
+                          <summary className="cursor-pointer select-none font-medium text-[var(--link)]">
                             Chaîne de pensée
                           </summary>
                           <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap">
@@ -1024,7 +1024,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                     <button
                       type="button"
                       onClick={() => void handleForkAt(i)}
-                      className="absolute -bottom-2 right-2 hidden rounded border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)] hover:border-brand-500 hover:text-brand-400 group-hover:block"
+                      className="absolute -bottom-2 right-2 hidden rounded border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)] hover:border-neutral-400 hover:text-[var(--link)] group-hover:block"
                       title="Créer une branche à partir de ce message"
                     >
                       Brancher ici
@@ -1042,7 +1042,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           </div>
 
           {conversationNotice && (
-            <p className="mb-2 text-sm text-brand-400">{conversationNotice}</p>
+            <p className="mb-2 text-sm text-[var(--link)]">{conversationNotice}</p>
           )}
           {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
           {hostOffline && connected && (
@@ -1055,7 +1055,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             <p className="mb-2 text-sm text-amber-400">{queueHint}</p>
           )}
           {inputMentionHint && (
-            <p className="mb-2 text-xs text-brand-400">{inputMentionHint}</p>
+            <p className="mb-2 text-xs text-[var(--link)]">{inputMentionHint}</p>
           )}
 
           <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--border)] pt-4">
@@ -1071,7 +1071,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               placeholder={`Votre message… (${SEND_SHORTCUT_LABEL} pour envoyer · @base:Nom, @fichier:…)`}
               disabled={streaming || !canSend}
               aria-keyshortcuts={SEND_SHORTCUT_LABEL}
-              className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-[var(--border)] bg-white px-4 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
             />
             {streaming ? (
               <Button type="button" variant="secondary" onClick={handleStop}>

@@ -63,7 +63,7 @@ export default async function HomePage() {
             <h1 className="mb-5 text-4xl font-bold leading-[1.15] tracking-tight text-[var(--foreground)] md:text-5xl lg:text-[3.25rem]">
               Votre IA,
               <br />
-              <span className="text-brand-500">chez vous.</span>
+              <span className="text-neutral-500">chez vous.</span>
             </h1>
             <p className="mb-8 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
               Une intelligence artificielle simple et privée sur votre PC. Installez, liez,
@@ -136,7 +136,7 @@ export default async function HomePage() {
                 <span className="mb-2 block text-2xl" aria-hidden>
                   {benefit.emoji}
                 </span>
-                <h3 className="mb-2 text-lg font-semibold text-brand-600">{benefit.title}</h3>
+                <h3 className="mb-2 text-lg font-semibold">{benefit.title}</h3>
                 <p className="text-sm leading-relaxed text-[var(--muted)]">{benefit.description}</p>
               </Card>
             ))}

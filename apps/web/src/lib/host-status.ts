@@ -66,7 +66,7 @@ export function hostStatusLabel(status: HostDisplayStatus): string {
 export function hostStatusClassName(status: HostDisplayStatus): string {
   switch (status) {
     case "online":
-      return "text-brand-500";
+      return "text-[var(--link)]";
     case "busy":
       return "text-[var(--warn)]";
     case "offline":

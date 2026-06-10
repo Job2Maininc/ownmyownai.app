@@ -44,7 +44,7 @@ export default function HostLinkPage() {
   return (
     <AppHeader>
     <main className="mx-auto min-h-screen max-w-lg px-6 py-12">
-      <Link href="/dashboard" className="mb-6 inline-block text-sm text-brand-500 hover:underline">
+      <Link href="/dashboard" className="mb-6 inline-block text-sm link">
         ← Dashboard
       </Link>
 
@@ -61,7 +61,7 @@ export default function HostLinkPage() {
 
         {code && !loading && (
           <div className="flex flex-col items-center gap-4">
-            <p className="font-mono text-3xl font-bold tracking-widest text-brand-500">
+            <p className="font-mono text-3xl font-bold tracking-widest text-[var(--link)]">
               {code}
             </p>
             {pairingUrl && (

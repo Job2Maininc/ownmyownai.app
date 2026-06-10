@@ -87,7 +87,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
   return (
     <CommandPaletteProvider defaultCommands={defaultCommands}>
       {email ? (
-        <header className="border-b border-[var(--border)] bg-[var(--surface)] shadow-soft">
+        <header className="border-b border-[var(--border)] bg-white shadow-soft">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
             <nav className="flex items-center gap-4 text-sm">
               <BrandMark href="/dashboard" size="sm" />

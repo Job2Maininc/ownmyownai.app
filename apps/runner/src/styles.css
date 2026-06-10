@@ -35,8 +35,8 @@ button:disabled {
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: var(--accent-foreground);
+  background: #171717;
+  color: #ffffff;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -163,8 +163,8 @@ input {
 }
 
 .model-card--selected {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-dim) 40%, transparent);
+  border-color: #d4d4d4;
+  background: #f5f5f5;
 }
 
 .model-card__head {
@@ -197,7 +197,8 @@ input {
 }
 
 .model-card__default--on {
-  color: var(--accent);
+  color: var(--foreground);
+  font-weight: 600;
 }
 
 .model-card__desc {
@@ -245,7 +246,7 @@ input {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--accent);
+  color: var(--muted);
   margin: 0 0 8px;
   font-weight: 600;
 }
@@ -1064,7 +1065,7 @@ input {
 }
 
 .brand-mark__accent {
-  color: var(--accent);
+  color: var(--foreground);
 }
 
 .brand-mark__host {
@@ -1102,11 +1103,7 @@ input {
 
 .app--dashboard .card--setup,
 .card--setup {
-  background: radial-gradient(
-    ellipse 80% 50% at 50% 0%,
-    color-mix(in srgb, var(--accent-dim) 60%, transparent) 0%,
-    transparent 70%
-  );
+  background: #ffffff;
 }
 
 /* Local chat */
@@ -1148,8 +1145,8 @@ input {
 
 .local-chat__bubble--user {
   align-self: flex-end;
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: #f5f5f5;
+  border: 1px solid var(--border);
 }
 
 .local-chat__bubble--assistant {
@@ -1193,7 +1190,7 @@ input {
 .metric-card__value {
   font-size: 16px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--foreground);
 }
 
 .metric-card__label {
@@ -1234,8 +1231,8 @@ input {
 }
 
 .context-base-item--active {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent-dim) 30%, transparent);
+  border-color: #d4d4d4;
+  background: #f5f5f5;
 }
 
 .context-base-item__head {
@@ -1266,7 +1263,7 @@ input {
 }
 
 .btn-ghost--active {
-  color: var(--accent) !important;
+  color: var(--foreground) !important;
   font-weight: 600;
 }
 
@@ -1275,6 +1272,6 @@ input {
 }
 
 .context-list__item--active {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-dim) 25%, transparent);
+  border-color: #d4d4d4;
+  background: #f5f5f5;
 }

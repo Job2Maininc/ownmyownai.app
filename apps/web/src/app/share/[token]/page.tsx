@@ -54,7 +54,7 @@ export default function SharePage() {
   return (
     <AppHeader>
       <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
-        <Link href="/" className="mb-6 inline-block text-sm text-brand-500 hover:underline">
+        <Link href="/" className="mb-6 inline-block text-sm link">
           ← OwnMyOwnAI
         </Link>
 
@@ -90,7 +90,7 @@ export default function SharePage() {
                   key={`${msg.role}-${i}`}
                   className={`rounded-lg px-4 py-3 ${
                     msg.role === "user"
-                      ? "ml-8 bg-brand-600/20"
+                      ? "ml-8 bg-neutral-100"
                       : "mr-8 border border-[var(--border)] bg-[var(--card)]"
                   }`}
                 >

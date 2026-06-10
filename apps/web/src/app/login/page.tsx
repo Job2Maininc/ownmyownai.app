@@ -66,7 +66,7 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6">
+      <main className="flex min-h-screen items-center justify-center bg-white px-6">
         <p className="text-sm text-[var(--muted)]">Vérification de la session…</p>
       </main>
     );
@@ -74,9 +74,8 @@ export default function LoginPage() {
 
   if (sent) {
     return (
-      <main className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--background)] px-6">
-        <div className="brand-blob brand-blob--1" aria-hidden />
-        <Card className="relative z-10 w-full max-w-md text-center shadow-card">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-white px-6">
+        <Card className="w-full max-w-md text-center shadow-card">
           <h1 className="mb-2 text-xl font-semibold">Vérifiez votre boîte mail</h1>
           <p className="text-[var(--muted)]">
             Un lien de connexion a été envoyé à <strong className="text-[var(--foreground)]">{email}</strong>.
@@ -87,12 +86,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--background)] px-6">
-      <div className="brand-blob brand-blob--1" aria-hidden />
-      <div className="relative z-10 mb-8">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-white px-6">
+      <div className="mb-8">
         <BrandMark href="/" />
       </div>
-      <Card className="relative z-10 w-full max-w-md shadow-card">
+      <Card className="w-full max-w-md shadow-card">
         <h1 className="mb-2 text-xl font-semibold">Connexion</h1>
         <p className="mb-6 text-sm text-[var(--muted)]">
           Entrez votre e-mail — on vous envoie un lien magique, sans mot de passe.
@@ -112,7 +110,7 @@ export default function LoginPage() {
           </Button>
         </form>
         <p className="mt-4 text-center text-sm text-[var(--muted)]">
-          <Link href="/" className="font-medium text-brand-600 hover:underline">
+          <Link href="/" className="link font-medium">
             Retour à l&apos;accueil
           </Link>
         </p>

@@ -16,16 +16,16 @@ OwnMyOwnAI est une IA locale, privée et simple. La marque doit rassurer et rest
 | Local | Métaphore maison + nœud sur votre machine |
 | Humain | Pas de terminal aesthetic |
 
-## Couleurs — thème clair grand public
+## Couleurs — blanc pur
 
 Source unique : `tokens.css` / `tokens.json`.
 
-- Fond : `#F7FAF8` (blanc cassé chaud)
-- Surface : `#FFFFFF` (cartes)
-- Texte : `#1A2E26`
-- Accent : `#0A9B6E` (vert accessible)
-- Accent doux : `#E3F5ED` (fonds hero)
-- Texte bouton primary : `#FFFFFF` sur fond accent
+- Fond : `#FFFFFF`
+- Texte : `#171717`
+- Bordures : `#E5E5E5`
+- Boutons : `#171717` (noir) sur blanc
+- Liens : `#2563EB` (bleu)
+- Sections alternées : `#FAFAFA`
 
 ## Typographie
 

@@ -50,7 +50,7 @@ export function ModelPullPanel({ hostId, disabled, onDone }: ModelPullPanelProps
   }
 
   return (
-    <div className="rounded border border-[var(--border)] bg-black/20 p-3 text-sm">
+    <div className="rounded border border-[var(--border)] bg-neutral-50 p-3 text-sm">
       <p className="mb-2 font-medium">Télécharger un modèle sur ce PC</p>
       <div className="flex flex-wrap gap-2">
         <input
@@ -58,7 +58,7 @@ export function ModelPullPanel({ hostId, disabled, onDone }: ModelPullPanelProps
           onChange={(e) => setModel(e.target.value)}
           placeholder="ex. llama3.2:3b"
           disabled={pulling || disabled}
-          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-black/30 px-2 py-1 text-sm"
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-sm"
         />
         <Button
           type="button"
@@ -76,9 +76,9 @@ export function ModelPullPanel({ hostId, disabled, onDone }: ModelPullPanelProps
         </p>
       )}
       {percent != null && (
-        <div className="mt-1 h-1.5 overflow-hidden rounded bg-black/40">
+        <div className="mt-1 h-1.5 overflow-hidden rounded bg-neutral-100">
           <div
-            className="h-full bg-brand-500 transition-all"
+            className="h-full bg-neutral-900 transition-all"
             style={{ width: `${Math.min(100, percent)}%` }}
           />
         </div>

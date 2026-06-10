@@ -53,7 +53,7 @@ export default async function DashboardPage() {
         )}
 
         <p className="mt-8 text-center">
-          <Link href="/download" className="text-sm text-brand-500 hover:underline">
+          <Link href="/download" className="text-sm link">
             Télécharger le host Windows
           </Link>
         </p>

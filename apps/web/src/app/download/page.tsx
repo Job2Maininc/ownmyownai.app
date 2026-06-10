@@ -38,7 +38,7 @@ export default async function DownloadPage({
           {release ? (
             <p className="mb-6 text-sm">
               <span className="text-[var(--muted)]">Version disponible : </span>
-              <span className="font-medium text-brand-400">v{release.version}</span>
+              <span className="font-medium text-[var(--link)]">v{release.version}</span>
               {releaseDate && (
                 <span className="text-[var(--muted)]"> — publiée le {releaseDate}</span>
               )}
@@ -61,13 +61,13 @@ export default async function DownloadPage({
             <li>Téléchargez et lancez l&apos;installateur</li>
             <li>Ouvrez OwnMyOwnAI Host depuis le menu Démarrer</li>
             <li>
-              <Link href="/login" className="text-brand-500 hover:underline">
+              <Link href="/login" className="link">
                 Connectez-vous
               </Link>{" "}
               sur le web
             </li>
             <li>
-              <Link href="/host/link" className="text-brand-500 hover:underline">
+              <Link href="/host/link" className="link">
                 Générez un code de pairing
               </Link>{" "}
               et entrez-le dans l&apos;app

@@ -33,8 +33,8 @@ export function PairingStatus({ code }: PairingStatusProps) {
   if (!hostId) return null;
 
   return (
-    <div className="mt-4 rounded-lg border border-brand-500/40 bg-brand-600/10 p-4 text-center">
-      <p className="mb-2 text-sm text-brand-300">PC lié avec succès !</p>
+    <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-center">
+      <p className="mb-2 text-sm text-[var(--success)]">PC lié avec succès !</p>
       <Link href="/dashboard">
         <Button>Voir mon PC</Button>
       </Link>

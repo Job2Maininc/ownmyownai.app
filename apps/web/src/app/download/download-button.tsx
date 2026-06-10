@@ -23,7 +23,7 @@ export function DownloadButton({ version }: DownloadButtonProps) {
       <a
         href="/api/download"
         download={PORTABLE_ZIP_FILENAME}
-        className="text-center text-sm text-brand-500 hover:underline"
+        className="text-center text-sm link"
       >
         Version portable ZIP{versionLabel} (sans mise à jour auto)
       </a>

@@ -10,35 +10,9 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Marketing — ambiance claire */
-.brand-blob {
-  position: fixed;
-  border-radius: 50%;
-  filter: blur(90px);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.brand-blob--1 {
-  width: 480px;
-  height: 480px;
-  top: -120px;
-  right: -100px;
-  background: var(--accent-dim);
-  opacity: 0.85;
-}
-
-.brand-blob--2 {
-  width: 360px;
-  height: 360px;
-  bottom: 5%;
-  left: -80px;
-  background: color-mix(in srgb, var(--warm) 50%, white);
-  opacity: 0.5;
-}
-
+/* Marketing — fond blanc pur */
 .brand-hero-gradient {
-  background: linear-gradient(180deg, var(--accent-dim) 0%, var(--background) 55%);
+  background: #ffffff;
 }
 
 .brand-badge {
@@ -48,15 +22,48 @@ body {
   padding: 6px 14px;
   border-radius: var(--radius-full);
   font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  font-weight: 500;
+  color: var(--foreground);
+  background: #ffffff;
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
 
 .brand-section-alt {
-  background: color-mix(in srgb, var(--accent-dim) 45%, var(--background));
+  background: #fafafa;
+}
+
+/* Champs & chips réutilisables */
+.ui-input {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ui-input:focus {
+  border-color: #a3a3a3;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+.ui-chip {
+  border-radius: var(--radius-sm);
+  background: #fafafa;
+  border: 1px solid var(--border);
+}
+
+.ui-chip--active {
+  background: #f5f5f5;
+  border-color: #d4d4d4;
+}
+
+.link {
+  color: var(--link);
+}
+
+.link:hover {
+  text-decoration: underline;
 }
 
 /* Status pills */
@@ -80,12 +87,12 @@ body {
 }
 
 .status-pill--online {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--success);
+  border-color: #bbf7d0;
 }
 
 .status-pill--online .status-pill__dot {
-  background: var(--accent);
+  background: var(--success);
   animation: status-pulse 2s ease-out infinite;
 }
 
@@ -183,8 +190,8 @@ body {
 }
 
 .diff-line--add {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--brand-700);
+  background: #f0fdf4;
+  color: #166534;
 }
 
 .diff-line--remove {
@@ -241,8 +248,9 @@ body {
 }
 
 .chat-sidebar-tabs button[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: #d4d4d4;
+  background: #f5f5f5;
+  font-weight: 600;
 }
 
 .artifacts-panel {
@@ -275,21 +283,21 @@ body {
   padding: 10px 12px;
   text-align: left;
   border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--border);
+  background: #ffffff;
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .artifact-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: #d4d4d4;
+  background: #fafafa;
 }
 
 .artifact-card__label {
   display: block;
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--brand-600);
+  color: var(--muted);
 }
 
 .artifact-card__title {
@@ -308,9 +316,9 @@ body {
 .inline-edit-panel {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  background: #fafafa;
 }
 
 .inline-edit-panel__header {
@@ -338,8 +346,8 @@ body {
 }
 
 .inline-edit-preview__after {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
 }
 
 .inline-edit-preview__label {
