@@ -86,6 +86,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
 
   return (
     <CommandPaletteProvider defaultCommands={defaultCommands}>
+      <div className="flex min-h-dvh flex-col">
       {email ? (
         <header className="border-b border-[var(--border)] bg-white shadow-soft">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
@@ -112,6 +113,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
         </header>
       ) : null}
       {children}
+      </div>
     </CommandPaletteProvider>
   );
 }

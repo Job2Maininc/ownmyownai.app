@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   ChatMessage,
@@ -40,14 +39,13 @@ import { hostStatusClassName, hostStatusLabel, resolveChatHostStatus } from "@/l
 import { formatShortcutLabel } from "@/lib/keyboard-shortcuts";
 import { RelayClient } from "@/lib/relay-client";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ArtifactsPanel } from "./artifacts-panel";
+import { ChatComposer } from "./chat-composer";
+import { ChatMessage as ChatMessageBubble, ChatTypingIndicator } from "./chat-message";
+import { ChatToolbar } from "./chat-toolbar";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
-import { MarkdownMessage } from "./markdown-message";
-import { PlaybookPicker } from "./playbook-picker";
-import { RagCitationBadges } from "./rag-citation-badges";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
 
@@ -814,11 +812,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
 
   useRegisterPaletteCommands(paletteCommands);
 
-  function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    sendMessage();
-  }
-
   const headerStatus = reconnecting
     ? { label: "Reconnexion…", className: "text-[var(--muted)]" }
     : !connected
@@ -830,263 +823,128 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
             className: hostStatusClassName(effectiveHostStatus),
           };
 
+  const showTypingIndicator =
+    streaming && messages[messages.length - 1]?.role !== "assistant";
+
   return (
-    <main className="mx-auto flex h-screen max-w-5xl flex-col px-4 py-4">
-      <header className="mb-4 flex items-center justify-between border-b border-[var(--border)] pb-4">
-        <Link href="/dashboard" className="text-sm link">
-          ← Mes PCs
-        </Link>
-        <div className="flex items-center gap-3">
-          <PlaybookPicker
-            relay={relayRef.current}
-            connected={connected}
-            model={model}
-            contextIds={activeContextIds}
-            disabled={!canSend || streaming}
-            onRun={handlePlaybookRun}
-          />
-          <Button type="button" variant="ghost" onClick={() => setShowSidebar((v) => !v)}>
-            {showSidebar ? "Masquer panneau" : "Panneau latéral"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleNewConversation}
-            disabled={streaming}
-          >
-            Nouvelle conversation
-          </Button>
-          {branchOptions.length > 1 && (
-            <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
-              Branche
-              <select
-                value={activeBranchId}
-                onChange={(e) => void handleSwitchBranch(e.target.value)}
-                disabled={streaming}
-                className="max-w-[220px] rounded-lg border border-[var(--border)] bg-white px-2 py-1 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
-                aria-label="Choisir une branche de conversation"
-              >
-                {branchOptions.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.label} ({branch.count} msg)
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={messages.length === 0 || streaming}
-            onClick={handleExportConversation}
-            title="Télécharger le fil actuel en Markdown (.md) — export local uniquement"
-          >
-            Exporter .md
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={messages.length === 0 || streaming}
-            onClick={() => setShowShareDialog(true)}
-            title="Créer un lien temporaire en lecture seule (sans documents RAG)"
-          >
-            Partager
-          </Button>
-          <span className={`text-sm ${headerStatus.className}`}>{headerStatus.label}</span>
-        </div>
-      </header>
+    <main className="chat-shell">
+      <ChatToolbar
+        headerStatus={headerStatus}
+        model={model}
+        defaultModel={defaultModel}
+        modelSearch={modelSearch}
+        onModelSearchChange={setModelSearch}
+        onModelChange={setModel}
+        filteredModels={filteredModels}
+        thinkingMode={thinkingMode}
+        onThinkingModeChange={setThinkingMode}
+        streaming={streaming}
+        showSidebar={showSidebar}
+        onToggleSidebar={() => setShowSidebar((v) => !v)}
+        onNewConversation={handleNewConversation}
+        onExport={handleExportConversation}
+        onShare={() => setShowShareDialog(true)}
+        messagesCount={messages.length}
+        branchOptions={branchOptions}
+        activeBranchId={activeBranchId}
+        onSwitchBranch={(id) => void handleSwitchBranch(id)}
+        relay={relayRef.current}
+        connected={connected}
+        canSend={canSend}
+        contextIds={activeContextIds}
+        onPlaybookRun={handlePlaybookRun}
+      />
 
-      <div className="flex min-h-0 flex-1 gap-4">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="mb-3 flex items-center gap-2">
-            <label htmlFor="model-select" className="text-sm text-[var(--muted)]">
-              Modèle
-            </label>
-            <input
-              id="model-search"
-              type="search"
-              placeholder="Filtrer…"
-              value={modelSearch}
-              onChange={(e) => setModelSearch(e.target.value)}
-              className="w-24 rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-sm"
-              disabled={streaming}
-            />
-            <select
-              id="model-select"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={streaming}
-              className="flex-1 rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
-            >
-              {filteredModels.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                  {m === defaultModel ? " (défaut)" : ""}
-                </option>
-              ))}
-            </select>
-            <label htmlFor="thinking-mode" className="text-sm text-[var(--muted)]">
-              Mode
-            </label>
-            <select
-              id="thinking-mode"
-              value={thinkingMode ? "reflection" : "normal"}
-              onChange={(e) => setThinkingMode(e.target.value === "reflection")}
-              disabled={streaming}
-              className="rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
-              title="Réflexion : modèles thinking Ollama (qwen3, deepseek-r1…)"
-            >
-              <option value="normal">Normal</option>
-              <option value="reflection">Réflexion</option>
-            </select>
-          </div>
-
+      <div className="chat-layout">
+        <div className="chat-main">
           {activeContextIds.length > 0 && (
-            <p className="mb-2 text-xs text-[var(--link)]">
+            <p className="chat-alerts text-xs text-[var(--link)]">
               Contexte actif : {activeContextIds.length} base(s)
             </p>
           )}
 
-          <div className="flex-1 space-y-4 overflow-y-auto pb-4">
-            {relayStatus === "connecting" && <ChatConnectingSkeleton />}
-            {branchOptions.length > 1 && messages.length === 0 && (
-              <Card>
-                <p className="mb-2 text-sm font-medium">Branches enregistrées</p>
-                <ul className="space-y-1 text-xs text-[var(--muted)]">
-                  {branchOptions.slice(0, 8).map((branch) => (
-                    <li key={branch.id}>
-                      <button
-                        type="button"
-                        className="text-left hover:text-[var(--link)]"
-                        onClick={() => void handleSwitchBranch(branch.id)}
-                        disabled={streaming}
-                      >
-                        {branch.label} — {branch.count} msg(s)
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
-            {messages.length === 0 && relayStatus === "connected" && (
-              <Card>
-                <p className="text-center text-[var(--muted)]">
-                  Posez une question — la réponse est générée sur votre PC.
-                </p>
-              </Card>
-            )}
-            {messages.map((msg, i) => {
-              if (msg.role === "assistant" && !msg.content.trim() && !msg.thinking?.trim()) {
-                return null;
-              }
-              return (
-                <div
-                  key={`${msg.role}-${i}`}
-                  className={`group relative rounded-lg px-4 py-3 ${
-                    msg.role === "user"
-                      ? "ml-8 bg-neutral-100"
-                      : "mr-8 border border-[var(--border)] bg-[var(--card)]"
-                  }`}
-                >
-                  {msg.role === "assistant" ? (
-                    <>
-                      {msg.thinking?.trim() && (
-                        <details
-                          className="mb-3 rounded border border-[var(--border)] bg-neutral-50 px-3 py-2 text-xs text-[var(--muted)]"
-                          open={streaming && i === messages.length - 1}
+          <div className="chat-messages">
+            <div className="chat-messages__inner">
+              {relayStatus === "connecting" && <ChatConnectingSkeleton />}
+
+              {branchOptions.length > 1 && messages.length === 0 && (
+                <Card className="mb-4">
+                  <p className="mb-2 text-sm font-medium">Branches enregistrées</p>
+                  <ul className="space-y-1 text-xs text-[var(--muted)]">
+                    {branchOptions.slice(0, 8).map((branch) => (
+                      <li key={branch.id}>
+                        <button
+                          type="button"
+                          className="text-left hover:text-[var(--link)]"
+                          onClick={() => void handleSwitchBranch(branch.id)}
+                          disabled={streaming}
                         >
-                          <summary className="cursor-pointer select-none font-medium text-[var(--link)]">
-                            Chaîne de pensée
-                          </summary>
-                          <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap">
-                            {msg.thinking}
-                          </pre>
-                        </details>
-                      )}
-                      {msg.content.trim() && (
-                        <MarkdownMessage
-                          content={msg.content}
-                          messageKey={`msg-${i}`}
-                          onOpenArtifact={openArtifact}
-                          relay={relayRef.current}
-                          contextIds={activeContextIds}
-                          connected={connected}
-                        />
-                      )}
-                      {msg.citations && msg.citations.length > 0 && (
-                        <RagCitationBadges citations={msg.citations} />
-                      )}
-                    </>
-                  ) : (
-                    <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
-                  )}
-                  {!streaming && messages.length > 1 && i < messages.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={() => void handleForkAt(i)}
-                      className="absolute -bottom-2 right-2 hidden rounded border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)] hover:border-neutral-400 hover:text-[var(--link)] group-hover:block"
-                      title="Créer une branche à partir de ce message"
-                    >
-                      Brancher ici
-                    </button>
-                  )}
+                          {branch.label} — {branch.count} msg(s)
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+
+              {messages.length === 0 && relayStatus === "connected" && (
+                <div className="chat-empty">
+                  <p className="chat-empty__title">Comment puis-je vous aider ?</p>
+                  <p className="text-sm">
+                    Posez une question — la réponse est générée sur votre PC.
+                  </p>
                 </div>
-              );
-            })}
-            {streaming && messages[messages.length - 1]?.role !== "assistant" && (
-              <p className="text-sm text-[var(--muted)]">
-                {thinkingMode ? "Pensée en cours…" : "Réflexion…"}
-              </p>
-            )}
-            <div ref={messagesEndRef} />
+              )}
+
+              {messages.map((msg, i) => (
+                <ChatMessageBubble
+                  key={`${msg.role}-${i}`}
+                  message={msg}
+                  index={i}
+                  streaming={streaming}
+                  messagesLength={messages.length}
+                  canFork={!streaming && messages.length > 1}
+                  onFork={() => void handleForkAt(i)}
+                  onOpenArtifact={openArtifact}
+                  relay={relayRef.current}
+                  contextIds={activeContextIds}
+                  connected={connected}
+                />
+              ))}
+
+              {showTypingIndicator && <ChatTypingIndicator thinkingMode={thinkingMode} />}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
 
-          {conversationNotice && (
-            <p className="mb-2 text-sm text-[var(--link)]">{conversationNotice}</p>
-          )}
-          {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
-          {hostOffline && connected && (
-            <p className="mb-2 text-sm text-red-400">
-              Ce PC est hors ligne — ouvrez l&apos;app Host sur la machine ou attendez qu&apos;il
-              se reconnecte.
-            </p>
-          )}
-          {queueHint && !streaming && (
-            <p className="mb-2 text-sm text-amber-400">{queueHint}</p>
-          )}
-          {inputMentionHint && (
-            <p className="mb-2 text-xs text-[var(--link)]">{inputMentionHint}</p>
+          {(conversationNotice || error || (hostOffline && connected) || queueHint) && (
+            <div className="chat-alerts space-y-1 text-sm">
+              {conversationNotice && <p className="text-[var(--link)]">{conversationNotice}</p>}
+              {error && <p className="text-red-600">{error}</p>}
+              {hostOffline && connected && (
+                <p className="text-red-600">
+                  Ce PC est hors ligne — ouvrez l&apos;app Host sur la machine ou attendez qu&apos;il
+                  se reconnecte.
+                </p>
+              )}
+              {queueHint && !streaming && <p className="text-amber-600">{queueHint}</p>}
+            </div>
           )}
 
-          <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--border)] pt-4">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              placeholder={`Votre message… (${SEND_SHORTCUT_LABEL} pour envoyer · @base:Nom, @fichier:…)`}
-              disabled={streaming || !canSend}
-              aria-keyshortcuts={SEND_SHORTCUT_LABEL}
-              className="flex-1 rounded-lg border border-[var(--border)] bg-white px-4 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-50"
-            />
-            {streaming ? (
-              <Button type="button" variant="secondary" onClick={handleStop}>
-                Arrêter
-              </Button>
-            ) : (
-              <Button type="submit" disabled={!canSend || !input.trim()}>
-                Envoyer
-              </Button>
-            )}
-          </form>
+          <ChatComposer
+            value={input}
+            onChange={setInput}
+            onSubmit={sendMessage}
+            onStop={handleStop}
+            streaming={streaming}
+            canSend={canSend}
+            sendShortcutLabel={SEND_SHORTCUT_LABEL}
+            mentionHint={inputMentionHint}
+          />
         </div>
 
         {showSidebar && (
-          <div className="flex min-h-0 w-[320px] shrink-0 flex-col border-l border-[var(--border)] pl-4">
+          <aside className="chat-sidebar">
             <div className="chat-sidebar-tabs" role="tablist" aria-label="Panneau latéral">
               <button
                 type="button"
@@ -1124,7 +982,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 onSelect={setActiveArtifactId}
               />
             )}
-          </div>
+          </aside>
         )}
       </div>
 
