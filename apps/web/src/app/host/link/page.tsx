@@ -8,6 +8,7 @@ import { createPairingCode } from "@/lib/api";
 import { AppHeader } from "@/components/layout/app-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BRAND_ACCENT } from "@/lib/brand";
 import { PairingStatus } from "./pairing-status";
 
 export default function HostLinkPage() {
@@ -64,7 +65,7 @@ export default function HostLinkPage() {
               {code}
             </p>
             {pairingUrl && (
-              <QRCodeSVG value={pairingUrl} size={160} bgColor="transparent" fgColor="#10b981" />
+              <QRCodeSVG value={pairingUrl} size={160} bgColor="transparent" fgColor={BRAND_ACCENT} />
             )}
             {expiresAt && (
               <p className="text-xs text-[var(--muted)]">

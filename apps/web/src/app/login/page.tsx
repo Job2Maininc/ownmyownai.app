@@ -7,6 +7,7 @@ import { formatAuthError } from "@/lib/auth-errors";
 import { sanitizeRedirectPath } from "@/lib/auth-redirect";
 import { getRememberedEmail, rememberEmail } from "@/lib/remembered-email";
 import { createClient } from "@/lib/supabase/client";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -73,8 +74,9 @@ export default function LoginPage() {
 
   if (sent) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md items-center px-6">
-        <Card className="w-full text-center">
+      <main className="relative flex min-h-screen flex-col items-center justify-center px-6">
+        <div className="brand-blob brand-blob--1" aria-hidden />
+        <Card className="relative z-10 w-full max-w-md text-center">
           <h1 className="mb-2 text-xl font-semibold">Vérifiez votre boîte mail</h1>
           <p className="text-[var(--muted)]">
             Un lien de connexion a été envoyé à <strong>{email}</strong>.
@@ -85,11 +87,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-6">
-      <Card className="w-full">
+    <main className="relative flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="brand-blob brand-blob--1" aria-hidden />
+      <div className="relative z-10 mb-8">
+        <BrandMark href="/" />
+      </div>
+      <Card className="relative z-10 w-full max-w-md">
         <h1 className="mb-2 text-xl font-semibold">Connexion</h1>
         <p className="mb-6 text-sm text-[var(--muted)]">
-          Magic link — pas de mot de passe.
+          Recevez un lien magique par e-mail — pas de mot de passe.
         </p>
         <form onSubmit={handleLogin} className="space-y-4">
           <input
@@ -98,16 +104,16 @@ export default function LoginPage() {
             placeholder="vous@exemple.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-black/30 px-4 py-2 text-sm outline-none focus:border-brand-500"
+            className="input-field"
           />
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-[var(--error)]">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Envoi…" : "Recevoir le lien"}
           </Button>
         </form>
         <p className="mt-4 text-center text-sm text-[var(--muted)]">
           <Link href="/" className="text-brand-500 hover:underline">
-            Retour
+            Retour à l&apos;accueil
           </Link>
         </p>
       </Card>

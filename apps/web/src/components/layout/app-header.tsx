@@ -9,6 +9,7 @@ import {
   useCommandPalette,
   type PaletteCommand,
 } from "@/components/command-palette/command-palette-provider";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -19,12 +20,12 @@ function CommandPaletteTrigger() {
     <Button
       type="button"
       variant="ghost"
-      className="hidden text-[var(--muted)] sm:inline-flex"
+      className="hidden sm:inline-flex"
       onClick={open}
       title={`Palette de commandes (${PALETTE_SHORTCUT_LABEL})`}
     >
       Commandes
-      <kbd className="ml-2 rounded border border-[var(--border)] px-1.5 py-0.5 text-xs">
+      <kbd className="ml-2 rounded border border-[var(--border)] px-1.5 py-0.5 font-mono text-xs">
         {PALETTE_SHORTCUT_LABEL}
       </kbd>
     </Button>
@@ -86,19 +87,17 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
   return (
     <CommandPaletteProvider defaultCommands={defaultCommands}>
       {email ? (
-        <header className="border-b border-[var(--border)] bg-black/20">
+        <header className="border-b border-[var(--border)] bg-[var(--surface)]">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
             <nav className="flex items-center gap-4 text-sm">
-              <Link href="/dashboard" className="font-semibold text-brand-400 hover:underline">
-                OwnMyOwnAI
-              </Link>
-              <Link href="/dashboard" className="text-[var(--muted)] hover:text-white">
+              <BrandMark href="/dashboard" size="sm" />
+              <Link href="/dashboard" className="text-[var(--muted)] hover:text-[var(--foreground)]">
                 Mes PCs
               </Link>
-              <Link href="/host/link" className="text-[var(--muted)] hover:text-white">
+              <Link href="/host/link" className="text-[var(--muted)] hover:text-[var(--foreground)]">
                 Lier un PC
               </Link>
-              <Link href="/download" className="text-[var(--muted)] hover:text-white">
+              <Link href="/download" className="text-[var(--muted)] hover:text-[var(--foreground)]">
                 Télécharger
               </Link>
             </nav>

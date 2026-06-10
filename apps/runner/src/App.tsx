@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { BrandMark } from "./components/BrandMark";
 import Dashboard from "./components/Dashboard";
 import InstallProgress from "./components/InstallProgress";
 import ModelSetup from "./components/ModelSetup";
@@ -168,16 +169,16 @@ export default function App() {
 
       <div className={step === "online" ? "card card--wide" : "card card--setup"}>
         {step === "welcome" && (
-          <>
-            <h1>OwnMyOwnAI Host</h1>
-            <p className="muted">
-              Choisissez où stocker vos données, installez Ollama, sélectionnez vos modèles
-              IA et liez ce PC à votre compte.
+          <div className="welcome">
+            <BrandMark className="welcome__brand" />
+            <h1 className="welcome__title">Bienvenue</h1>
+            <p className="muted welcome__lead">
+              Configurons votre IA locale en quelques minutes — stockage, modèles et liaison à
+              votre compte.
             </p>
             <button
               type="button"
-              className="btn-primary"
-              style={{ width: "100%", marginTop: 16 }}
+              className="btn-primary welcome__cta"
               onClick={() => {
                 setError(null);
                 setStep("storage");
@@ -185,7 +186,7 @@ export default function App() {
             >
               Commencer
             </button>
-          </>
+          </div>
         )}
 
         {step === "storage" && (

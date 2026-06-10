@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getHostDisplayStatus,
   hostStatusLabel,
+  hostStatusPillVariant,
   resolveChatHostStatus,
 } from "../host-status";
 import type { Host } from "@ownmyownai/supabase-types";
@@ -51,6 +52,12 @@ describe("host-status", () => {
 
   it("traduit busy en Occupé", () => {
     expect(hostStatusLabel("busy")).toBe("Occupé");
+  });
+
+  it("mappe les statuts vers les variantes StatusPill", () => {
+    expect(hostStatusPillVariant("online")).toBe("online");
+    expect(hostStatusPillVariant("busy")).toBe("warn");
+    expect(hostStatusPillVariant("offline")).toBe("offline");
   });
 
   it("chat hors ligne si heartbeat expiré même si relay dit online", () => {

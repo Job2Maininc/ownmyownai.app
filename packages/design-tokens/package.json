@@ -1,0 +1,15 @@
+{
+  "name": "@ownmyownai/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./tokens.css": "./tokens.css",
+    "./tokens.json": "./tokens.json",
+    "./BRAND.md": "./BRAND.md"
+  },
+  "files": [
+    "tokens.css",
+    "tokens.json",
+    "BRAND.md"
+  ]
+}

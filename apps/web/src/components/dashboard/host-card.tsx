@@ -7,11 +7,12 @@ import type { Host } from "@ownmyownai/supabase-types";
 import { deleteHost, renameHost, updateDefaultModel } from "@/app/dashboard/actions";
 import {
   getHostDisplayStatus,
-  hostStatusClassName,
   hostStatusLabel,
+  hostStatusPillVariant,
 } from "@/lib/host-status";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { StatusPill } from "@/components/ui/status-pill";
 import { ModelPullPanel } from "./model-pull-panel";
 
 interface HostCardProps {
@@ -130,11 +131,12 @@ export function HostCard({ host: initialHost }: HostCardProps) {
               {host.name}
             </button>
           )}
-          <p className="text-sm text-[var(--muted)]">
-            <span className={hostStatusClassName(displayStatus)}>
-              {hostStatusLabel(displayStatus)}
-            </span>
-            {host.disk_free_gb != null && ` · ${host.disk_free_gb} Go libres`}
+          <p className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+            <StatusPill
+              variant={hostStatusPillVariant(displayStatus)}
+              label={hostStatusLabel(displayStatus)}
+            />
+            {host.disk_free_gb != null && <span>{host.disk_free_gb} Go libres</span>}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ownmyownai/design-tokens": "*",
     "@ownmyownai/protocol": "*",
     "@ownmyownai/supabase-types": "*",
     "@supabase/ssr": "^0.5.2",

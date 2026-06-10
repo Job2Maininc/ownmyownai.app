@@ -68,8 +68,21 @@ export function hostStatusClassName(status: HostDisplayStatus): string {
     case "online":
       return "text-brand-500";
     case "busy":
-      return "text-amber-400";
+      return "text-[var(--warn)]";
     case "offline":
-      return "text-red-400";
+      return "text-[var(--muted)]";
+  }
+}
+
+export type HostStatusPillVariant = "online" | "offline" | "pairing" | "warn";
+
+export function hostStatusPillVariant(status: HostDisplayStatus): HostStatusPillVariant {
+  switch (status) {
+    case "online":
+      return "online";
+    case "busy":
+      return "warn";
+    case "offline":
+      return "offline";
   }
 }

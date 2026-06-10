@@ -1,13 +1,11 @@
+@import "@ownmyownai/design-tokens/tokens.css";
+
 :root {
-  --bg: #0a0f0d;
-  --fg: #ecfdf5;
-  --muted: #6b7280;
-  --card: #111916;
-  --border: #1f2937;
-  --accent: #10b981;
-  --accent-dim: #064e3b;
-  --warn: #f59e0b;
-  --error: #f87171;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --transition-fast: 200ms ease-out;
 }
 
 * {
@@ -16,9 +14,9 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--fg);
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
   font-size: 14px;
 }
 
@@ -38,7 +36,7 @@ button:disabled {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-foreground);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -46,8 +44,8 @@ button:disabled {
 }
 
 .btn-secondary {
-  background: var(--card);
-  color: var(--fg);
+  background: var(--surface);
+  color: var(--foreground);
   border: 1px solid var(--border);
 }
 
@@ -165,8 +163,8 @@ input {
 }
 
 .model-card--selected {
-  border-color: rgba(16, 185, 129, 0.45);
-  background: rgba(6, 78, 59, 0.2);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-dim) 40%, transparent);
 }
 
 .model-card__head {
@@ -446,7 +444,7 @@ input {
 
 .live-dot--on {
   background: var(--accent);
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
   animation: pulse 2s infinite;
 }
 
@@ -457,13 +455,13 @@ input {
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 8px transparent;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -1044,4 +1042,235 @@ input {
   overflow: auto;
   font-size: 13px;
   line-height: 1.45;
+}
+
+/* Brand */
+.brand-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.brand-mark__text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.brand-mark__accent {
+  color: var(--accent);
+}
+
+.brand-mark__host {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.welcome__brand {
+  margin-bottom: 8px;
+}
+
+.welcome__title {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.welcome__lead {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.welcome__cta {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.app--dashboard .card--setup,
+.card--setup {
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 0%,
+    color-mix(in srgb, var(--accent-dim) 60%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+/* Local chat */
+.local-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 280px;
+}
+
+.local-chat__hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.local-chat__messages {
+  flex: 1;
+  min-height: 160px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.local-chat__bubble {
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.local-chat__bubble--user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.local-chat__bubble--assistant {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.local-chat__composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  margin-bottom: 8px;
+}
+
+.local-chat__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Metrics */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.metric-card__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.metric-card__label {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Context / projects manager */
+.context-manager h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.context-create-row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.context-input {
+  flex: 1;
+}
+
+.context-base-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.context-base-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.context-base-item--active {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-dim) 30%, transparent);
+}
+
+.context-base-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-base-item__title {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.btn-ghost--danger {
+  color: var(--error) !important;
+}
+
+.btn-ghost--danger:hover:not(:disabled) {
+  color: var(--error) !important;
+  opacity: 0.85;
+}
+
+.btn-ghost--active {
+  color: var(--accent) !important;
+  font-weight: 600;
+}
+
+.field__input {
+  width: 100%;
+}
+
+.context-list__item--active {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-dim) 25%, transparent);
 }

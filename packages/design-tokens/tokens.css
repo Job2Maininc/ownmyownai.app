@@ -1,0 +1,44 @@
+:root {
+  /* Surfaces */
+  --background: #131712;
+  --foreground: #f2f5f0;
+  --surface: #1a211c;
+  --surface-hover: #222b25;
+  --card: var(--surface);
+  --muted: #9ba89e;
+  --border: #2a332c;
+
+  /* Brand accent */
+  --accent: #4ec9a0;
+  --accent-hover: #3db88f;
+  --accent-dim: #1a3d32;
+  --accent-foreground: #0d1510;
+  --warm: #e8b88a;
+
+  /* Semantic */
+  --success: #4ec9a0;
+  --warn: #e5b567;
+  --error: #e88b8b;
+  --info: #6ba3e8;
+
+  /* Typography */
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.25);
+
+  /* Motion */
+  --transition-fast: 200ms ease-out;
+
+  /* Runner aliases (backward compat) */
+  --bg: var(--background);
+  --fg: var(--foreground);
+}

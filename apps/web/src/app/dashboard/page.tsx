@@ -32,7 +32,7 @@ export default async function DashboardPage() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Mes PCs</h1>
-            <p className="text-sm text-[var(--muted)]">Vos hosts IA locaux</p>
+            <p className="text-sm text-[var(--muted)]">Vos PCs — votre IA reste chez vous</p>
           </div>
           <Link href="/host/link">
             <Button>Ajouter un PC</Button>
