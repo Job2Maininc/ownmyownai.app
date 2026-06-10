@@ -104,7 +104,7 @@ async function fetchGithubReleaseInfo(): Promise<HostReleaseInfo | null> {
   try {
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=5`,
-      { headers: githubAuthHeaders(), next: { revalidate: 300 } },
+      { headers: githubAuthHeaders(), cache: "no-store" },
     );
     if (!res.ok) return null;
     const releases = (await res.json()) as Release[];
