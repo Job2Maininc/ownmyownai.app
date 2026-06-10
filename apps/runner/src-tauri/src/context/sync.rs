@@ -1,7 +1,10 @@
-use super::ingest::{file_mtime, ingest_from_path, is_allowed_extension, reindex_document};
+use super::ingest::{
+    file_mtime, ingest_from_path, is_allowed_extension, is_indexable_path, is_skippable_ingest_error,
+    reindex_document,
+};
 use super::store::{
-    get_context_link, list_all_context_links, list_documents_for_link, remove_stale_linked_documents,
-    update_context_link_sync, ContextLimits, ContextLink,
+    delete_document, get_context_link, list_all_context_links, list_documents_for_link,
+    remove_stale_linked_documents, update_context_link_sync, ContextLimits, ContextLink,
 };
 use crate::settings::{resolved_context_limits, resolved_sync_scan_settings, SyncScanSettings};
 use std::collections::HashSet;
@@ -27,10 +30,25 @@ const EXCLUDED_DIR_NAMES: &[&str] = &[
     "windows",
     "program files",
     "program files (x86)",
+    "programdata",
     "node_modules",
     ".git",
     "appdata",
     "system volume information",
+    "recovery",
+    "perflogs",
+    "msocache",
+    "windows.old",
+    "$windows.~bt",
+    "boot",
+    "efi",
+    "config.msi",
+    "intel",
+    "amd",
+    "nvidia",
+    "drivers",
+    "winsxs",
+    "packages",
 ];
 
 pub fn scan_link(link: &ContextLink, scan: &SyncScanSettings, limits: &ContextLimits) -> Result<Vec<ScannedFile>, String> {
@@ -91,25 +109,7 @@ fn is_scannable_file(path: &Path, link_type: &str, allowed: &[String]) -> bool {
 }
 
 fn should_scan_untyped_file(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    const SKIP_EXTENSIONS: &[&str] = &[
-        "exe", "dll", "msi", "iso", "img", "bin", "dat", "pak", "db", "sqlite", "zip", "rar",
-        "7z", "gz", "tar", "bz2", "woff", "woff2", "ttf", "otf", "eot", "mp3", "mp4", "avi",
-        "mov", "mkv", "wav", "flac", "webm",
-    ];
-    if let Some(ext) = name.rsplit('.').next() {
-        if SKIP_EXTENSIONS.contains(&ext) {
-            return false;
-        }
-    }
-    true
+    is_indexable_path(path)
 }
 
 fn scan_directory(
@@ -241,6 +241,11 @@ async fn sync_link_inner(link_id: &str) -> Result<(), String> {
                 })
                 .collect();
 
+        let scanned_count = scanned.len();
+        let mut indexed = 0u32;
+        let mut skipped = 0u32;
+        let mut failed = 0u32;
+
         for file in scanned {
             let needs_index = match existing.get(&file.relative_path) {
                 Some((_, mtime, size)) => {
@@ -254,16 +259,19 @@ async fn sync_link_inner(link_id: &str) -> Result<(), String> {
                 continue;
             }
 
-            if let Some((doc_id, _, _)) = existing.get(&file.relative_path) {
-                if reindex_document(doc_id).await.is_err() {
-                    let _ = ingest_from_path(
+            let ingest_result = if let Some((doc_id, _, _)) = existing.get(&file.relative_path) {
+                if reindex_document(doc_id).await.is_ok() {
+                    Ok(())
+                } else {
+                    ingest_from_path(
                         &link.knowledge_base_id,
                         &file.path,
                         Some(link_id),
                         Some(&file.relative_path),
                         &limits,
                     )
-                    .await;
+                    .await
+                    .map(|_| ())
                 }
             } else {
                 ingest_from_path(
@@ -273,16 +281,31 @@ async fn sync_link_inner(link_id: &str) -> Result<(), String> {
                     Some(&file.relative_path),
                     &limits,
                 )
-                .await?;
+                .await
+                .map(|_| ())
+            };
+
+            match ingest_result {
+                Ok(()) => indexed += 1,
+                Err(e) => {
+                    if is_skippable_ingest_error(&e) {
+                        skipped += 1;
+                        remove_failed_linked_doc(link_id, &file.relative_path);
+                    } else {
+                        failed += 1;
+                    }
+                }
             }
         }
-        Ok::<(), String>(())
+
+        let summary = build_sync_summary(indexed, skipped, failed, scanned_count);
+        Ok::<Option<String>, String>(summary)
     }
     .await;
 
     match outcome {
-        Ok(()) => {
-            update_context_link_sync(link_id, "ready", None)?;
+        Ok(summary) => {
+            update_context_link_sync(link_id, "ready", summary.as_deref())?;
             Ok(())
         }
         Err(e) => {
@@ -290,6 +313,39 @@ async fn sync_link_inner(link_id: &str) -> Result<(), String> {
             Err(e)
         }
     }
+}
+
+fn remove_failed_linked_doc(link_id: &str, relative_path: &str) {
+    if let Ok(docs) = list_documents_for_link(link_id) {
+        for doc in docs {
+            if doc.relative_path.as_deref() == Some(relative_path) {
+                let _ = delete_document(&doc.id);
+            }
+        }
+    }
+}
+
+fn build_sync_summary(indexed: u32, skipped: u32, failed: u32, scanned: usize) -> Option<String> {
+    if scanned == 0 {
+        return Some(
+            "Aucun fichier indexable trouvé (documents, code, PDF, images…). Les dossiers système sont ignorés."
+                .into(),
+        );
+    }
+    if indexed == 0 && failed == 0 {
+        return Some(format!(
+            "Scan terminé : {skipped} fichier(s) ignoré(s) (format non indexable ou vide)."
+        ));
+    }
+    if failed > 0 {
+        return Some(format!(
+            "{indexed} indexé(s), {skipped} ignoré(s), {failed} en erreur."
+        ));
+    }
+    if skipped > 0 {
+        return Some(format!("{indexed} fichier(s) indexé(s), {skipped} ignoré(s)."));
+    }
+    None
 }
 
 pub async fn sync_all_links() {
@@ -345,8 +401,14 @@ pub async fn link_context_folder(
         None
     };
     let link = super::store::create_context_link(kb_id, link_type, &path, recursive, extensions)?;
-    sync_link(&link.id).await?;
-    get_context_link(&link.id)
+    let sync_result = sync_link(&link.id).await;
+    let updated = get_context_link(&link.id)?;
+    if sync_result.is_err() && updated.last_sync_status == "error" {
+        return Err(updated
+            .last_sync_error
+            .unwrap_or_else(|| "Échec de l'indexation".into()));
+    }
+    Ok(updated)
 }
 
 pub async fn link_context_repo(kb_id: &str, path: String) -> Result<ContextLink, String> {
@@ -371,6 +433,43 @@ pub fn unlink_context_link(link_id: &str) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn drive_wildcard_skips_binaries_keeps_logs() {
+        let base = std::env::temp_dir().join(format!("omoa-drive-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&base).unwrap();
+        fs::write(base.join("app.log"), "ligne de log utile pour le contexte").unwrap();
+        fs::write(base.join("tool.exe"), b"MZ").unwrap();
+
+        let link = ContextLink {
+            id: "drive".into(),
+            knowledge_base_id: "kb".into(),
+            link_type: "drive".into(),
+            path: base.to_string_lossy().into_owned(),
+            recursive: false,
+            enabled: true,
+            last_sync_at: None,
+            last_sync_status: "pending".into(),
+            last_sync_error: None,
+            doc_count: 0,
+            symbol_count: 0,
+            allowed_extensions: vec!["*".into()],
+        };
+        let scan = SyncScanSettings::default();
+        let limits = ContextLimits::default();
+        let files = scan_link(&link, &scan, &limits).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].path.to_string_lossy().ends_with("app.log"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn build_sync_summary_reports_partial_success() {
+        let msg = build_sync_summary(3, 2, 0, 5).unwrap();
+        assert!(msg.contains("3"));
+        assert!(msg.contains("2"));
+    }
 
     #[test]
     fn excludes_system_directories() {

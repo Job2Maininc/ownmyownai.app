@@ -66,7 +66,7 @@ const SOURCE_TYPES = [
   {
     id: "drive",
     title: "Disque entier",
-    hint: "C:, D:, clé USB — tous types de fichiers",
+    hint: "C:, D:, clé USB — documents, code, PDF, texte",
     icon: "💾",
   },
 ] as const;
@@ -357,8 +357,9 @@ export default function ContextManager() {
   async function linkDrivePath(kbId: string, drivePath: string) {
     const ok = window.confirm(
       `Indexer le contenu de « ${drivePath} » ?\n\n` +
-        "Tous les types de fichiers seront analysés (sauf archives et binaires système). " +
-        "L'indexation est limitée aux 500 premiers fichiers trouvés.",
+        "Documents, code, PDF, images et fichiers texte (.log, .csv, .json…) seront indexés. " +
+        "Les dossiers système (Windows, Program Files…) et les binaires sont ignorés. " +
+        "Limite : 500 fichiers par scan.",
     );
     if (!ok) return;
     setSyncing(true);
@@ -602,7 +603,11 @@ export default function ContextManager() {
                     : ""}
                   {link.allowedExtensions.includes("*") ? " · tous types de fichiers" : ""}
                 </p>
-                {link.lastSyncError && <p className="error-line">{link.lastSyncError}</p>}
+                {link.lastSyncError && (
+                  <p className={link.lastSyncStatus === "error" ? "error-line" : "muted"}>
+                    {link.lastSyncError}
+                  </p>
+                )}
                 {link.linkType !== "repo" && !link.allowedExtensions.includes("*") && (
                   <div className="context-create" role="group" aria-label="Types de fichiers indexés">
                     {EXTRACTABLE_EXTENSIONS.map((ext) => (

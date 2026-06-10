@@ -319,9 +319,54 @@ pub fn file_mtime(path: &Path) -> Result<i64, String> {
         .as_secs() as i64)
 }
 
+const PLAIN_TEXT_EXTENSIONS: &[&str] = &[
+    "log", "csv", "json", "xml", "yaml", "yml", "html", "htm", "ini", "cfg", "env", "rtf", "toml",
+    "rst", "tex", "properties", "conf", "config",
+];
+
+pub fn is_indexable_path(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    let lower = filename.to_lowercase();
+    if lower.ends_with(".txt")
+        || lower.ends_with(".md")
+        || lower.ends_with(".pdf")
+        || lower.ends_with(".docx")
+        || is_code_filename(&lower)
+        || is_image_filename(filename)
+        || is_plain_text_extension(&lower)
+        || super::codebase_index::is_code_file(path)
+    {
+        return true;
+    }
+    false
+}
+
+fn is_plain_text_extension(lower: &str) -> bool {
+    PLAIN_TEXT_EXTENSIONS
+        .iter()
+        .any(|ext| lower.ends_with(&format!(".{ext}")))
+}
+
+pub fn is_skippable_ingest_error(message: &str) -> bool {
+    let m = message.to_lowercase();
+    m.contains("format non supporté")
+        || m.contains("aucun texte extractible")
+        || m.contains("fichier texte invalide")
+        || m.contains("modèle vision")
+        || m.contains("moondream")
+        || m.contains("llava")
+        || m.contains("fichier trop volumineux")
+}
+
 pub fn is_allowed_extension(path: &Path, allowed: &[String]) -> bool {
     if allowed.iter().any(|a| a == "*") {
-        return path.is_file();
+        return is_indexable_path(path);
     }
     let ext = path
         .extension()
@@ -337,7 +382,11 @@ pub fn is_supported_extension(path: &Path) -> bool {
 
 fn extract_text(filename: &str, data: &[u8]) -> Result<String, String> {
     let lower = filename.to_lowercase();
-    if lower.ends_with(".txt") || lower.ends_with(".md") || is_code_filename(&lower) {
+    if lower.ends_with(".txt")
+        || lower.ends_with(".md")
+        || is_code_filename(&lower)
+        || is_plain_text_extension(&lower)
+    {
         return String::from_utf8(data.to_vec())
             .map_err(|_| "Fichier texte invalide (UTF-8 requis)".into());
     }
