@@ -16,7 +16,8 @@
         "title": "OwnMyOwnAI Host",
         "width": 520,
         "height": 780,
-        "resizable": true
+        "resizable": true,
+        "backgroundColor": "#FFFFFF"
       }
     ],
     "security": {

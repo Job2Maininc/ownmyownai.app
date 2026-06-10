@@ -65,6 +65,7 @@ use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemor
 use jobs::{cancel_job, list_jobs, submit_job, JobKind, JobSnapshot};
 use local_chat::{cancel_local_chat, run_local_chat};
 use serde::Deserialize;
+use tauri::Manager;
 
 #[tauri::command(rename = "check_ollama")]
 async fn check_ollama_cmd() -> Result<OllamaStatus, String> {
@@ -663,6 +664,9 @@ pub fn run() {
             install_host_update_cmd,
         ])
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_theme(Some(tauri::Theme::Light));
+            }
             set_app_handle(app.handle().clone());
             tray::setup(app)?;
             ollama::start_status_poller();
