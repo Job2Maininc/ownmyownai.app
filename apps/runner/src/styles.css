@@ -979,3 +979,69 @@ input {
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+
+.review-intro {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.review-intro__lead {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.review-intro__points {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.review-empty {
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.review-result {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.review-result h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.review-result__alerts {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.review-result__alerts h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.review-result__body {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #000;
+  white-space: pre-wrap;
+  max-height: 24rem;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.45;
+}

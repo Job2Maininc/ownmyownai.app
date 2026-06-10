@@ -31,6 +31,44 @@ interface PrReviewResult {
   model: string;
 }
 
+type ReviewMode = "unstaged" | "staged" | "head" | "github-pr";
+
+const REVIEW_OPTIONS: {
+  id: ReviewMode;
+  title: string;
+  hint: string;
+  icon: string;
+  gitMode?: string;
+}[] = [
+  {
+    id: "unstaged",
+    title: "Modifications en cours",
+    hint: "Fichiers modifiés mais pas encore ajoutés au commit",
+    icon: "✏️",
+    gitMode: "unstaged",
+  },
+  {
+    id: "staged",
+    title: "Prêt à committer",
+    hint: "Ce qui sera inclus dans votre prochain commit",
+    icon: "📦",
+    gitMode: "staged",
+  },
+  {
+    id: "head",
+    title: "Dernier commit",
+    hint: "Revoir les changements du commit le plus récent",
+    icon: "🕐",
+    gitMode: "head",
+  },
+  {
+    id: "github-pr",
+    title: "Pull Request GitHub",
+    hint: "Analyser une PR avec la commande gh (si installée)",
+    icon: "🔀",
+  },
+];
+
 function truncatePath(path: string, max = 52) {
   if (path.length <= max) return path;
   return `…${path.slice(-max + 1)}`;
@@ -45,6 +83,8 @@ export default function PrReviewPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PrReviewResult | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [pendingGhReview, setPendingGhReview] = useState(false);
 
   const refreshRepos = useCallback(async () => {
     try {
@@ -65,19 +105,22 @@ export default function PrReviewPanel() {
 
   async function loadDiff(mode: string) {
     if (!selectedRepo) {
-      setError("Sélectionnez un dépôt lié.");
+      setError("Choisissez d'abord un dépôt.");
       return;
     }
     setError(null);
     setLoading(true);
+    setResult(null);
     try {
       const text = await invoke<string>("collect_git_diff", {
         repoPath: selectedRepo,
         mode,
       });
       setDiff(text);
+      return text;
     } catch (e) {
       setError(String(e));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -85,27 +128,31 @@ export default function PrReviewPanel() {
 
   async function loadGhPr() {
     if (!selectedRepo || !prNumber.trim()) {
-      setError("Numéro de PR requis.");
-      return;
+      setError("Indiquez le numéro de la Pull Request (ex. 42).");
+      return null;
     }
     setError(null);
     setLoading(true);
+    setResult(null);
     try {
       const text = await invoke<string>("collect_gh_pr_diff", {
         repoPath: selectedRepo,
         prNumber: Number.parseInt(prNumber, 10),
       });
       setDiff(text);
+      return text;
     } catch (e) {
       setError(String(e));
+      return null;
     } finally {
       setLoading(false);
     }
   }
 
-  async function runReview() {
-    if (!diff.trim()) {
-      setError("Collez ou chargez un diff avant de lancer la review.");
+  async function runReview(diffText?: string) {
+    const content = (diffText ?? diff).trim();
+    if (!content) {
+      setError("Aucun changement à analyser. Essayez une autre source.");
       return;
     }
     setError(null);
@@ -114,7 +161,7 @@ export default function PrReviewPanel() {
     try {
       const review = await invoke<PrReviewResult>("review_git_diff", {
         input: {
-          diff,
+          diff: content,
           repoPath: selectedRepo || null,
         },
       });
@@ -126,29 +173,84 @@ export default function PrReviewPanel() {
     }
   }
 
+  async function handleReviewChoice(option: (typeof REVIEW_OPTIONS)[number]) {
+    if (!selectedRepo) {
+      setError("Liez d'abord un dépôt Git dans l'onglet Base de données IA.");
+      return;
+    }
+
+    if (option.id === "github-pr") {
+      if (!ghAvailable) {
+        setError(
+          "GitHub CLI (gh) n'est pas installé. Installez-le ou choisissez une autre option.",
+        );
+        return;
+      }
+      setPendingGhReview(true);
+      return;
+    }
+
+    setPendingGhReview(false);
+    const loaded = await loadDiff(option.gitMode!);
+    if (loaded?.trim()) {
+      await runReview(loaded);
+    }
+  }
+
+  async function confirmGhReview() {
+    const loaded = await loadGhPr();
+    setPendingGhReview(false);
+    if (loaded?.trim()) {
+      await runReview(loaded);
+    }
+  }
+
+  const visibleOptions = REVIEW_OPTIONS.filter(
+    (o) => o.id !== "github-pr" || ghAvailable,
+  );
+
   return (
     <section className="panel">
       <div className="panel__head">
-        <h2>Review PR locale</h2>
+        <h2>Revue de code</h2>
         <button type="button" className="btn-ghost" onClick={() => void refreshRepos()}>
           Actualiser
         </button>
       </div>
-      <p className="muted panel__meta">
-        Analyse un diff git sur ce PC (Ollama) avec checklist sécurité — aucune donnée envoyée au cloud.
-      </p>
+
+      <div className="review-intro">
+        <p className="review-intro__lead">
+          <strong>À quoi ça sert ?</strong> Avant de committer ou d&apos;ouvrir une Pull Request,
+          l&apos;IA locale relit vos changements comme un collègue développeur : bugs possibles,
+          risques de sécurité, qualité du code.
+        </p>
+        <ul className="review-intro__points muted">
+          <li>Tout reste sur votre PC — le diff n&apos;est pas envoyé au cloud</li>
+          <li>Fonctionne sur vos dépôts Git déjà liés dans Base de données IA</li>
+          <li>Résultat en français : résumé, sécurité, recommandations</li>
+        </ul>
+      </div>
 
       {repos.length === 0 ? (
-        <p className="panel__empty">
-          Aucun dépôt Git lié. Liez un dossier contenant un repo dans l&apos;onglet Contexte.
-        </p>
+        <div className="review-empty">
+          <p>
+            Aucun dépôt Git détecté. Dans l&apos;onglet{" "}
+            <strong>Base de données IA</strong>, liez un dossier de projet avec un dossier{" "}
+            <code className="inline-code">.git</code> (carte « Dépôt Git »).
+          </p>
+        </div>
       ) : (
-        <label className="field">
-          <span className="field__label">Dépôt lié</span>
+        <>
+          <label className="field-label">Projet à analyser</label>
           <select
             className="field__input"
             value={selectedRepo}
-            onChange={(e) => setSelectedRepo(e.target.value)}
+            onChange={(e) => {
+              setSelectedRepo(e.target.value);
+              setResult(null);
+              setDiff("");
+            }}
+            style={{ marginBottom: 16 }}
           >
             {repos.map((r) => (
               <option key={r.linkId} value={r.path}>
@@ -156,55 +258,99 @@ export default function PrReviewPanel() {
               </option>
             ))}
           </select>
-        </label>
+
+          <div className="source-picker">
+            <h3>Que voulez-vous faire relire ?</h3>
+            <p className="muted source-picker__lead">
+              Choisissez une source — l&apos;analyse démarre automatiquement.
+            </p>
+            <div className="source-picker__grid">
+              {visibleOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="source-card"
+                  disabled={loading}
+                  onClick={() => void handleReviewChoice(option)}
+                >
+                  <span className="source-card__icon" aria-hidden>
+                    {option.icon}
+                  </span>
+                  <strong>{option.title}</strong>
+                  <span className="muted">{option.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {pendingGhReview && (
+            <div className="drive-picker">
+              <h4>Numéro de Pull Request</h4>
+              <div className="context-create">
+                <input
+                  value={prNumber}
+                  onChange={(e) => setPrNumber(e.target.value)}
+                  placeholder="Ex. 42"
+                  style={{ maxWidth: 120 }}
+                />
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={loading || !prNumber.trim()}
+                  onClick={() => void confirmGhReview()}
+                >
+                  Analyser la PR
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setPendingGhReview(false)}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+
+          {loading && (
+            <p className="muted" style={{ marginTop: 12 }}>
+              Lecture du diff et analyse par l&apos;IA locale…
+            </p>
+          )}
+
+          <button
+            type="button"
+            className="btn-ghost context-advanced-toggle"
+            onClick={() => setShowDiff((v) => !v)}
+          >
+            {showDiff ? "Masquer le diff brut" : "Voir ou coller un diff manuellement"}
+          </button>
+
+          {showDiff && (
+            <div className="context-advanced">
+              <p className="muted">
+                Pour une review hors Git : collez un diff unified (format patch) puis lancez
+                l&apos;analyse.
+              </p>
+              <textarea
+                className="context-instruction"
+                rows={8}
+                value={diff}
+                onChange={(e) => setDiff(e.target.value)}
+                placeholder="Collez un diff ici…"
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={loading || !diff.trim()}
+                onClick={() => void runReview()}
+              >
+                Analyser ce diff
+              </button>
+            </div>
+          )}
+        </>
       )}
-
-      <div className="btn-row" style={{ marginTop: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-        <button type="button" className="btn-secondary" disabled={loading} onClick={() => void loadDiff("head")}>
-          Diff HEAD
-        </button>
-        <button type="button" className="btn-secondary" disabled={loading} onClick={() => void loadDiff("staged")}>
-          Diff indexé
-        </button>
-        <button type="button" className="btn-secondary" disabled={loading} onClick={() => void loadDiff("unstaged")}>
-          Non commité
-        </button>
-        {ghAvailable ? (
-          <>
-            <input
-              className="field__input"
-              style={{ width: "5rem" }}
-              placeholder="PR #"
-              value={prNumber}
-              onChange={(e) => setPrNumber(e.target.value)}
-            />
-            <button type="button" className="btn-secondary" disabled={loading} onClick={() => void loadGhPr()}>
-              gh pr diff
-            </button>
-          </>
-        ) : null}
-      </div>
-
-      <label className="field" style={{ marginTop: "1rem" }}>
-        <span className="field__label">Diff (collé ou chargé)</span>
-        <textarea
-          className="field__input"
-          rows={10}
-          value={diff}
-          onChange={(e) => setDiff(e.target.value)}
-          placeholder="Collez un unified diff ou chargez-le depuis git / gh…"
-        />
-      </label>
-
-      <button
-        type="button"
-        className="btn-primary"
-        style={{ marginTop: "0.75rem" }}
-        disabled={loading || !diff.trim()}
-        onClick={() => void runReview()}
-      >
-        {loading ? "Analyse en cours…" : "Lancer la review"}
-      </button>
 
       {error ? (
         <p className="error-banner" role="alert" style={{ marginTop: "1rem" }}>
@@ -213,14 +359,15 @@ export default function PrReviewPanel() {
       ) : null}
 
       {result ? (
-        <div style={{ marginTop: "1.25rem" }}>
+        <div className="review-result">
+          <h3>Résultat de la revue</h3>
           <p className="muted panel__meta">
             {result.diffStats.filesChanged} fichier(s) · +{result.diffStats.linesAdded} / −
             {result.diffStats.linesRemoved} · modèle {result.model}
           </p>
           {result.securityFindings.length > 0 ? (
-            <div className="panel panel--compact" style={{ marginTop: "0.75rem" }}>
-              <h3>Signaux sécurité ({result.securityFindings.length})</h3>
+            <div className="review-result__alerts">
+              <h4>Alertes détectées ({result.securityFindings.length})</h4>
               <ul className="session-list">
                 {result.securityFindings.map((f, i) => (
                   <li key={`${f.category}-${i}`} className="session-item">
@@ -230,18 +377,10 @@ export default function PrReviewPanel() {
                 ))}
               </ul>
             </div>
-          ) : null}
-          <pre
-            className="host-id"
-            style={{
-              marginTop: "0.75rem",
-              whiteSpace: "pre-wrap",
-              maxHeight: "24rem",
-              overflow: "auto",
-            }}
-          >
-            {result.aiReview}
-          </pre>
+          ) : (
+            <p className="muted">Aucune alerte sécurité automatique sur ce diff.</p>
+          )}
+          <pre className="review-result__body">{result.aiReview}</pre>
         </div>
       ) : null}
     </section>

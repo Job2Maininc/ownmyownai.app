@@ -263,7 +263,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
             ["chat", "Chat local"],
             ["models", "Modèles"],
             ["context", "Contexte"],
-            ["review", "Review PR"],
+            ["review", "Revue code"],
             ["projects", "Projets"],
             ["audit", "Journal"],
           ] as const
