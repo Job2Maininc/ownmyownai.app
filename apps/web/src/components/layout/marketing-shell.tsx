@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { BrandMark } from "@/components/brand/brand-mark";
+import { MarketingFooter } from "@/components/layout/marketing-footer";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 
 export async function MarketingShell({ children }: { children: React.ReactNode }) {
@@ -14,10 +16,14 @@ export async function MarketingShell({ children }: { children: React.ReactNode }
       <header className="nav-glass">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
           <BrandMark href="/" size="sm" />
-          <nav className="flex items-center gap-4 text-sm sm:gap-6">
+          <nav className="flex items-center gap-3 text-sm sm:gap-4">
+            <Link href="/pricing" className="nav-link hidden sm:inline">
+              Tarifs
+            </Link>
             <Link href="/download" className="nav-link hidden sm:inline">
               Télécharger
             </Link>
+            <ThemeToggle />
             {user ? (
               <Link href="/dashboard">
                 <Button variant="secondary">Mon tableau de bord</Button>
@@ -33,21 +39,7 @@ export async function MarketingShell({ children }: { children: React.ReactNode }
 
       <div className="flex-1">{children}</div>
 
-      <footer className="border-t border-[var(--border)] bg-[var(--surface)]">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between">
-          <p className="font-medium text-[var(--foreground)]">
-            OwnMyOwnAI — votre IA reste chez vous.
-          </p>
-          <div className="flex gap-5">
-            <Link href="/download" className="link">
-              Installer le Host
-            </Link>
-            <Link href="/login" className="link">
-              Connexion
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

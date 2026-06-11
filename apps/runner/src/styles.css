@@ -1,8 +1,12 @@
 @import "@ownmyownai/design-tokens/tokens.css";
 
 html {
-  color-scheme: light only;
+  color-scheme: light;
   background: var(--background);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 * {
@@ -122,9 +126,31 @@ input:focus {
 }
 
 .app {
+  position: relative;
   padding: 24px;
   min-height: 100vh;
   background: var(--gradient-hero), var(--background);
+}
+
+.app__theme-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
 }
 
 .app--dashboard {
@@ -466,6 +492,12 @@ input:focus {
 
 .dashboard__header {
   margin-bottom: 16px;
+}
+
+.dashboard__header-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
 .dashboard__title-row {

@@ -14,6 +14,7 @@ import type {
   LastRequestMetrics,
   UpdateCheckResult,
 } from "../types";
+import { ThemeToggle } from "./ThemeToggle";
 
 type DashboardTab = "status" | "chat" | "models" | "context" | "review" | "projects" | "audit";
 
@@ -230,6 +231,9 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   return (
     <div className="dashboard">
       <header className="dashboard__header">
+        <div className="dashboard__header-top">
+          <ThemeToggle />
+        </div>
         <div className="dashboard__title-row">
           <span
             className={`live-dot ${allOk ? "live-dot--on" : "live-dot--partial"}`}

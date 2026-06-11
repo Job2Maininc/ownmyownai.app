@@ -70,3 +70,41 @@
   --bg: var(--background);
   --fg: var(--foreground);
 }
+
+[data-theme="dark"] {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --surface: #18181b;
+  --surface-hover: #27272a;
+  --surface-subtle: #141416;
+  --surface-elevated: #1f1f23;
+  --card: #18181b;
+  --muted: #a1a1aa;
+  --border: #3f3f46;
+  --border-subtle: #27272a;
+
+  --accent: #fafafa;
+  --accent-hover: #e4e4e7;
+  --accent-dim: #27272a;
+  --accent-foreground: #09090b;
+  --accent-ring: rgba(129, 140, 248, 0.4);
+  --link: #818cf8;
+  --link-hover: #a5b4fc;
+  --warm: #141416;
+
+  --success: #22c55e;
+  --warn: #eab308;
+  --error: #f87171;
+  --info: #818cf8;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 32px rgba(99, 102, 241, 0.15);
+
+  --gradient-hero:
+    radial-gradient(ellipse 80% 60% at 50% -20%, rgba(99, 102, 241, 0.18), transparent),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(168, 85, 247, 0.12), transparent),
+    radial-gradient(ellipse 40% 30% at 0% 50%, rgba(59, 130, 246, 0.1), transparent);
+}

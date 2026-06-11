@@ -4,6 +4,14 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -115,25 +123,25 @@ body {
 .ui-input {
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: var(--surface);
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .ui-input:focus {
-  border-color: #a3a3a3;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+  border-color: color-mix(in srgb, var(--muted) 50%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 .ui-chip {
   border-radius: var(--radius-sm);
-  background: #fafafa;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
 }
 
 .ui-chip--active {
-  background: #f5f5f5;
-  border-color: #d4d4d4;
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
 }
 
 .link {
@@ -473,7 +481,7 @@ body {
   gap: 0.375rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--surface-elevated);
   padding: 0.5rem;
   box-shadow: var(--shadow-md);
 }
@@ -484,9 +492,10 @@ body {
   width: 100%;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: var(--surface);
   padding: 0.375rem 0.5rem;
   font-size: 0.8125rem;
+  color: var(--foreground);
 }
 
 .chat-toolbar__mode,
@@ -532,10 +541,10 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  background: #171717;
+  background: var(--accent);
   font-size: 0.6875rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--accent-foreground);
 }
 
 .chat-message__body {
@@ -554,7 +563,7 @@ body {
   margin-bottom: 0.75rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: #fafafa;
+  background: var(--surface-subtle);
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
   color: var(--muted);
@@ -577,7 +586,7 @@ body {
   margin-top: 0.25rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: var(--surface);
   padding: 0.125rem 0.5rem;
   font-size: 0.625rem;
   color: var(--muted);
@@ -637,7 +646,7 @@ body {
 .chat-composer-wrap {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
-  background: linear-gradient(to top, #ffffff 80%, transparent);
+  background: linear-gradient(to top, var(--surface) 80%, transparent);
   padding: 0.75rem 1rem 1rem;
 }
 
@@ -739,7 +748,7 @@ body {
   gap: 0.375rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: #fafafa;
+  background: var(--surface-subtle);
   padding: 0.625rem 0.75rem;
 }
 
@@ -769,13 +778,13 @@ body {
   height: 0.375rem;
   overflow: hidden;
   border-radius: 9999px;
-  background: #e5e5e5;
+  background: var(--border);
 }
 
 .indexing-progress__fill {
   height: 100%;
   border-radius: 9999px;
-  background: #171717;
+  background: var(--accent);
   transition: width 0.35s ease-out;
 }
 
@@ -805,8 +814,8 @@ body {
 }
 
 .chat-sidebar-tabs button[aria-selected="true"] {
-  border-color: #d4d4d4;
-  background: #f5f5f5;
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+  background: var(--surface-hover);
   font-weight: 600;
 }
 
@@ -841,13 +850,13 @@ body {
   text-align: left;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: var(--surface);
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .artifact-card:hover {
-  border-color: #d4d4d4;
-  background: #fafafa;
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+  background: var(--surface-hover);
 }
 
 .artifact-card__label {
@@ -875,7 +884,7 @@ body {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #fafafa;
+  background: var(--surface-subtle);
 }
 
 .inline-edit-panel__header {
@@ -1179,5 +1188,87 @@ body {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--success);
+}
+
+/* Pages légales */
+.legal-prose {
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.legal-prose section {
+  margin-bottom: 2rem;
+}
+
+.legal-prose h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+
+.legal-prose h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.legal-prose p {
+  margin-bottom: 0.75rem;
+  color: var(--muted);
+}
+
+.legal-prose ul {
+  margin: 0.5rem 0 0.75rem 1.25rem;
+  list-style: disc;
+  color: var(--muted);
+}
+
+.legal-prose li {
+  margin-bottom: 0.35rem;
+}
+
+.legal-prose a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-prose a:hover {
+  color: var(--link-hover);
+}
+
+.legal-prose table {
+  width: 100%;
+  margin: 0.75rem 0 1rem;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.legal-prose th,
+.legal-prose td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.legal-prose th {
+  background: var(--surface-hover);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.legal-prose td {
+  color: var(--muted);
+}
+
+.legal-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
 }
 

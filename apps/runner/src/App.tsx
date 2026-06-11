@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { BrandMark } from "./components/BrandMark";
+import { ThemeToggle } from "./components/ThemeToggle";
 import Dashboard from "./components/Dashboard";
 import InstallProgress from "./components/InstallProgress";
 import ModelSetup from "./components/ModelSetup";
@@ -159,6 +160,11 @@ export default function App() {
 
   return (
     <main className={`app ${step === "online" ? "app--dashboard" : ""}`}>
+      {step !== "online" && (
+        <div className="app__theme-toggle">
+          <ThemeToggle />
+        </div>
+      )}
       {showSteps && (
         <div className="steps">
           {[0, 1, 2, 3, 4, 5].map((i) => (

@@ -6,7 +6,10 @@ import "@fontsource/ibm-plex-mono/400.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { applyTheme, resolveTheme } from "./lib/theme";
 import "./styles.css";
+
+applyTheme(resolveTheme());
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
