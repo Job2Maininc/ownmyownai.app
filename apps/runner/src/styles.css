@@ -148,9 +148,54 @@ input:focus {
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
   background: var(--surface);
-  font-size: 16px;
+  color: var(--muted);
   line-height: 1;
   padding: 0;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.inline-icon {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 0.35rem;
+  color: var(--link);
+}
+
+.doc-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.skeleton-line {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--surface-subtle) 0%,
+    var(--surface-hover) 50%,
+    var(--surface-subtle) 100%
+  );
+  background-size: 200% 100%;
+  animation: runner-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes runner-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .app--dashboard {
@@ -987,8 +1032,16 @@ input:focus {
 }
 
 .source-card__icon {
-  font-size: 22px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--link) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--link) 18%, var(--border));
+  color: var(--link);
 }
 
 .source-card strong {

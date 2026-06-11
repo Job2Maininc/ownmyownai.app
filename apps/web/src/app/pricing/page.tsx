@@ -1,39 +1,40 @@
 import Link from "next/link";
 import { MarketingShell } from "@/components/layout/marketing-shell";
+import { FeatureIcon, type IconName } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const included = [
+const included: { icon: IconName; title: string; description: string }[] = [
   {
-    emoji: "🖥️",
+    icon: "monitor",
     title: "Host Windows",
     description: "Installateur, mises à jour automatiques et liaison avec votre compte.",
   },
   {
-    emoji: "🧠",
+    icon: "brain",
     title: "IA locale",
     description: "Modèles sur votre PC via Ollama — vos conversations restent chez vous.",
   },
   {
-    emoji: "💬",
+    icon: "message",
     title: "Chat web",
     description: "Interface navigateur pour discuter avec votre Host, où que vous soyez sur le réseau.",
   },
   {
-    emoji: "📁",
+    icon: "folder",
     title: "Contexte & projets",
     description: "Indexation locale, bases de connaissances et outils intégrés au Host.",
   },
   {
-    emoji: "🔒",
+    icon: "lock",
     title: "Confidentialité",
     description: "Pas d'envoi de vos données vers des clouds tiers sans votre accord explicite.",
   },
   {
-    emoji: "✨",
+    icon: "sparkles",
     title: "Nouveautés bêta",
     description: "Accès aux évolutions en cours — votre retour façonne le produit.",
   },
@@ -56,9 +57,7 @@ export default async function PricingPage() {
           >
             Simple, gratuit,
             <br />
-            <span className="bg-gradient-to-r from-zinc-500 to-zinc-400 bg-clip-text text-transparent">
-              sans surprise.
-            </span>
+            <span className="text-gradient-brand">sans surprise.</span>
           </h1>
           <p className="mx-auto max-w-xl text-lg leading-relaxed text-[var(--muted)]">
             OwnMyOwnAI est en phase bêta : tout est accessible gratuitement pendant que nous
@@ -69,9 +68,7 @@ export default async function PricingPage() {
 
       <section className="mx-auto max-w-3xl px-6 pb-16">
         <Card className="animate-fade-up text-center shadow-glow" style={{ animationDelay: "80ms" }}>
-          <p className="text-sm font-semibold uppercase tracking-widest text-[var(--link)]">
-            Offre actuelle
-          </p>
+          <p className="section-eyebrow">Offre actuelle</p>
           <p className="mt-4 text-5xl font-bold tracking-tight text-[var(--foreground)]">0 €</p>
           <p className="mt-2 text-[var(--muted)]">Accès complet · sans carte bancaire</p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -101,16 +98,14 @@ export default async function PricingPage() {
 
       <section className="brand-section-alt px-6 py-16 md:py-20">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-10 text-center">
-            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">Ce qui est inclus</h2>
-            <p className="mt-3 text-[var(--muted)]">Tout ce dont vous avez besoin pour démarrer.</p>
+          <div className="section-header mb-10 text-center">
+            <h2 className="section-title">Ce qui est inclus</h2>
+            <p className="section-subtitle">Tout ce dont vous avez besoin pour démarrer.</p>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="stagger-children grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {included.map((item) => (
               <Card key={item.title} interactive>
-                <span className="mb-3 block text-2xl" aria-hidden>
-                  {item.emoji}
-                </span>
+                <FeatureIcon name={item.icon} />
                 <h3 className="mb-2 font-semibold tracking-tight">{item.title}</h3>
                 <p className="text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>
               </Card>
@@ -120,14 +115,16 @@ export default async function PricingPage() {
       </section>
 
       <section className="px-6 py-16 md:py-20">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10 text-center shadow-soft">
-          <h2 className="mb-3 text-2xl font-bold tracking-tight">Prêt à commencer ?</h2>
-          <p className="mb-8 text-[var(--muted)]">
-            Installez le Host, liez votre PC et discutez en quelques minutes.
-          </p>
-          <Link href="/download">
-            <Button size="lg">Commencer gratuitement</Button>
-          </Link>
+        <div className="mx-auto max-w-2xl animate-fade-up">
+          <div className="cta-panel rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10 text-center shadow-soft">
+            <h2 className="mb-3 text-2xl font-bold tracking-tight">Prêt à commencer ?</h2>
+            <p className="mb-8 text-[var(--muted)]">
+              Installez le Host, liez votre PC et discutez en quelques minutes.
+            </p>
+            <Link href="/download">
+              <Button size="lg">Commencer gratuitement</Button>
+            </Link>
+          </div>
         </div>
       </section>
     </MarketingShell>

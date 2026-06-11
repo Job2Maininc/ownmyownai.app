@@ -65,7 +65,7 @@ export function ChatMessage({
   return (
     <div className="chat-message chat-message--assistant group">
       <div className="chat-message__avatar" aria-hidden>
-        O
+        <span className="chat-message__avatar-mark">O</span>
       </div>
       <div className="chat-message__body">
         {message.thinking?.trim() && (
@@ -111,7 +111,7 @@ export function ChatTypingIndicator({ thinkingMode }: { thinkingMode: boolean })
   return (
     <div className="chat-message chat-message--assistant" aria-live="polite">
       <div className="chat-message__avatar" aria-hidden>
-        O
+        <span className="chat-message__avatar-mark">O</span>
       </div>
       <div className="chat-message__body">
         <div className="chat-typing" role="status">

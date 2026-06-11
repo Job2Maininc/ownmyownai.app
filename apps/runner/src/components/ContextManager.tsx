@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { InlineDocIcon, SourceIcon, type SourceIconId } from "./Icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -44,32 +45,37 @@ interface DriveInfo {
 
 const EXTRACTABLE_EXTENSIONS = ["txt", "md", "pdf", "docx", "png", "jpg", "jpeg"] as const;
 
-const SOURCE_TYPES = [
+const SOURCE_TYPES: {
+  id: SourceIconId;
+  title: string;
+  hint: string;
+  iconId: SourceIconId;
+}[] = [
   {
     id: "file",
     title: "Fichiers",
     hint: "Un ou plusieurs fichiers sur votre PC",
-    icon: "📄",
+    iconId: "file",
   },
   {
     id: "folder",
     title: "Dossier",
     hint: "Un dossier et ses sous-dossiers",
-    icon: "📁",
+    iconId: "folder",
   },
   {
     id: "repo",
     title: "Dépôt Git",
     hint: "Code source avec index des symboles",
-    icon: "🔀",
+    iconId: "repo",
   },
   {
     id: "drive",
     title: "Disque entier",
     hint: "C:, D:, clé USB — documents, code, PDF, texte",
-    icon: "💾",
+    iconId: "drive",
   },
-] as const;
+];
 
 function truncatePath(path: string, max = 48) {
   if (path.length <= max) return path;
@@ -541,7 +547,7 @@ export default function ContextManager() {
               onClick={() => void handleSourcePick(source.id)}
             >
               <span className="source-card__icon" aria-hidden>
-                {source.icon}
+                <SourceIcon id={source.iconId} size={20} />
               </span>
               <strong>{source.title}</strong>
               <span className="muted">{source.hint}</span>
@@ -680,8 +686,8 @@ export default function ContextManager() {
               <li className="muted">Aucun document indexé pour l&apos;instant.</li>
             )}
             {documents.map((d) => (
-              <li key={d.id}>
-                {d.sourceType === "linked" ? "🔗 " : "📤 "}
+              <li key={d.id} className="doc-list-item">
+                <InlineDocIcon linked={d.sourceType === "linked"} />
                 {d.filename} — {d.status}
                 {d.chunkCount > 0 && ` (${d.chunkCount} extraits)`}
                 {d.externalPath && (

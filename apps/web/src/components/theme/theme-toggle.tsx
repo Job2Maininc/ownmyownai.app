@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/ui/icon";
 import { useTheme } from "./theme-provider";
 
 export function ThemeToggle({ className = "" }: { className?: string }) {
@@ -10,13 +11,11 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     <button
       type="button"
       onClick={toggleTheme}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-[background,color,border-color] duration-base ease-expo hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] ${className}`}
+      className={`theme-toggle-btn ${className}`}
       aria-label={isDark ? "Passer en mode clair" : "Passer en mode sombre"}
       title={isDark ? "Mode clair" : "Mode sombre"}
     >
-      <span aria-hidden className="text-base leading-none">
-        {isDark ? "☀️" : "🌙"}
-      </span>
+      <Icon name={isDark ? "sun" : "moon"} size={16} />
     </button>
   );
 }

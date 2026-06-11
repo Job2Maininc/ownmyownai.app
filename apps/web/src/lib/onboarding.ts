@@ -1,3 +1,5 @@
+import type { IconName } from "@/components/ui/icon";
+
 export const ONBOARDING_STEPS = [
   {
     id: "download",
@@ -5,7 +7,7 @@ export const ONBOARDING_STEPS = [
     shortLabel: "Installer",
     href: "/download",
     description: "Téléchargez OwnMyOwnAI Host sur votre PC Windows.",
-    emoji: "⬇️",
+    icon: "download" as IconName,
   },
   {
     id: "login",
@@ -13,7 +15,7 @@ export const ONBOARDING_STEPS = [
     shortLabel: "Compte",
     href: "/login",
     description: "Connectez-vous avec un lien magique — sans mot de passe.",
-    emoji: "✉️",
+    icon: "mail" as IconName,
   },
   {
     id: "link",
@@ -21,7 +23,7 @@ export const ONBOARDING_STEPS = [
     shortLabel: "Lier",
     href: "/host/link",
     description: "Générez un code et entrez-le dans l'application Host.",
-    emoji: "🔗",
+    icon: "link" as IconName,
   },
   {
     id: "chat",
@@ -29,7 +31,7 @@ export const ONBOARDING_STEPS = [
     shortLabel: "Discuter",
     href: "/dashboard",
     description: "Ouvrez le chat et posez votre première question.",
-    emoji: "💬",
+    icon: "message" as IconName,
   },
 ] as const;
 

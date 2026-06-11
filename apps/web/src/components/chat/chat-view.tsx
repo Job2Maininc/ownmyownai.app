@@ -49,6 +49,7 @@ import { ChatToolbar } from "./chat-toolbar";
 import { IndexingProgressBar } from "./indexing-progress-bar";
 import type { IndexingProgressPayload } from "@/lib/relay-client";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
+import { FeatureIcon } from "@/components/ui/icon";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
@@ -148,6 +149,12 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [contextBases, setContextBases] = useState<KnowledgeBaseSummary[]>([]);
   const [showSidebar, setShowSidebar] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setShowSidebar(false);
+    }
+  }, []);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("context");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [conversationTree, setConversationTree] = useState<ConversationTree | null>(null);
@@ -898,6 +905,14 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       />
 
       <div className="chat-layout">
+        {showSidebar && (
+          <button
+            type="button"
+            className="chat-sidebar-backdrop"
+            aria-label="Fermer le panneau latéral"
+            onClick={() => setShowSidebar(false)}
+          />
+        )}
         <div className="chat-main">
           {activeContextIds.length > 0 && (
             <p className="chat-alerts text-xs text-[var(--link)]">
@@ -940,9 +955,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               )}
 
               {messages.length === 0 && relayStatus === "connected" && (
-                <div className="chat-empty">
+                <div className="chat-empty animate-fade-up">
+                  <FeatureIcon name="message" className="chat-empty__icon" />
                   <p className="chat-empty__title">Votre premier message</p>
-                  <p className="text-sm">
+                  <p className="chat-empty__subtitle text-sm">
                     Posez une question — la réponse est générée localement sur votre PC.
                   </p>
                   <div className="chat-empty__suggestions">
@@ -993,7 +1009,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   actionHref="/dashboard"
                 />
               )}
-              {queueHint && !streaming && <p className="text-amber-600">{queueHint}</p>}
+              {queueHint && !streaming && <p className="text-[var(--warn)]">{queueHint}</p>}
             </div>
           )}
 
@@ -1010,7 +1026,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         </div>
 
         {showSidebar && (
-          <aside className="chat-sidebar">
+          <aside className="chat-sidebar chat-sidebar--open">
             <div className="chat-sidebar-tabs" role="tablist" aria-label="Panneau latéral">
               <button
                 type="button"

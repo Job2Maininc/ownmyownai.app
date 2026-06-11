@@ -8,6 +8,7 @@ import { sanitizeRedirectPath } from "@/lib/auth-redirect";
 import { getRememberedEmail, rememberEmail } from "@/lib/remembered-email";
 import { createClient } from "@/lib/supabase/client";
 import { BrandMark } from "@/components/brand/brand-mark";
+import { FeatureIcon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -76,6 +77,7 @@ export default function LoginPage() {
     return (
       <main className="auth-backdrop flex min-h-screen flex-col items-center justify-center px-6">
         <Card className="w-full max-w-md animate-fade-up text-center shadow-glow">
+          <FeatureIcon name="mail" className="mx-auto mb-4" />
           <h1 className="mb-2 text-xl font-semibold">Vérifiez votre boîte mail</h1>
           <p className="text-[var(--muted)]">
             Un lien de connexion a été envoyé à <strong className="text-[var(--foreground)]">{email}</strong>.

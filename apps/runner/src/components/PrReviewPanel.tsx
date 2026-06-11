@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { ReviewIcon, type ReviewIconId } from "./Icons";
 
 interface GitRepoInfo {
   linkId: string;
@@ -37,35 +38,35 @@ const REVIEW_OPTIONS: {
   id: ReviewMode;
   title: string;
   hint: string;
-  icon: string;
+  iconId: ReviewIconId;
   gitMode?: string;
 }[] = [
   {
     id: "unstaged",
     title: "Modifications en cours",
     hint: "Fichiers modifiés mais pas encore ajoutés au commit",
-    icon: "✏️",
+    iconId: "unstaged",
     gitMode: "unstaged",
   },
   {
     id: "staged",
     title: "Prêt à committer",
     hint: "Ce qui sera inclus dans votre prochain commit",
-    icon: "📦",
+    iconId: "staged",
     gitMode: "staged",
   },
   {
     id: "head",
     title: "Dernier commit",
     hint: "Revoir les changements du commit le plus récent",
-    icon: "🕐",
+    iconId: "head",
     gitMode: "head",
   },
   {
     id: "github-pr",
     title: "Pull Request GitHub",
     hint: "Analyser une PR avec la commande gh (si installée)",
-    icon: "🔀",
+    iconId: "github-pr",
   },
 ];
 
@@ -274,7 +275,7 @@ export default function PrReviewPanel() {
                   onClick={() => void handleReviewChoice(option)}
                 >
                   <span className="source-card__icon" aria-hidden>
-                    {option.icon}
+                    <ReviewIcon id={option.iconId} size={20} />
                   </span>
                   <strong>{option.title}</strong>
                   <span className="muted">{option.hint}</span>

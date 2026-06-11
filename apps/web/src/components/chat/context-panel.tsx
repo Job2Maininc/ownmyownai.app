@@ -11,6 +11,7 @@ import type {
 import type { RelayClient } from "@/lib/relay-client";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Icon } from "@/components/ui/icon";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { formatApiError, type UserError } from "@/lib/user-errors";
 import { ContextUploadSkeleton } from "./chat-skeleton";
@@ -299,7 +300,7 @@ export function ContextPanel({
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="Nouvelle base"
-          className="flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-sm"
+          className="input-field flex-1 !px-2 !py-1 text-sm"
           disabled={!connected}
         />
         <Button type="button" variant="secondary" disabled={!connected} onClick={() => void handleCreate()}>
@@ -310,7 +311,7 @@ export function ContextPanel({
       {!loading && bases.length === 0 && connected && (
         <div className="mt-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-subtle)]">
           <EmptyState
-            emoji="📁"
+            icon="folder"
             title="Créez votre première base"
             description="Ajoutez des documents (.txt, .md, .pdf) pour enrichir vos réponses. Vous pouvez aussi lier des dossiers depuis l'app Host."
           />
@@ -369,11 +370,14 @@ export function ContextPanel({
                     <p className="text-xs font-medium">Sources liées (Host)</p>
                     <ul className="mt-1 space-y-1 text-xs text-[var(--muted)]">
                       {links.map((link) => (
-                        <li key={link.id}>
-                          🔗 {truncatePath(link.path)} — {linkStatusLabel(link)}
-                          {link.lastSyncError && (
-                            <span className="text-red-400"> ({link.lastSyncError})</span>
-                          )}
+                        <li key={link.id} className="flex items-center gap-1.5">
+                          <Icon name="link" size={14} className="shrink-0 text-[var(--link)]" />
+                          <span>
+                            {truncatePath(link.path)} — {linkStatusLabel(link)}
+                            {link.lastSyncError && (
+                              <span className="text-[var(--error)]"> ({link.lastSyncError})</span>
+                            )}
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -394,7 +398,7 @@ export function ContextPanel({
                     )}
                   </div>
                 ) : (
-                  <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] hover:border-neutral-400">
+                  <label className="block cursor-pointer rounded border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--muted)] transition-colors hover:border-[color-mix(in_srgb,var(--link)_25%,var(--border))] hover:bg-[var(--surface-subtle)]">
                     Glisser-déposer ou cliquer (.txt, .md, .pdf, .docx)
                     <input
                       type="file"
@@ -410,8 +414,13 @@ export function ContextPanel({
                   {documents.map((d) => (
                     <li key={d.id}>
                       <div className="flex items-center gap-2">
-                        <span>
-                          {d.sourceType === "linked" ? "🔗" : "📤"} {d.filename} — {d.status}
+                        <span className="inline-flex items-center gap-1.5">
+                          <Icon
+                            name={d.sourceType === "linked" ? "link" : "upload"}
+                            size={14}
+                            className="shrink-0 text-[var(--muted)]"
+                          />
+                          {d.filename} — {d.status}
                           {d.chunkCount > 0 && ` (${d.chunkCount} extraits)`}
                         </span>
                         {d.externalPath && (
@@ -430,14 +439,14 @@ export function ContextPanel({
                         )}
                         <button
                           type="button"
-                          className="text-red-400 hover:underline"
+                          className="text-[var(--error)] hover:underline"
                           onClick={() => void handleDeleteDocument(d.id)}
                         >
                           Retirer
                         </button>
                       </div>
                       {d.errorMessage && (
-                        <p className="text-red-400">{d.errorMessage}</p>
+                        <p className="text-[var(--error)]">{d.errorMessage}</p>
                       )}
                     </li>
                   ))}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/ui/icon";
 import {
   getOnboardingStepIndex,
   ONBOARDING_STEPS,
@@ -33,7 +34,7 @@ export function OnboardingSteps({
             <li key={step.id} className={`onboarding-steps__item onboarding-steps__item--${state}`}>
               <Link href={step.href} className="onboarding-steps__link">
                 <span className="onboarding-steps__marker" aria-hidden>
-                  {isComplete ? "✓" : index + 1}
+                  {isComplete ? <Icon name="check" size={14} /> : index + 1}
                 </span>
                 <span className="onboarding-steps__label">
                   {compact ? step.shortLabel : step.label}
@@ -67,7 +68,10 @@ export function OnboardingStepDetail({ stepId, className = "" }: OnboardingStepD
         Étape {stepNumber} sur {ONBOARDING_STEPS.length}
       </p>
       <h2 className="onboarding-step-detail__title">
-        <span aria-hidden>{step.emoji}</span> {step.label}
+        <span className="onboarding-step-detail__icon" aria-hidden>
+          <Icon name={step.icon} size={22} />
+        </span>
+        {step.label}
       </h2>
       <p className="onboarding-step-detail__description">{step.description}</p>
     </div>

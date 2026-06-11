@@ -101,7 +101,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-sm outline-none focus:border-neutral-400"
+                className="input-field flex-1 !px-2 !py-1 text-sm"
                 autoFocus
                 disabled={saving}
               />
@@ -165,7 +165,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
             value={host.default_model}
             disabled={updatingModel}
             onChange={(e) => void handleDefaultModelChange(e.target.value)}
-            className="rounded border border-[var(--border)] bg-white px-2 py-1 text-sm"
+            className="input-field !w-auto !px-2 !py-1 text-sm"
           >
             {installedModels.map((m) => (
               <option key={m} value={m}>
@@ -217,7 +217,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
         </div>
       )}
 
-      {actionError && <p className="text-sm text-red-400">{actionError}</p>}
+      {actionError && <p className="text-sm text-[var(--error)]">{actionError}</p>}
     </Card>
   );
 }

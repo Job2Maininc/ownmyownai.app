@@ -45,7 +45,7 @@ export default async function DashboardPage() {
         {!hosts?.length ? (
           <Card>
             <EmptyState
-              emoji="🖥️"
+              icon="monitor"
               title="Connectez votre Host"
               description="Installez OwnMyOwnAI sur votre PC Windows, puis liez-le avec un code de pairing. Vous pourrez chatter en moins de 5 minutes."
             >

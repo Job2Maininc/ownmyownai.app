@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { PlaybookSummary } from "@ownmyownai/protocol";
 import type { RelayClient } from "@/lib/relay-client";
+import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { PlaybookPicker } from "./playbook-picker";
 
@@ -68,8 +69,13 @@ export function ChatToolbar({
   return (
     <header className="chat-toolbar">
       <div className="chat-toolbar__left">
-        <Link href="/dashboard" className="chat-toolbar__back" title="Retour au tableau de bord">
-          ←
+        <Link
+          href="/dashboard"
+          className="chat-toolbar__back"
+          title="Retour au tableau de bord"
+          aria-label="Retour au tableau de bord"
+        >
+          <Icon name="arrow-left" size={18} />
         </Link>
       </div>
 
@@ -98,7 +104,9 @@ export function ChatToolbar({
           {headerStatus.label}
         </span>
         <details className="chat-toolbar__menu">
-          <summary aria-label="Actions">⋯</summary>
+          <summary aria-label="Actions du chat">
+            <Icon name="more-horizontal" size={18} />
+          </summary>
           <div className="chat-toolbar__menu-panel">
             <input
               type="search"

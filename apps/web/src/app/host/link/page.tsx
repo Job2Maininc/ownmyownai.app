@@ -1,21 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { useCallback, useEffect, useState } from "react";
 import { createPairingCode } from "@/lib/api";
 import { AppHeader } from "@/components/layout/app-header";
 import {
   OnboardingStepDetail,
   OnboardingSteps,
 } from "@/components/onboarding/onboarding-steps";
+import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { BRAND_ACCENT } from "@/lib/brand";
 import { formatApiError } from "@/lib/user-errors";
 import { PairingStatus } from "./pairing-status";
+
+function PairingCodeSkeleton() {
+  return (
+    <div className="py-6 text-center" aria-busy="true" aria-label="Génération du code">
+      <div className="mx-auto space-y-3">
+        <div className="skeleton-line mx-auto h-3 w-32" />
+        <div className="skeleton-line mx-auto h-12 w-48 rounded-lg" />
+        <div className="skeleton-line mx-auto h-40 w-40 rounded-xl" />
+      </div>
+    </div>
+  );
+}
 
 export default function HostLinkPage() {
   const searchParams = useSearchParams();
@@ -50,8 +63,12 @@ export default function HostLinkPage() {
   return (
     <AppHeader>
       <main className="mx-auto min-h-screen max-w-lg px-6 py-8 md:py-12">
-        <Link href="/dashboard" className="mb-6 inline-block text-sm link">
-          ← Retour au dashboard
+        <Link
+          href="/dashboard"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm link"
+        >
+          <Icon name="arrow-left" size={16} />
+          Retour au dashboard
         </Link>
 
         <div className="mb-8 animate-fade-up">
@@ -72,14 +89,7 @@ export default function HostLinkPage() {
             <li>Votre PC apparaîtra sur le dashboard — vous pourrez chatter immédiatement</li>
           </ol>
 
-          {loading && (
-            <div className="py-6 text-center">
-              <p className="text-sm text-[var(--muted)]">Génération du code…</p>
-              <div className="mx-auto mt-3 h-1.5 w-32 overflow-hidden rounded-full bg-[var(--border)]">
-                <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--link)]" />
-              </div>
-            </div>
-          )}
+          {loading && <PairingCodeSkeleton />}
 
           {error && !loading && (
             <div className="mb-4">
@@ -92,15 +102,15 @@ export default function HostLinkPage() {
           )}
 
           {code && !loading && (
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-4 animate-fade-up">
               <p className="text-xs font-medium uppercase tracking-widest text-[var(--muted)]">
                 Votre code de pairing
               </p>
-              <p className="font-mono text-4xl font-bold tracking-[0.2em] text-[var(--link)]">
+              <p className="pairing-code" aria-label={`Code ${code}`}>
                 {code}
               </p>
               {pairingUrl && (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-4 shadow-soft">
                   <QRCodeSVG
                     value={pairingUrl}
                     size={160}

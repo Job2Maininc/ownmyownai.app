@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { FeatureIcon, type IconName } from "@/components/ui/icon";
 
 interface EmptyStateProps {
-  emoji?: string;
+  icon?: IconName;
   title: string;
   description: string;
   children?: ReactNode;
@@ -9,7 +10,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  emoji,
+  icon,
   title,
   description,
   children,
@@ -17,11 +18,7 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className={`empty-state ${className}`.trim()}>
-      {emoji && (
-        <span className="empty-state__emoji" aria-hidden>
-          {emoji}
-        </span>
-      )}
+      {icon && <FeatureIcon name={icon} className="empty-state__icon" />}
       <h2 className="empty-state__title">{title}</h2>
       <p className="empty-state__description">{description}</p>
       {children && <div className="empty-state__actions">{children}</div>}

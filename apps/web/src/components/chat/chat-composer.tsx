@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 
 interface ChatComposerProps {
@@ -76,19 +77,7 @@ export function ChatComposer({
               className="chat-composer__btn !px-3 !py-2"
               aria-label="Envoyer"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M12 19V5M5 12l7-7 7 7" />
-              </svg>
+              <Icon name="send" size={16} />
             </Button>
           )}
         </div>

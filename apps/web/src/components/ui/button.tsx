@@ -13,7 +13,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const base =
-    "inline-flex items-center justify-center font-semibold transition-[background,color,box-shadow,transform,border-color] duration-base ease-expo disabled:opacity-50 active:scale-[0.98]";
+    "inline-flex items-center justify-center font-semibold transition-[background,color,box-shadow,transform,border-color] duration-base ease-expo disabled:opacity-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]";
   const sizes = {
     default: "rounded-full px-5 py-2.5 text-sm",
     lg: "rounded-full px-8 py-3.5 text-base",
