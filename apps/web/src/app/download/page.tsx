@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { MarketingShell } from "@/components/layout/marketing-shell";
+import {
+  OnboardingStepDetail,
+  OnboardingSteps,
+} from "@/components/onboarding/onboarding-steps";
 import { Card } from "@/components/ui/card";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { formatDownloadError } from "@/lib/user-errors";
 import { resolveHostReleaseInfo } from "@/lib/release-download";
 import { DownloadButton } from "./download-button";
 
@@ -25,13 +31,20 @@ export default async function DownloadPage({
     resolveHostReleaseInfo(),
   ]);
   const releaseDate = formatReleaseDate(release?.pubDate ?? null);
+  const downloadError = error ? formatDownloadError(error) : null;
 
   return (
     <MarketingShell>
-      <main className="mx-auto max-w-2xl px-6 py-12">
-        <Card>
-          <h1 className="mb-2 text-2xl font-bold">Installer le Host</h1>
-          <p className="mb-2 text-[var(--muted)]">
+      <section className="brand-hero-gradient px-6 pb-8 pt-10 md:pt-14">
+        <div className="mx-auto max-w-2xl animate-fade-up">
+          <OnboardingSteps currentStepId="download" className="mb-8" />
+          <OnboardingStepDetail stepId="download" />
+        </div>
+      </section>
+
+      <main className="mx-auto max-w-2xl px-6 pb-12">
+        <Card className="animate-fade-up shadow-glow" style={{ animationDelay: "80ms" }}>
+          <p className="mb-2 text-sm text-[var(--muted)]">
             Gratuit, sur votre PC. Windows 10+, 8 Go RAM recommandés. L&apos;installateur gère
             les mises à jour automatiquement.
           </p>
@@ -44,36 +57,42 @@ export default async function DownloadPage({
               )}
             </p>
           ) : (
-            <p className="mb-6 text-sm text-[var(--warn)]">
-              Version Host non publiée pour le moment — le téléchargement peut échouer.
-            </p>
+            <div className="mb-6">
+              <ErrorAlert
+                message="La dernière version n'est pas encore publiée. Le téléchargement peut échouer — réessayez bientôt."
+                actionLabel="Actualiser"
+                actionHref="/download"
+              />
+            </div>
           )}
 
-          {error && (
-            <p className="mb-4 rounded-lg border border-[color-mix(in_srgb,var(--warn)_30%,transparent)] bg-[color-mix(in_srgb,var(--warn)_10%,transparent)] p-3 text-sm text-[var(--warn)]">
-              Le ZIP n&apos;est pas disponible pour le moment. Réessayez dans quelques minutes.
-            </p>
+          {downloadError && (
+            <div className="mb-4">
+              <ErrorAlert {...downloadError} />
+            </div>
           )}
 
           <DownloadButton version={release?.version ?? null} />
 
-          <ol className="mt-8 list-decimal space-y-2 pl-5 text-sm text-[var(--muted)]">
-            <li>Téléchargez et lancez l&apos;installateur</li>
-            <li>Ouvrez OwnMyOwnAI Host depuis le menu Démarrer</li>
-            <li>
-              <Link href="/login" className="link">
-                Connectez-vous
-              </Link>{" "}
-              sur le web
-            </li>
-            <li>
-              <Link href="/host/link" className="link">
-                Générez un code de pairing
-              </Link>{" "}
-              et entrez-le dans l&apos;app
-            </li>
-            <li>Discutez depuis le dashboard</li>
-          </ol>
+          <div className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-4">
+            <p className="mb-3 text-sm font-semibold text-[var(--foreground)]">Ensuite</p>
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--muted)]">
+              <li>Lancez l&apos;installateur et ouvrez OwnMyOwnAI Host</li>
+              <li>
+                <Link href="/login" className="link">
+                  Connectez-vous
+                </Link>{" "}
+                sur le web (lien magique par e-mail)
+              </li>
+              <li>
+                <Link href="/host/link" className="link">
+                  Générez un code de pairing
+                </Link>{" "}
+                et entrez-le dans l&apos;app
+              </li>
+              <li>Discutez depuis le dashboard — prêt en moins de 5 minutes</li>
+            </ol>
+          </div>
         </Card>
       </main>
     </MarketingShell>

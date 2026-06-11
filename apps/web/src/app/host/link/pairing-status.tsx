@@ -33,14 +33,16 @@ export function PairingStatus({ code }: PairingStatusProps) {
   if (!hostId) return null;
 
   return (
-    <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-center">
-      <p className="mb-2 text-sm text-[var(--success)]">PC lié avec succès !</p>
-      <Link href="/dashboard">
-        <Button>Voir mon PC</Button>
-      </Link>
-      <Link href={`/chat/${hostId}`} className="ml-2 inline-block">
-        <Button variant="secondary">Ouvrir le chat</Button>
-      </Link>
+    <div className="pairing-success">
+      <p className="pairing-success__message">PC lié avec succès ! Vous pouvez commencer à discuter.</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Link href={`/chat/${hostId}`}>
+          <Button>Démarrer le premier chat</Button>
+        </Link>
+        <Link href="/dashboard">
+          <Button variant="secondary">Voir le dashboard</Button>
+        </Link>
+      </div>
     </div>
   );
 }

@@ -40,6 +40,8 @@ import { formatShortcutLabel } from "@/lib/keyboard-shortcuts";
 import { RelayClient } from "@/lib/relay-client";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { formatRelayError, type UserError } from "@/lib/user-errors";
 import { ArtifactsPanel } from "./artifacts-panel";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage as ChatMessageBubble, ChatTypingIndicator } from "./chat-message";
@@ -67,6 +69,12 @@ interface ChatViewProps {
 }
 
 const SEND_SHORTCUT_LABEL = formatShortcutLabel({ key: "Enter", mod: true });
+
+const CHAT_SUGGESTIONS = [
+  "Explique-moi ce projet",
+  "Résume ce document",
+  "Aide-moi à rédiger un e-mail",
+];
 
 function contextKey(hostId: string) {
   return `context-active:${hostId}`;
@@ -132,7 +140,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [thinkingMode, setThinkingMode] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [hostStatus, setHostStatus] = useState<HostStatus>("offline");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UserError | null>(null);
   const [relayStatus, setRelayStatus] = useState<"connecting" | "connected" | "offline" | "error">(
     "connecting",
   );
@@ -363,7 +371,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         setRelayStatus(status);
         if (status === "error") {
           setError(
-            "Connexion au relay impossible. Vérifiez que l'app Host est ouverte sur ce PC.",
+            formatRelayError(
+              "Connexion au relay impossible. Vérifiez que l'app Host est ouverte sur ce PC.",
+            ),
           );
         }
       },
@@ -423,13 +433,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         clearAssistantTurn();
       },
       onError: (msg) => {
-        const outdatedHost =
-          msg.includes("déjà utilisé") || msg.includes("autre session de chat");
-        setError(
-          outdatedHost
-            ? "Host obsolète — installez la v0.2.1+ (onglet État → Mises à jour ou page Télécharger), puis redémarrez l'app."
-            : msg,
-        );
+        setError(formatRelayError(msg));
         setStreaming(false);
         setQueueHint(null);
         activeRequestId.current = null;
@@ -629,7 +633,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         );
         window.setTimeout(() => setConversationNotice(null), 5000);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Impossible de créer la branche");
+        setError({
+          message: "Impossible de créer la branche. Réessayez ou rafraîchissez la page.",
+        });
       }
       return;
     }
@@ -660,7 +666,9 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         clearAssistantTurn();
         activeRequestId.current = null;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Impossible de charger la branche");
+        setError({
+          message: "Impossible de charger cette branche. Sélectionnez un autre fil ou réessayez.",
+        });
       }
       return;
     }
@@ -933,10 +941,23 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
 
               {messages.length === 0 && relayStatus === "connected" && (
                 <div className="chat-empty">
-                  <p className="chat-empty__title">Comment puis-je vous aider ?</p>
+                  <p className="chat-empty__title">Votre premier message</p>
                   <p className="text-sm">
-                    Posez une question — la réponse est générée sur votre PC.
+                    Posez une question — la réponse est générée localement sur votre PC.
                   </p>
+                  <div className="chat-empty__suggestions">
+                    {CHAT_SUGGESTIONS.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        className="chat-empty__suggestion"
+                        onClick={() => setInput(suggestion)}
+                        disabled={streaming}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -962,14 +983,15 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
           </div>
 
           {(conversationNotice || error || (hostOffline && connected) || queueHint) && (
-            <div className="chat-alerts space-y-1 text-sm">
+            <div className="chat-alerts space-y-2 text-sm">
               {conversationNotice && <p className="text-[var(--link)]">{conversationNotice}</p>}
-              {error && <p className="text-red-600">{error}</p>}
+              {error && <ErrorAlert {...error} />}
               {hostOffline && connected && (
-                <p className="text-red-600">
-                  Ce PC est hors ligne — ouvrez l&apos;app Host sur la machine ou attendez qu&apos;il
-                  se reconnecte.
-                </p>
+                <ErrorAlert
+                  message="Ce PC est hors ligne. Ouvrez l'app Host sur votre machine ou attendez qu'il se reconnecte."
+                  actionLabel="Voir mes PCs"
+                  actionHref="/dashboard"
+                />
               )}
               {queueHint && !streaming && <p className="text-amber-600">{queueHint}</p>}
             </div>

@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { HostList } from "@/components/dashboard/host-list";
 import { OnboardingBanner } from "@/components/dashboard/onboarding-banner";
 import { AppHeader } from "@/components/layout/app-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { Host } from "@ownmyownai/supabase-types";
 
 export const dynamic = "force-dynamic";
@@ -34,19 +35,27 @@ export default async function DashboardPage() {
             <h1 className="text-2xl font-bold tracking-tight">Mes PCs</h1>
             <p className="mt-1 text-sm text-[var(--muted)]">Vos PCs — votre IA reste chez vous</p>
           </div>
-          <Link href="/host/link">
-            <Button>Ajouter un PC</Button>
-          </Link>
+          {hosts.length > 0 && (
+            <Link href="/host/link">
+              <Button>Ajouter un PC</Button>
+            </Link>
+          )}
         </div>
 
         {!hosts?.length ? (
           <Card>
-            <p className="mb-4 text-[var(--muted)]">
-              Aucun PC lié. Téléchargez le host Windows et créez un code de pairing.
-            </p>
-            <Link href="/host/link">
-              <Button>Lier mon premier PC</Button>
-            </Link>
+            <EmptyState
+              emoji="🖥️"
+              title="Connectez votre Host"
+              description="Installez OwnMyOwnAI sur votre PC Windows, puis liez-le avec un code de pairing. Vous pourrez chatter en moins de 5 minutes."
+            >
+              <Link href="/download">
+                <Button variant="secondary">1. Télécharger le Host</Button>
+              </Link>
+              <Link href="/host/link">
+                <Button>2. Lier mon premier PC</Button>
+              </Link>
+            </EmptyState>
           </Card>
         ) : (
           <HostList initialHosts={hosts} />

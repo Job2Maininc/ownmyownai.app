@@ -10,6 +10,9 @@ import type {
 } from "@ownmyownai/protocol";
 import type { RelayClient } from "@/lib/relay-client";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { formatApiError, type UserError } from "@/lib/user-errors";
 import { ContextUploadSkeleton } from "./chat-skeleton";
 import { InlineEditPanel } from "./inline-edit-panel";
 
@@ -36,10 +39,6 @@ export function loadActiveContextIds(hostId: string): string[] {
   }
 }
 
-function formatPanelError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/^Error:\s*/i, "");
-}
 
 function truncatePath(path: string, max = 40) {
   if (path.length <= max) return path;
@@ -87,7 +86,7 @@ export function ContextPanel({
   const [chunksLoading, setChunksLoading] = useState(false);
   const [inlineEditDoc, setInlineEditDoc] = useState<ContextDocumentSummary | null>(null);
   const [inlineEditSelection, setInlineEditSelection] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UserError | null>(null);
 
   const refreshProjects = useCallback(async () => {
     if (!relay || !connected) return;
@@ -110,12 +109,7 @@ export function ContextPanel({
       ]);
       setBases(list);
     } catch (e) {
-      const message = formatPanelError(e);
-      setError(
-        message.includes("ne répond pas")
-          ? `${message} (installez la v0.2.0+ si besoin)`
-          : message,
-      );
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -149,7 +143,7 @@ export function ContextPanel({
       onActiveChange(opened.knowledgeBaseIds);
       await refreshProjects();
     } catch (e) {
-      setError(formatPanelError(e));
+      setError(formatApiError(e));
     }
   }
 
@@ -168,7 +162,7 @@ export function ContextPanel({
       setNewName("");
       await refresh();
     } catch (e) {
-      setError(formatPanelError(e));
+      setError(formatApiError(e));
     }
   }
 
@@ -179,7 +173,7 @@ export function ContextPanel({
       onActiveChange(activeIds.filter((x) => x !== id));
       await refresh();
     } catch (e) {
-      setError(formatPanelError(e));
+      setError(formatApiError(e));
     }
   }
 
@@ -190,7 +184,7 @@ export function ContextPanel({
       await refreshStatus(expandedId);
       await refresh();
     } catch (e) {
-      setError(formatPanelError(e));
+      setError(formatApiError(e));
     }
   }
 
@@ -212,7 +206,7 @@ export function ContextPanel({
       setChunksDocId(documentId);
       setChunks(list);
     } catch (e) {
-      setError(formatPanelError(e));
+      setError(formatApiError(e));
     } finally {
       setChunksLoading(false);
     }
@@ -251,7 +245,7 @@ export function ContextPanel({
       }
       await refresh();
     } catch (e) {
-      setError(formatPanelError(e));
+      setError(formatApiError(e));
     } finally {
       setUploading(false);
       setUploadPercent(0);
@@ -313,6 +307,20 @@ export function ContextPanel({
         </Button>
       </div>
       {loading && <p className="mt-2 text-sm text-[var(--muted)]">Chargement…</p>}
+      {!loading && bases.length === 0 && connected && (
+        <div className="mt-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-subtle)]">
+          <EmptyState
+            emoji="📁"
+            title="Créez votre première base"
+            description="Ajoutez des documents (.txt, .md, .pdf) pour enrichir vos réponses. Vous pouvez aussi lier des dossiers depuis l'app Host."
+          />
+        </div>
+      )}
+      {!connected && !loading && (
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          Connectez-vous au Host pour gérer vos bases de contexte.
+        </p>
+      )}
       <ul className="mt-3 space-y-2">
         {bases.map((kb) => (
           <li key={kb.id} className="rounded border border-[var(--border)] p-2">
@@ -482,7 +490,11 @@ export function ContextPanel({
           </li>
         ))}
       </ul>
-      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      {error && (
+        <div className="mt-2">
+          <ErrorAlert {...error} />
+        </div>
+      )}
     </aside>
   );
 }
