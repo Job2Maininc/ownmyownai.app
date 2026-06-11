@@ -66,16 +66,16 @@ export default function LoginPage() {
 
   if (checkingSession) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white px-6">
-        <p className="text-sm text-[var(--muted)]">Vérification de la session…</p>
+      <main className="auth-backdrop flex min-h-screen items-center justify-center px-6">
+        <p className="animate-fade-in text-sm text-[var(--muted)]">Vérification de la session…</p>
       </main>
     );
   }
 
   if (sent) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-white px-6">
-        <Card className="w-full max-w-md text-center shadow-card">
+      <main className="auth-backdrop flex min-h-screen flex-col items-center justify-center px-6">
+        <Card className="w-full max-w-md animate-fade-up text-center shadow-glow">
           <h1 className="mb-2 text-xl font-semibold">Vérifiez votre boîte mail</h1>
           <p className="text-[var(--muted)]">
             Un lien de connexion a été envoyé à <strong className="text-[var(--foreground)]">{email}</strong>.
@@ -86,12 +86,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-white px-6">
-      <div className="mb-8">
+    <main className="auth-backdrop flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="mb-8 animate-fade-up">
         <BrandMark href="/" />
       </div>
-      <Card className="w-full max-w-md shadow-card">
-        <h1 className="mb-2 text-xl font-semibold">Connexion</h1>
+      <Card className="w-full max-w-md animate-fade-up shadow-glow" style={{ animationDelay: "80ms" }}>
+        <h1 className="mb-2 text-xl font-semibold tracking-tight">Connexion</h1>
         <p className="mb-6 text-sm text-[var(--muted)]">
           Entrez votre e-mail — on vous envoie un lien magique, sans mot de passe.
         </p>

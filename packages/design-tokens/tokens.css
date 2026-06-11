@@ -1,42 +1,71 @@
 :root {
-  /* Blanc pur — palette neutre */
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces — profondeur subtile (Linear / Vercel) */
+  --background: #fafafa;
+  --foreground: #0a0a0a;
   --surface: #ffffff;
-  --surface-hover: #fafafa;
+  --surface-hover: #f5f5f5;
+  --surface-subtle: #f4f4f5;
+  --surface-elevated: #ffffff;
   --card: #ffffff;
-  --muted: #737373;
-  --border: #e5e5e5;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --border-subtle: #f4f4f5;
 
-  /* Actions & liens */
-  --accent: #171717;
-  --accent-hover: #404040;
-  --accent-dim: #f5f5f5;
+  /* Actions & liens — accent indigo discret (Raycast) */
+  --accent: #18181b;
+  --accent-hover: #3f3f46;
+  --accent-dim: #f4f4f5;
   --accent-foreground: #ffffff;
-  --link: #2563eb;
-  --warm: #f5f5f4;
+  --accent-ring: rgba(99, 102, 241, 0.35);
+  --link: #4f46e5;
+  --link-hover: #4338ca;
+  --warm: #fafaf9;
 
   /* Sémantique */
   --success: #16a34a;
   --warn: #ca8a04;
   --error: #dc2626;
-  --info: #2563eb;
+  --info: #4f46e5;
 
   /* Typographie */
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --text-display: clamp(2.25rem, 5vw, 3.25rem);
+  --text-title: 1.5rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-xs: 0.75rem;
+  --leading-tight: 1.15;
+  --leading-normal: 1.6;
+  --tracking-tight: -0.025em;
+  --tracking-display: -0.035em;
 
   /* Rayons */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
-  /* Ombres neutres */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.06);
+  /* Ombres — couches douces */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 0 1px rgba(0, 0, 0, 0.03), 0 8px 32px rgba(99, 102, 241, 0.08);
 
-  --transition-fast: 200ms ease-out;
+  /* Motion — ease-out expo (Stripe / Vercel) */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-fast: 180ms var(--ease-out-expo);
+  --transition-base: 240ms var(--ease-out-expo);
+  --transition-slow: 360ms var(--ease-out-expo);
+
+  /* Décor — mesh hero */
+  --gradient-hero:
+    radial-gradient(ellipse 80% 60% at 50% -20%, rgba(99, 102, 241, 0.12), transparent),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(168, 85, 247, 0.08), transparent),
+    radial-gradient(ellipse 40% 30% at 0% 50%, rgba(59, 130, 246, 0.06), transparent);
 
   --bg: var(--background);
   --fg: var(--foreground);

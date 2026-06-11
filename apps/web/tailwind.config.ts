@@ -7,20 +7,21 @@ const config: Config = {
       colors: {
         brand: {
           50: "#fafafa",
-          100: "#f5f5f5",
-          200: "#e5e5e5",
-          300: "#d4d4d4",
-          400: "#a3a3a3",
-          500: "#171717",
-          600: "#262626",
-          700: "#404040",
-          800: "#525252",
-          900: "#737373",
-          950: "#a3a3a3",
+          100: "#f4f4f5",
+          200: "#e4e4e7",
+          300: "#d4d4d8",
+          400: "#a1a1aa",
+          500: "#18181b",
+          600: "#27272a",
+          700: "#3f3f46",
+          800: "#52525b",
+          900: "#71717a",
+          950: "#a1a1aa",
         },
         surface: {
           DEFAULT: "var(--surface)",
           hover: "var(--surface-hover)",
+          subtle: "var(--surface-subtle)",
         },
       },
       fontFamily: {
@@ -31,10 +32,39 @@ const config: Config = {
         sm: "var(--radius-sm)",
         md: "var(--radius-md)",
         lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
       },
       boxShadow: {
         card: "var(--shadow-md)",
         soft: "var(--shadow-sm)",
+        glow: "var(--shadow-glow)",
+        lift: "var(--shadow-lg)",
+      },
+      transitionTimingFunction: {
+        expo: "var(--ease-out-expo)",
+      },
+      transitionDuration: {
+        fast: "180ms",
+        base: "240ms",
+      },
+      keyframes: {
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(12px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        shimmer: {
+          "0%": { backgroundPosition: "200% 0" },
+          "100%": { backgroundPosition: "-200% 0" },
+        },
+      },
+      animation: {
+        "fade-up": "fade-up 0.6s var(--ease-out-expo) both",
+        "fade-in": "fade-in 0.4s var(--ease-out-expo) both",
+        shimmer: "shimmer 3s ease-in-out infinite",
       },
     },
   },

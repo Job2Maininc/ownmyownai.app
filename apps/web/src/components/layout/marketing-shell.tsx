@@ -10,12 +10,12 @@ export async function MarketingShell({ children }: { children: React.ReactNode }
   } = await supabase.auth.getUser();
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <header className="border-b border-[var(--border)] bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+    <div className="flex min-h-screen flex-col bg-[var(--background)]">
+      <header className="nav-glass">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
           <BrandMark href="/" size="sm" />
-          <nav className="flex items-center gap-3 text-sm sm:gap-5">
-            <Link href="/download" className="hidden font-medium text-[var(--muted)] hover:text-[var(--foreground)] sm:inline">
+          <nav className="flex items-center gap-4 text-sm sm:gap-6">
+            <Link href="/download" className="nav-link hidden sm:inline">
               Télécharger
             </Link>
             {user ? (
@@ -31,9 +31,9 @@ export async function MarketingShell({ children }: { children: React.ReactNode }
         </div>
       </header>
 
-      <div className="flex-1 bg-white">{children}</div>
+      <div className="flex-1">{children}</div>
 
-      <footer className="border-t border-[var(--border)] bg-white">
+      <footer className="border-t border-[var(--border)] bg-[var(--surface)]">
         <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between">
           <p className="font-medium text-[var(--foreground)]">
             OwnMyOwnAI — votre IA reste chez vous.

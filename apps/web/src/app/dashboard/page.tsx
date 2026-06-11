@@ -26,13 +26,13 @@ export default async function DashboardPage() {
 
   return (
     <AppHeader>
-      <main className="mx-auto min-h-screen max-w-3xl px-6 py-12">
+      <main className="mx-auto min-h-screen max-w-3xl px-6 py-10 md:py-12">
         <OnboardingBanner hasHosts={hosts.length > 0} />
 
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Mes PCs</h1>
-            <p className="text-sm text-[var(--muted)]">Vos PCs — votre IA reste chez vous</p>
+            <h1 className="text-2xl font-bold tracking-tight">Mes PCs</h1>
+            <p className="mt-1 text-sm text-[var(--muted)]">Vos PCs — votre IA reste chez vous</p>
           </div>
           <Link href="/host/link">
             <Button>Ajouter un PC</Button>

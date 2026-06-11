@@ -1,16 +1,8 @@
 @import "@ownmyownai/design-tokens/tokens.css";
 
-:root {
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --shadow-md: 0 4px 24px var(--surface-hover);
-  --transition-fast: 200ms ease-out;
-}
-
 html {
   color-scheme: light only;
-  background: #ffffff;
+  background: var(--background);
 }
 
 * {
@@ -20,23 +12,34 @@ html {
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: #ffffff;
+  background: var(--background);
   color: var(--foreground);
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
   min-height: 100vh;
-  background: #ffffff;
+  background: var(--background);
 }
 
 button {
   cursor: pointer;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 10px 16px;
   font-size: 14px;
   font-weight: 500;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 button:disabled {
@@ -45,18 +48,26 @@ button:disabled {
 }
 
 .btn-primary {
-  background: #171717;
-  color: #ffffff;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: var(--accent-hover);
+  box-shadow: var(--shadow-md);
 }
 
 .btn-secondary {
   background: var(--surface);
   color: var(--foreground);
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--link) 20%, var(--border));
 }
 
 .btn-ghost {
@@ -73,11 +84,18 @@ button:disabled {
 input {
   width: 100%;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--surface-hover);
+  background: var(--surface);
   color: var(--fg);
   font-size: 14px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--link) 30%, var(--border));
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .input-code {
@@ -106,6 +124,7 @@ input {
 .app {
   padding: 24px;
   min-height: 100vh;
+  background: var(--gradient-hero), var(--background);
 }
 
 .app--dashboard {
@@ -115,10 +134,12 @@ input {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   max-width: 420px;
   margin: 0 auto;
+  box-shadow: var(--shadow-md);
+  transition: box-shadow var(--transition-base);
 }
 
 .card--wide {
@@ -166,15 +187,26 @@ input {
 .model-card {
   display: block;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 12px;
-  background: var(--surface-hover);
+  background: var(--surface);
   cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.model-card:hover {
+  border-color: color-mix(in srgb, var(--link) 20%, var(--border));
+  box-shadow: var(--shadow-sm);
 }
 
 .model-card--selected {
-  border-color: #d4d4d4;
-  background: #f5f5f5;
+  border-color: color-mix(in srgb, var(--link) 35%, var(--border));
+  background: var(--accent-dim);
+  box-shadow: var(--shadow-sm);
 }
 
 .model-card__head {
@@ -394,10 +426,12 @@ input {
   height: 8px;
   border-radius: 50%;
   background: var(--border);
+  transition: background var(--transition-base), transform var(--transition-base);
 }
 
 .step.active {
   background: var(--accent);
+  transform: scale(1.15);
 }
 
 .progress {
@@ -1127,7 +1161,7 @@ input {
 
 .app--dashboard .card--setup,
 .card--setup {
-  background: #ffffff;
+  background: var(--surface);
 }
 
 /* Local chat */

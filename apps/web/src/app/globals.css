@@ -8,11 +8,13 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Marketing — fond blanc pur */
+/* Marketing — mesh gradient (Vercel / Linear) */
 .brand-hero-gradient {
-  background: #ffffff;
+  background: var(--gradient-hero), var(--background);
 }
 
 .brand-badge {
@@ -24,13 +26,89 @@ body {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--foreground);
-  background: #ffffff;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(8px);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.brand-badge:hover {
+  border-color: color-mix(in srgb, var(--link) 25%, var(--border));
   box-shadow: var(--shadow-sm);
 }
 
 .brand-section-alt {
-  background: #fafafa;
+  background: var(--surface-subtle);
+}
+
+/* Navigation glass */
+.nav-glass {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+.nav-link {
+  position: relative;
+  font-weight: 500;
+  color: var(--muted);
+  transition: color var(--transition-fast);
+}
+
+.nav-link:hover {
+  color: var(--foreground);
+}
+
+.nav-link--active {
+  color: var(--foreground);
+}
+
+/* Cartes interactives */
+.card-interactive {
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base),
+    border-color var(--transition-fast);
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--border) 60%, var(--link));
+}
+
+/* Hero image frame */
+.hero-image-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-glow);
+  transition: transform var(--transition-slow), box-shadow var(--transition-slow);
+}
+
+.hero-image-frame:hover {
+  transform: scale(1.01);
+  box-shadow: var(--shadow-lg);
+}
+
+.hero-image-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+/* Auth / login backdrop */
+.auth-backdrop {
+  background: var(--gradient-hero), var(--background);
 }
 
 /* Champs & chips réutilisables */
@@ -60,9 +138,11 @@ body {
 
 .link {
   color: var(--link);
+  transition: color var(--transition-fast);
 }
 
 .link:hover {
+  color: var(--link-hover);
   text-decoration: underline;
 }
 
@@ -238,7 +318,7 @@ body {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .chat-layout {
@@ -292,7 +372,9 @@ body {
   gap: 0.75rem;
   border-bottom: 1px solid var(--border);
   padding: 0.625rem 1rem;
-  background: #ffffff;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .chat-toolbar__back {
@@ -305,11 +387,13 @@ body {
   font-size: 1.125rem;
   color: var(--muted);
   text-decoration: none;
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 
 .chat-toolbar__back:hover {
   background: var(--surface-hover);
   color: var(--foreground);
+  transform: translateX(-1px);
 }
 
 .chat-toolbar__center {
@@ -428,7 +512,8 @@ body {
 .chat-message__bubble--user {
   max-width: min(85%, 36rem);
   border-radius: 1.25rem;
-  background: #f4f4f4;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
   padding: 0.75rem 1rem;
   color: var(--foreground);
 }
@@ -567,14 +652,15 @@ body {
   gap: 0.5rem;
   border-radius: 1.5rem;
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: var(--surface);
   padding: 0.5rem 0.5rem 0.5rem 1rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-base);
 }
 
 .chat-composer:focus-within {
-  border-color: #d4d4d4;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  border-color: color-mix(in srgb, var(--link) 30%, var(--border));
+  box-shadow: var(--shadow-glow);
 }
 
 .chat-composer__input {
@@ -630,7 +716,7 @@ body {
   flex-shrink: 0;
   flex-direction: column;
   border-left: 1px solid var(--border);
-  background: #fafafa;
+  background: var(--surface-subtle);
   padding: 0.75rem 1rem;
   min-height: 0;
 }

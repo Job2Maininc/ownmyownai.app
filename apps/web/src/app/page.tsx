@@ -9,16 +9,19 @@ export const dynamic = "force-dynamic";
 
 const steps = [
   {
+    step: "01",
     emoji: "⬇️",
     title: "Installez",
     description: "Téléchargez le Host Windows — c'est gratuit et guidé.",
   },
   {
+    step: "02",
     emoji: "🔗",
     title: "Liez",
     description: "Connectez-vous et associez votre PC en un clic.",
   },
   {
+    step: "03",
     emoji: "💬",
     title: "Discutez",
     description: "Chattez depuis le navigateur. L'IA tourne chez vous.",
@@ -52,18 +55,23 @@ export default async function HomePage() {
   return (
     <MarketingShell>
       {/* Hero */}
-      <section className="brand-hero-gradient px-6 pb-16 pt-12 md:pb-24 md:pt-16">
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row md:items-center md:justify-between md:gap-14">
-          <div className="max-w-xl text-center md:text-left">
-            <div className="mb-5 flex flex-wrap justify-center gap-2 md:justify-start">
+      <section className="brand-hero-gradient px-6 pb-20 pt-14 md:pb-28 md:pt-20">
+        <div className="mx-auto flex max-w-5xl flex-col items-center gap-12 md:flex-row md:items-center md:justify-between md:gap-16">
+          <div className="max-w-xl animate-fade-up text-center md:text-left">
+            <div className="mb-6 flex flex-wrap justify-center gap-2 md:justify-start">
               <span className="brand-badge">Gratuit</span>
               <span className="brand-badge">Windows</span>
               <span className="brand-badge">Prêt en 5 min</span>
             </div>
-            <h1 className="mb-5 text-4xl font-bold leading-[1.15] tracking-tight text-[var(--foreground)] md:text-5xl lg:text-[3.25rem]">
+            <h1
+              className="mb-5 font-bold leading-[var(--leading-tight)] tracking-[var(--tracking-display)] text-[var(--foreground)]"
+              style={{ fontSize: "var(--text-display)" }}
+            >
               Votre IA,
               <br />
-              <span className="text-neutral-500">chez vous.</span>
+              <span className="bg-gradient-to-r from-zinc-500 to-zinc-400 bg-clip-text text-transparent">
+                chez vous.
+              </span>
             </h1>
             <p className="mb-8 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
               Une intelligence artificielle simple et privée sur votre PC. Installez, liez,
@@ -88,7 +96,10 @@ export default async function HomePage() {
               )}
             </div>
           </div>
-          <div className="w-full max-w-md overflow-hidden rounded-lg shadow-card">
+          <div
+            className="hero-image-frame w-full max-w-md animate-fade-up"
+            style={{ animationDelay: "120ms" }}
+          >
             <Image
               src="/brand/hero.png"
               alt="Personne utilisant son IA depuis chez elle, dans un cadre lumineux et accueillant"
@@ -102,21 +113,29 @@ export default async function HomePage() {
       </section>
 
       {/* Étapes */}
-      <section className="brand-section-alt px-6 py-16 md:py-20">
+      <section className="brand-section-alt px-6 py-20 md:py-24">
         <div className="mx-auto max-w-5xl">
-          <h2 className="mb-3 text-center text-2xl font-bold md:text-3xl">
-            Trois étapes, c&apos;est tout
-          </h2>
-          <p className="mb-10 text-center text-[var(--muted)]">
-            Pas de ligne de commande. Pas de configuration compliquée.
-          </p>
+          <div className="mb-12 text-center">
+            <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-[var(--link)]">
+              Démarrage rapide
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
+              Trois étapes, c&apos;est tout
+            </h2>
+            <p className="mt-3 text-[var(--muted)]">
+              Pas de ligne de commande. Pas de configuration compliquée.
+            </p>
+          </div>
           <div className="grid gap-5 md:grid-cols-3">
             {steps.map((step) => (
-              <Card key={step.title} className="text-center">
+              <Card key={step.title} interactive className="relative text-center">
+                <span className="absolute right-4 top-4 font-mono text-xs font-medium text-[var(--muted)] opacity-40">
+                  {step.step}
+                </span>
                 <span className="mb-3 block text-3xl" aria-hidden>
                   {step.emoji}
                 </span>
-                <h3 className="mb-2 text-lg font-semibold">{step.title}</h3>
+                <h3 className="mb-2 text-lg font-semibold tracking-tight">{step.title}</h3>
                 <p className="text-sm leading-relaxed text-[var(--muted)]">{step.description}</p>
               </Card>
             ))}
@@ -125,18 +144,20 @@ export default async function HomePage() {
       </section>
 
       {/* Avantages */}
-      <section className="px-6 py-16 md:py-20">
+      <section className="px-6 py-20 md:py-24">
         <div className="mx-auto max-w-5xl">
-          <h2 className="mb-10 text-center text-2xl font-bold md:text-3xl">
-            Pourquoi OwnMyOwnAI ?
-          </h2>
+          <div className="mb-12 text-center">
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
+              Pourquoi OwnMyOwnAI ?
+            </h2>
+          </div>
           <div className="grid gap-5 md:grid-cols-3">
             {benefits.map((benefit) => (
-              <Card key={benefit.title}>
-                <span className="mb-2 block text-2xl" aria-hidden>
+              <Card key={benefit.title} interactive>
+                <span className="mb-3 block text-2xl" aria-hidden>
                   {benefit.emoji}
                 </span>
-                <h3 className="mb-2 text-lg font-semibold">{benefit.title}</h3>
+                <h3 className="mb-2 text-lg font-semibold tracking-tight">{benefit.title}</h3>
                 <p className="text-sm leading-relaxed text-[var(--muted)]">{benefit.description}</p>
               </Card>
             ))}
@@ -145,9 +166,9 @@ export default async function HomePage() {
       </section>
 
       {/* CTA final */}
-      <section className="brand-section-alt px-6 py-16 md:py-20">
-        <div className="mx-auto max-w-2xl rounded-lg border border-[var(--border)] bg-[var(--surface)] p-10 text-center shadow-card">
-          <h2 className="mb-3 text-2xl font-bold md:text-3xl">Prêt à essayer ?</h2>
+      <section className="brand-section-alt px-6 py-20 md:py-24">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10 text-center shadow-glow md:p-12">
+          <h2 className="mb-3 text-2xl font-bold tracking-tight md:text-3xl">Prêt à essayer ?</h2>
           <p className="mb-8 text-[var(--muted)]">
             Rejoignez ceux qui gardent leur IA chez eux — en toute simplicité.
           </p>

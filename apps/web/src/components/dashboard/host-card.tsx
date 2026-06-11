@@ -87,7 +87,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
   }
 
   return (
-    <Card className="flex flex-col gap-3">
+    <Card interactive className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -183,8 +183,10 @@ export function HostCard({ host: initialHost }: HostCardProps) {
           {installedModels.map((m) => (
             <span
               key={m}
-              className={`rounded px-2 py-0.5 text-xs ${
-                m === host.default_model ? "bg-neutral-100" : "bg-white"
+              className={`rounded-full border px-2.5 py-0.5 font-mono text-xs transition-colors duration-fast ${
+                m === host.default_model
+                  ? "border-[color-mix(in_srgb,var(--link)_30%,var(--border))] bg-[var(--accent-dim)] font-medium"
+                  : "border-[var(--border)] bg-[var(--surface)]"
               }`}
             >
               {m}
