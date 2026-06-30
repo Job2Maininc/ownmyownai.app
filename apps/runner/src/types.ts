@@ -106,6 +106,8 @@ export interface CursorIntegrationInfo {
   /** IP locale suggérée pour Cursor sur un autre poste du réseau. */
   lanIp?: string | null;
   defaultModel: string;
+  /** Plafond req/min par token Bearer (0 = désactivé). */
+  maxReqPerMin: number;
   settingsJson: string;
 }
 

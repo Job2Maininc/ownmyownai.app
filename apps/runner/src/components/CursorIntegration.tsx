@@ -166,6 +166,23 @@ export default function CursorIntegration() {
                   }}
                 />
               </label>
+              <label className="cursor-integration__field" htmlFor="cursor-gateway-max-rpm">
+                <span className="cursor-integration__label">Limite req/min (par token)</span>
+                <input
+                  id="cursor-gateway-max-rpm"
+                  type="number"
+                  min={0}
+                  max={600}
+                  defaultValue={info.maxReqPerMin}
+                  key={`rpm-${info.maxReqPerMin}`}
+                  onBlur={(e) => {
+                    const next = Math.max(0, Number(e.target.value) || 0);
+                    if (next !== info.maxReqPerMin) {
+                      void patchGatewaySettings({ cursorGatewayMaxReqPerMin: next });
+                    }
+                  }}
+                />
+              </label>
             </fieldset>
 
             <div className="cursor-integration__field">
@@ -203,6 +220,11 @@ export default function CursorIntegration() {
               <strong>{info.lanEnabled ? "LAN" : "localhost"}</strong>
               {" · "}
               Port : <strong>{info.port}</strong>
+              {" · "}
+              Limite :{" "}
+              <strong>
+                {info.maxReqPerMin === 0 ? "aucune" : `${info.maxReqPerMin} req/min`}
+              </strong>
             </p>
 
             <button

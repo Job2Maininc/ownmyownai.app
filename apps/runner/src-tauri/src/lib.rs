@@ -655,6 +655,7 @@ struct CursorIntegrationInfo {
     lan_enabled: bool,
     lan_ip: Option<String>,
     default_model: String,
+    max_req_per_min: u32,
     settings_json: String,
 }
 
@@ -722,6 +723,7 @@ fn get_cursor_integration_cmd() -> Result<CursorIntegrationInfo, String> {
         lan_enabled: settings.cursor_gateway_lan,
         lan_ip,
         default_model: settings.default_model,
+        max_req_per_min: settings.cursor_gateway_max_req_per_min,
         settings_json,
     })
 }
