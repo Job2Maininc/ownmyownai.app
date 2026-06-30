@@ -1863,3 +1863,94 @@ html[data-theme="dark"] .hero-image-frame::after {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
+/* Toasts */
+.toast-stack {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: 0.875rem;
+  color: var(--foreground);
+  pointer-events: auto;
+}
+
+.toast--success {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+}
+
+.toast--error {
+  border-color: color-mix(in srgb, var(--error) 35%, var(--border));
+  background: color-mix(in srgb, var(--error) 8%, var(--surface));
+}
+
+.toast--info {
+  border-color: color-mix(in srgb, var(--link) 30%, var(--border));
+}
+
+/* Indicateur santé connexion */
+.connection-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: background var(--transition-fast);
+}
+
+.connection-health:hover {
+  background: var(--surface-hover);
+}
+
+.connection-health__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.connection-health--ok .connection-health__dot {
+  background: var(--success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+.connection-health--warn .connection-health__dot {
+  background: var(--warn);
+}
+
+.connection-health--off .connection-health__dot {
+  background: var(--error);
+}
+
+.connection-health--loading .connection-health__dot {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+

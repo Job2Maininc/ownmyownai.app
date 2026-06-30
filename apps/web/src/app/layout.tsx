@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ThemeScript } from "@/components/theme/theme-script";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -54,7 +55,9 @@ export default function RootLayout({
         <ThemeScript />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingShell } from "@/components/layout/marketing-shell";
+import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { FeatureIcon, type IconName } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -68,7 +69,7 @@ Modèle   : llama3.2:3b`,
       "Vous voulez le contexte OwnMyOwnAI (.cursorrules, bases liées, mémoire) directement dans Cursor, sans envoyer vos fichiers au cloud.",
     ragRules: "oui",
     status:
-      "Passerelle locale en cours de finalisation (GET /v1/models, POST /v1/chat/completions). Activez-la dans les paramètres Host.",
+      "Disponible — GET /v1/models, POST /v1/chat/completions (SSE), auth Bearer et rate limiting actifs. Activez la passerelle dans l'onglet Cursor du Host.",
     steps: [
       "Installez et liez le Host Windows (pairing).",
       "Activez « Gateway Cursor » dans les paramètres Host (port par défaut 8765).",
@@ -122,6 +123,24 @@ const badgeClass: Record<IntegrationPath["badgeTone"], string> = {
     "border-[color-mix(in_srgb,#16a34a_35%,var(--border))] text-[color-mix(in_srgb,#16a34a_90%,var(--foreground))]",
   complement: "border-[var(--border)] text-[var(--muted)]",
 };
+
+const cursorFaq = [
+  {
+    question: "Où trouver le token API pour la passerelle ?",
+    answer:
+      "Dans l'application Host Windows, onglet Cursor — généré à l'appairage. Le token n'est jamais exposé sur le web pour des raisons de sécurité.",
+  },
+  {
+    question: "La passerelle est-elle sécurisée ?",
+    answer:
+      "Oui : écoute localhost par défaut, authentification Bearer obligatoire sur /v1/*, et rate limiting par token. Activez le mode LAN uniquement si vous comprenez les risques réseau.",
+  },
+  {
+    question: "Quel chemin choisir pour débuter ?",
+    answer:
+      "Ollama direct si vous voulez tester en 2 minutes. La passerelle Host dès que vous voulez le RAG, la mémoire et les règles projet OwnMyOwnAI dans Cursor.",
+  },
+];
 
 const ragLabel: Record<IntegrationPath["ragRules"], string> = {
   non: "Non — contourne le Host",
@@ -287,6 +306,8 @@ export default function CursorPage() {
           </div>
         </div>
       </section>
+
+      <FaqAccordion items={cursorFaq} subtitle="Intégration Cursor et passerelle Host" />
 
       <section className="brand-section-alt px-6 py-16 md:py-20">
         <div className="mx-auto max-w-2xl animate-fade-up">

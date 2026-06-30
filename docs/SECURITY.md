@@ -122,30 +122,27 @@ flowchart TB
 | Validation projet | `X-Project-Id` doit référencer un projet existant | En-tête absent → projet actif du Host |
 | Anthropic via passerelle | `501 Not Implemented` | Évite un chemin cloud non testé |
 | Audit RAG | `log_audit(AgentAccess, "openai_gateway", …)` quand des bases sont touchées | Journal local uniquement ; pas d'alerte temps réel |
-| Token Bearer (`cursorApiToken`) | Généré à l'appairage, stocké keyring / `credentials.json`, affiché dans `CursorIntegration.tsx` | **Non vérifié côté serveur HTTP à ce jour** — voir risques résiduels |
-| Toggle `cursorGatewayEnabled` | Préférence utilisateur dans `settings.json` | **Le serveur démarre au lancement du Host** ; le toggle est informatif pour l'UI, pas un interrupteur réseau |
+| Token Bearer (`cursorApiToken`) | Généré à l'appairage, stocké keyring / `credentials.json` | **Vérifié** sur chaque route `/v1/*` via `bearer_auth_middleware` ; `401` si absent ou invalide |
+| Rate limiting | Fenêtre glissante 1 min par token Bearer | **Implémenté** (`rate_limit_middleware`) ; `429` + en-tête `Retry-After` |
+| Toggle `cursorGatewayEnabled` | Préférence dans `settings.json` | **Interrupteur réel** — le socket HTTP n'est lié que si activé ; `503` sur `/v1/*` si désactivé |
 | Mode air-gapped | `airGapped` désactive relay/heartbeat | N'empêche pas les modèles cloud si configurés et sélectionnés dans Cursor |
 
 ### Analyse STRIDE (synthèse)
 
 | Catégorie | Menace | Mitigation actuelle | Écart |
 |-----------|--------|---------------------|-------|
-| **S**poofing | Client se fait passer pour Cursor | Token Bearer prévu | Vérification Bearer non implémentée dans `openai_gateway.rs` |
+| **S**poofing | Client se fait passer pour Cursor | Token Bearer vérifié sur `/v1/*` | Token visible dans l'UI Host — ne pas partager |
 | **T**ampering | Modification des messages en transit | Loopback uniquement | TLS absent (acceptable en local) |
 | **R**epudiation | Négation d'un accès RAG | `audit_log` partiel (`agent_access`) | Pas de corrélation IP/client (loopback) |
-| **I**nformation disclosure | Fuite RAG / chemins / mémoire | Pas d'exposition WAN | Tout processus local peut interroger la passerelle |
-| **D**enial of service | Rafales de completions | — | Pas de rate limiting (jalon P2) |
+| **I**nformation disclosure | Fuite RAG / chemins / mémoire | Pas d'exposition WAN ; Bearer requis | Tout processus local avec le token peut interroger la passerelle |
+| **D**enial of service | Rafales de completions | Rate limiting par token (`cursorGatewayMaxReqPerMin`) | Pas de limite globale cross-tokens |
 | **E**levation | Prompt injection → actions outils Cursor | Hors périmètre Host | Responsabilité partagée IDE + modèle |
 
-### Risques résiduels et jalons P2
+### Jalons résiduels (P2)
 
-Priorité documentée dans [ROADMAP.md](./ROADMAP.md) (phase P2 — Sécurité & ops) :
-
-1. **Authentification Bearer** — comparer `Authorization: Bearer <cursorApiToken>` via `cursor_api_token_for_gateway()` sur chaque route `/v1/*` ; répondre `401` si absent ou invalide.
-2. **Rate limiting** — limiter les requêtes par fenêtre temporelle pour protéger Ollama et les quotas cloud.
-3. **Interrupteur réel** — ne pas lier le socket HTTP si `cursorGatewayEnabled` est `false`.
-4. **Option localhost vs LAN** — livré (`cursorGatewayLan`) ; en mode LAN, documenter le risque réseau et conserver l'auth Bearer obligatoire.
-5. **Audit étendu** — journaliser chaque appel `/v1/chat/completions` (modèle, projet, présence RAG), pas seulement les accès avec chunks.
+1. **Audit étendu** — journaliser chaque appel `/v1/chat/completions` (modèle, projet, présence RAG), pas seulement les accès avec chunks.
+2. **Régénération token** — commande dédiée sans désappairage complet.
+3. **mTLS optionnel** — pour les déploiements LAN sensibles.
 
 ### Recommandations opérationnelles
 

@@ -16,10 +16,13 @@ import {
   formatTokensPerSecond,
   parseHostLastMetrics,
 } from "@/lib/host-metrics";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { IndexingProgressBar } from "@/components/chat/indexing-progress-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ErrorAlert } from "@/components/ui/error-alert";
 import { StatusPill } from "@/components/ui/status-pill";
+import { useToast } from "@/components/ui/toast";
 import { ModelPullPanel } from "./model-pull-panel";
 
 interface HostCardProps {
@@ -28,6 +31,7 @@ interface HostCardProps {
 
 export function HostCard({ host: initialHost }: HostCardProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [host, setHost] = useState(initialHost);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(host.name);
@@ -62,6 +66,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
     }
     setHost({ ...host, name: trimmed });
     setEditing(false);
+    toast(`« ${trimmed} » renommé`);
     router.refresh();
   }
 
@@ -77,6 +82,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
       setActionError(deleteError);
       return;
     }
+    toast(`« ${host.name} » supprimé`);
     router.refresh();
   }
 
@@ -90,11 +96,12 @@ export function HostCard({ host: initialHost }: HostCardProps) {
       return;
     }
     setHost({ ...host, default_model: model });
+    toast(`Modèle par défaut : ${model}`);
     router.refresh();
   }
 
   return (
-    <Card interactive className="flex flex-col gap-3">
+    <Card interactive className="flex flex-col gap-3 transition-shadow duration-fast">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -113,7 +120,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
                 disabled={saving}
               />
               <Button type="submit" variant="ghost" disabled={saving}>
-                OK
+                {saving ? "…" : "OK"}
               </Button>
               <Button
                 type="button"
@@ -141,6 +148,7 @@ export function HostCard({ host: initialHost }: HostCardProps) {
               variant={hostStatusPillVariant(displayStatus)}
               label={hostStatusLabel(displayStatus)}
             />
+            <span title="Dernière activité">Vu {formatRelativeTime(host.last_seen_at)}</span>
             {host.disk_free_gb != null && <span>{host.disk_free_gb} Go libres</span>}
             {lastMetrics && (
               <>
@@ -150,7 +158,12 @@ export function HostCard({ host: initialHost }: HostCardProps) {
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Link href={`/onboarding/cursor?host=${host.id}`}>
+            <Button variant="ghost" className="text-xs" title="Configurer Cursor IDE">
+              Cursor
+            </Button>
+          </Link>
           <Button
             variant="ghost"
             onClick={handleDelete}
@@ -230,7 +243,9 @@ export function HostCard({ host: initialHost }: HostCardProps) {
         </div>
       )}
 
-      {actionError && <p className="text-sm text-[var(--error)]">{actionError}</p>}
+      {actionError && (
+        <ErrorAlert message={actionError} onAction={() => setActionError(null)} actionLabel="Fermer" />
+      )}
     </Card>
   );
 }

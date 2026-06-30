@@ -21,6 +21,7 @@ import {
 } from "@/components/command-palette/command-palette-provider";
 
 import { BrandMark } from "@/components/brand/brand-mark";
+import { ConnectionHealth } from "@/components/layout/connection-health";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -180,6 +181,20 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
 
       {
 
+        id: "nav-settings",
+
+        label: "Compte et paramètres",
+
+        keywords: "settings compte profil",
+
+        group: "Navigation",
+
+        onSelect: () => router.push("/settings"),
+
+      },
+
+      {
+
         id: "auth-sign-out",
 
         label: "Se déconnecter",
@@ -220,11 +235,15 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
 
               <NavLink href="/host/link">Lier un PC</NavLink>
 
+              <NavLink href="/settings">Compte</NavLink>
+
               <NavLink href="/download">Télécharger</NavLink>
 
             </nav>
 
             <div className="flex items-center gap-3 text-sm">
+
+              <ConnectionHealth />
 
               <span className="hidden max-w-[12rem] truncate text-[var(--muted)] sm:inline">
 

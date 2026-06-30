@@ -2,6 +2,8 @@
 
 Votre IA sur votre PC — host Windows + client web.
 
+> **Démarrage en 5 minutes** → [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+
 ## Structure
 
 - `apps/runner` — Tauri Windows host (Ollama + relay)

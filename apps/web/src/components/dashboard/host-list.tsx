@@ -123,8 +123,10 @@ export function HostList({ initialHosts }: HostListProps) {
           <button
             key={id}
             type="button"
-            className={`rounded px-2 py-1 text-xs ${
-              filter === id ? "bg-neutral-100" : "bg-white"
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors duration-fast ${
+              filter === id
+                ? "border-[color-mix(in_srgb,var(--link)_30%,var(--border))] bg-[var(--accent-dim)] text-[var(--foreground)]"
+                : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--surface-subtle)]"
             }`}
             onClick={() => setFilter(id)}
           >

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { MarketingShell } from "@/components/layout/marketing-shell";
+import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import { FeatureIcon, type IconName } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -69,10 +70,28 @@ const benefits: { icon: IconName; title: string; description: string }[] = [
 ];
 
 const socialProofPlaceholders = [
-  "Équipes produit",
-  "Indépendants",
-  "Startups locales",
-  "Cabinets conseil",
+  "Données 100 % locales",
+  "Open source friendly",
+  "Sans crédit cloud",
+  "RGPD-ready",
+];
+
+const homeFaq = [
+  {
+    question: "Mes données partent-elles sur Internet ?",
+    answer:
+      "Non pour l'inférence locale : les modèles Ollama tournent sur votre PC. Seuls le compte (magic link) et le heartbeat de statut passent par Supabase — jamais le contenu de vos chats.",
+  },
+  {
+    question: "Combien de temps pour démarrer ?",
+    answer:
+      "Environ 5 minutes : télécharger le Host, créer un compte, lier le PC avec un code, puis ouvrir le chat web.",
+  },
+  {
+    question: "Puis-je utiliser Cursor sans changer mes habitudes ?",
+    answer:
+      "Oui. Connectez Cursor à Ollama ou à la passerelle Host pour garder votre IDE tout en bénéficiant du RAG local OwnMyOwnAI.",
+  },
 ];
 
 export default async function HomePage() {
@@ -230,10 +249,10 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Social proof placeholder */}
+      {/* Confiance */}
       <section className="px-6 py-16 md:py-20">
         <div className="mx-auto max-w-5xl text-center">
-          <p className="section-eyebrow mb-8">Adopté par des équipes exigeantes</p>
+          <p className="section-eyebrow mb-8">Pourquoi nous faire confiance</p>
           <div className="social-proof-grid">
             {socialProofPlaceholders.map((label) => (
               <div key={label} className="social-proof-placeholder" aria-hidden>
@@ -242,10 +261,13 @@ export default async function HomePage() {
             ))}
           </div>
           <p className="mt-6 text-sm text-[var(--muted)]">
-            Cursor pour coder, Host pour l&apos;IA — 0 crédit, RAG local, confidentialité totale.
+            Vos conversations restent sur votre machine · Token gateway local · Chiffrement des
+            credentials Host
           </p>
         </div>
       </section>
+
+      <FaqAccordion items={homeFaq} />
 
       {/* CTA final */}
       <section className="px-6 py-20 md:py-24">
