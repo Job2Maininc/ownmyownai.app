@@ -507,15 +507,15 @@ pub fn parse_media_generate_payload(
         .unwrap_or(serde_json::Value::Object(Default::default()));
     if let Some(obj) = options.as_object_mut() {
         if let Some(mode) = voice_mode {
-            obj.entry("voiceMode".into())
+            obj.entry("voiceMode")
                 .or_insert(serde_json::Value::String(mode));
         }
         if let Some(path) = source_path {
-            obj.entry("sourcePath".into())
+            obj.entry("sourcePath")
                 .or_insert(serde_json::Value::String(path));
         }
         if let Some(paths) = payload.get("imagePaths") {
-            obj.entry("imagePaths".into())
+            obj.entry("imagePaths")
                 .or_insert_with(|| paths.clone());
         }
     }

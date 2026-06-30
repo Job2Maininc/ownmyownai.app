@@ -549,7 +549,7 @@ pub fn generate_local_image(
     settings: &LocalImageSettings,
     input: &GenerateImageInput,
 ) -> Result<LocalImageResult, String> {
-    let mut params = ImageGenerationParams {
+    let params = ImageGenerationParams {
         prompt: input.prompt.clone(),
         negative_prompt: input
             .negative_prompt

@@ -465,6 +465,18 @@
           "markdownDescription": "Enables the export_knowledge_base command without any pre-configured scope."
         },
         {
+          "description": "Enables the generate_local_image command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-generate-local-image",
+          "markdownDescription": "Enables the generate_local_image command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the generate_music command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-generate-music",
+          "markdownDescription": "Enables the generate_music command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_credentials command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-credentials",
@@ -499,6 +511,24 @@
           "type": "string",
           "const": "allow-get-host-status",
           "markdownDescription": "Enables the get_host_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_local_image_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-local-image-status",
+          "markdownDescription": "Enables the get_local_image_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_music_device_advice command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-music-device-advice",
+          "markdownDescription": "Enables the get_music_device_advice command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_musicgen_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-musicgen-status",
+          "markdownDescription": "Enables the get_musicgen_status command without any pre-configured scope."
         },
         {
           "description": "Enables the get_quantization_advice command without any pre-configured scope.",
@@ -555,6 +585,12 @@
           "markdownDescription": "Enables the list_background_jobs command without any pre-configured scope."
         },
         {
+          "description": "Enables the list_comfyui_checkpoints command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-comfyui-checkpoints",
+          "markdownDescription": "Enables the list_comfyui_checkpoints command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list_context_documents command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list-context-documents",
@@ -577,6 +613,18 @@
           "type": "string",
           "const": "allow-list-knowledge-bases",
           "markdownDescription": "Enables the list_knowledge_bases command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_mcp_servers command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-mcp-servers",
+          "markdownDescription": "Enables the list_mcp_servers command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_mcp_tools command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-mcp-tools",
+          "markdownDescription": "Enables the list_mcp_tools command without any pre-configured scope."
         },
         {
           "description": "Enables the list_projects command without any pre-configured scope.",
@@ -747,6 +795,18 @@
           "markdownDescription": "Denies the export_knowledge_base command without any pre-configured scope."
         },
         {
+          "description": "Denies the generate_local_image command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-generate-local-image",
+          "markdownDescription": "Denies the generate_local_image command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the generate_music command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-generate-music",
+          "markdownDescription": "Denies the generate_music command without any pre-configured scope."
+        },
+        {
           "description": "Denies the get_credentials command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-credentials",
@@ -781,6 +841,24 @@
           "type": "string",
           "const": "deny-get-host-status",
           "markdownDescription": "Denies the get_host_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_local_image_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-local-image-status",
+          "markdownDescription": "Denies the get_local_image_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_music_device_advice command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-music-device-advice",
+          "markdownDescription": "Denies the get_music_device_advice command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_musicgen_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-musicgen-status",
+          "markdownDescription": "Denies the get_musicgen_status command without any pre-configured scope."
         },
         {
           "description": "Denies the get_quantization_advice command without any pre-configured scope.",
@@ -837,6 +915,12 @@
           "markdownDescription": "Denies the list_background_jobs command without any pre-configured scope."
         },
         {
+          "description": "Denies the list_comfyui_checkpoints command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-comfyui-checkpoints",
+          "markdownDescription": "Denies the list_comfyui_checkpoints command without any pre-configured scope."
+        },
+        {
           "description": "Denies the list_context_documents command without any pre-configured scope.",
           "type": "string",
           "const": "deny-list-context-documents",
@@ -859,6 +943,18 @@
           "type": "string",
           "const": "deny-list-knowledge-bases",
           "markdownDescription": "Denies the list_knowledge_bases command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_mcp_servers command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-mcp-servers",
+          "markdownDescription": "Denies the list_mcp_servers command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_mcp_tools command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-mcp-tools",
+          "markdownDescription": "Denies the list_mcp_tools command without any pre-configured scope."
         },
         {
           "description": "Denies the list_projects command without any pre-configured scope.",

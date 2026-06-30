@@ -159,6 +159,45 @@ export interface HostSettings {
   desktopNotifications?: boolean;
   /** Resynchronisation planifiée des liens de contexte. */
   scheduledSync?: ScheduledSyncSettings;
+  /** Génération d'images locale (ComfyUI / SD WebUI). */
+  localImage?: LocalImageSettings;
+}
+
+export interface LocalImageSettings {
+  enabled?: boolean;
+  backend?: string;
+  baseUrl?: string;
+  checkpoint?: string;
+  steps?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface LocalImageStatus {
+  enabled: boolean;
+  backend: string;
+  baseUrl: string;
+  reachable: boolean;
+  message: string;
+  checkpoint?: string | null;
+}
+
+export interface GenerateImageInput {
+  prompt: string;
+  negativePrompt?: string;
+  width?: number;
+  height?: number;
+  steps?: number;
+  seed?: number;
+}
+
+export interface LocalImageResult {
+  filePath: string;
+  filename: string;
+  prompt: string;
+  width: number;
+  height: number;
+  backend: string;
 }
 
 export interface SetupProgress {

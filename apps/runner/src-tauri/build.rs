@@ -53,7 +53,9 @@ fn main() {
                 "install_host_update",
                 "get_musicgen_status",
                 "get_music_device_advice",
-                "generate_music",
+                "get_local_image_status",
+                "list_comfyui_checkpoints",
+                "generate_local_image",
             ]),
         ),
     )
