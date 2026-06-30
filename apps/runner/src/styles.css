@@ -697,6 +697,117 @@ input:focus {
   line-height: var(--leading-chat);
 }
 
+/* Empty states illustrés */
+.empty-state-panel {
+  margin: 12px 0;
+  padding: 4px 0;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface-hover));
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem 1rem;
+}
+
+.empty-state--compact {
+  padding: 0.75rem 0.5rem;
+}
+
+.empty-state__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-hover));
+  color: var(--accent);
+}
+
+.empty-state--compact .empty-state__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state__title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.empty-state--compact .empty-state__title {
+  font-size: 0.9rem;
+}
+
+.empty-state__description {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.empty-state--compact .empty-state__description {
+  font-size: 0.8rem;
+}
+
+.empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.local-chat__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 1rem;
+}
+
+.local-chat__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  max-width: 24rem;
+}
+
+.local-chat__suggestion {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.local-chat__suggestion:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-hover));
+}
+
+.local-chat__suggestion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .model-chips {
   list-style: none;
   margin: 0;
