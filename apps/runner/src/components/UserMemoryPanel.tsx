@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { EmptyStatePanel } from "./EmptyState";
 
 interface UserMemoryFact {
   id: string;
@@ -163,9 +164,11 @@ export default function UserMemoryPanel() {
       </p>
 
       {state?.facts.length === 0 && !loading ? (
-        <p className="panel__empty">
-          Aucun fait mémorisé. Ajoutez des préférences ou informations utiles pour vos conversations.
-        </p>
+        <EmptyStatePanel
+          icon="brain"
+          title="Aucun fait mémorisé"
+          description="Ajoutez des préférences ou informations utiles pour enrichir vos conversations."
+        />
       ) : (
         <ul className="context-base-list">
           {state?.facts.map((fact) => (
