@@ -176,6 +176,47 @@ pub struct CloudProvidersSettings {
     pub anthropic: CloudProviderToggle,
 }
 
+/// Synthèse vocale locale (Piper / edge-tts) ou cloud (OpenAI TTS).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceTtsSettings {
+    /// `auto` | `piper` | `edge-tts` | `openai`
+    #[serde(default = "default_voice_tts_engine")]
+    pub engine: String,
+    /// Chemin optionnel vers piper.exe (sinon PATH ou emplacements courants).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub piper_exe: Option<String>,
+    /// Chemin optionnel vers un modèle Piper .onnx (sinon models/piper/).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub piper_model: Option<String>,
+    /// Voix edge-tts (ex. fr-FR-DeniseNeural).
+    #[serde(default = "default_edge_tts_voice")]
+    pub edge_tts_voice: String,
+    /// Voix OpenAI TTS (alloy, echo, fable, onyx, nova, shimmer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openai_voice: Option<String>,
+}
+
+fn default_voice_tts_engine() -> String {
+    "auto".to_string()
+}
+
+fn default_edge_tts_voice() -> String {
+    "fr-FR-DeniseNeural".to_string()
+}
+
+impl Default for VoiceTtsSettings {
+    fn default() -> Self {
+        Self {
+            engine: default_voice_tts_engine(),
+            piper_exe: None,
+            piper_model: None,
+            edge_tts_voice: default_edge_tts_voice(),
+            openai_voice: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelTaskRouting {
@@ -209,6 +250,68 @@ impl Default for ScheduledSyncSettings {
             cron: default_scheduled_sync_cron(),
         }
     }
+}
+
+/// Génération d'images locale via ComfyUI ou Automatic1111 (SD WebUI).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalImageSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    /// `comfyui` ou `sd-webui`
+    #[serde(default = "default_local_image_backend")]
+    pub backend: String,
+    #[serde(default = "default_local_image_base_url")]
+    pub base_url: String,
+    /// Checkpoint ComfyUI (optionnel — premier disponible si absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<String>,
+    #[serde(default = "default_local_image_steps")]
+    pub steps: u32,
+    #[serde(default = "default_local_image_width")]
+    pub width: u32,
+    #[serde(default = "default_local_image_height")]
+    pub height: u32,
+}
+
+fn default_local_image_backend() -> String {
+    "comfyui".to_string()
+}
+
+fn default_local_image_base_url() -> String {
+    "http://127.0.0.1:8188".to_string()
+}
+
+fn default_local_image_steps() -> u32 {
+    20
+}
+
+fn default_local_image_width() -> u32 {
+    512
+}
+
+fn default_local_image_height() -> u32 {
+    512
+}
+
+impl Default for LocalImageSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend: default_local_image_backend(),
+            base_url: default_local_image_base_url(),
+            checkpoint: None,
+            steps: default_local_image_steps(),
+            width: default_local_image_width(),
+            height: default_local_image_height(),
+        }
+    }
+}
+
+pub fn resolved_local_image_settings() -> LocalImageSettings {
+    get_settings()
+        .map(|s| s.local_image)
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -272,6 +375,18 @@ pub struct HostSettings {
     /// Port HTTP du gateway Cursor (localhost uniquement par défaut).
     #[serde(default = "default_cursor_gateway_port")]
     pub cursor_gateway_port: u16,
+    /// Écoute sur toutes les interfaces (`0.0.0.0`) pour accès LAN ; sinon loopback uniquement.
+    #[serde(default)]
+    pub cursor_gateway_lan: bool,
+    /// Plafond de requêtes par minute et par token Bearer sur le gateway Cursor (0 = désactivé).
+    #[serde(default = "default_cursor_gateway_max_req_per_min")]
+    pub cursor_gateway_max_req_per_min: u32,
+    /// Génération d'images locale (ComfyUI / SD WebUI).
+    #[serde(default)]
+    pub local_image: LocalImageSettings,
+    /// Synthèse vocale TTS (Piper, edge-tts, OpenAI).
+    #[serde(default)]
+    pub voice_tts: VoiceTtsSettings,
 }
 
 fn default_chat_token_threshold() -> u32 {
@@ -284,6 +399,10 @@ fn default_chat_recent_messages() -> u32 {
 
 fn default_cursor_gateway_port() -> u16 {
     8765
+}
+
+fn default_cursor_gateway_max_req_per_min() -> u32 {
+    60
 }
 
 fn default_desktop_notifications() -> bool {
@@ -342,8 +461,19 @@ impl Default for HostSettings {
             chat_recent_messages: default_chat_recent_messages(),
             cursor_gateway_enabled: false,
             cursor_gateway_port: default_cursor_gateway_port(),
+            cursor_gateway_lan: false,
+            cursor_gateway_max_req_per_min: default_cursor_gateway_max_req_per_min(),
+            local_image: LocalImageSettings::default(),
+            voice_tts: VoiceTtsSettings::default(),
         }
     }
+}
+
+/// Plafond req/min par token Bearer sur le gateway Cursor (0 = pas de limite).
+pub fn resolved_cursor_gateway_max_req_per_min() -> u32 {
+    get_settings()
+        .map(|s| s.cursor_gateway_max_req_per_min)
+        .unwrap_or_else(|_| default_cursor_gateway_max_req_per_min())
 }
 
 pub fn resolved_vision_model_setting() -> Option<String> {
@@ -382,6 +512,13 @@ pub fn resolved_scheduled_sync() -> ScheduledSyncSettings {
     get_settings()
         .map(|s| s.scheduled_sync)
         .unwrap_or_default()
+}
+
+pub fn set_scheduled_sync(scheduled_sync: ScheduledSyncSettings) -> Result<(), String> {
+    validate_scheduled_sync(&scheduled_sync)?;
+    let mut settings = get_settings().unwrap_or_default();
+    settings.scheduled_sync = scheduled_sync;
+    save_settings(&settings)
 }
 
 fn validate_scheduled_sync(settings: &ScheduledSyncSettings) -> Result<(), String> {
@@ -470,7 +607,7 @@ pub fn validate_mcp_servers(servers: &[McpServerConfig]) -> Result<(), String> {
                 srv.id
             ));
         }
-        if crate::mcp::builtin::is_builtin(&srv.id) {
+        if crate::mcp::is_builtin(&srv.id) {
             return Err(format!(
                 "L'identifiant « {} » est réservé au serveur intégré",
                 srv.id

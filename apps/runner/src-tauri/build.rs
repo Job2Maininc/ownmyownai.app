@@ -8,6 +8,8 @@ fn main() {
                 "pull_models",
                 "get_host_settings",
                 "save_host_settings",
+                "list_mcp_servers",
+                "list_mcp_tools",
                 "get_default_models_dir",
                 "get_credentials",
                 "complete_pairing",
@@ -49,6 +51,9 @@ fn main() {
                 "list_audit_log",
                 "check_for_updates",
                 "install_host_update",
+                "get_musicgen_status",
+                "get_music_device_advice",
+                "generate_music",
             ]),
         ),
     )

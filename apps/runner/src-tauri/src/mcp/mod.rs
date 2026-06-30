@@ -5,8 +5,18 @@ use crate::settings::{get_settings, McpServerConfig};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-pub use builtin::{BUILTIN_FS_ID, BUILTIN_FS_NAME};
-pub use client::{close_all_sessions, call_external_tool, list_external_tools};
+pub use builtin::{is_builtin, BUILTIN_FS_ID, BUILTIN_FS_NAME};
+pub use client::{
+    close_all_sessions, call_external_tool, list_external_tools, validate_external_command,
+};
+
+/// Valide une entrée `mcp_servers` avant persistance.
+pub fn validate_external_config(config: &McpServerConfig) -> Result<(), String> {
+    if config.builtin {
+        return Err("Les serveurs intégrés ne sont pas configurables".into());
+    }
+    validate_external_command(config)
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

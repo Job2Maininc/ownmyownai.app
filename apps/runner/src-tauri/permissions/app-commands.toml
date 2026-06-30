@@ -8,6 +8,8 @@ commands.allow = [
   "pull_models",
   "get_host_settings",
   "save_host_settings",
+  "list_mcp_servers",
+  "list_mcp_tools",
   "get_default_models_dir",
   "get_default_data_dir",
   "get_host_data_layout",
@@ -58,4 +60,7 @@ commands.allow = [
   "list_audit_log",
   "check_for_updates",
   "install_host_update",
+  "get_musicgen_status",
+  "get_music_device_advice",
+  "generate_music",
 ]

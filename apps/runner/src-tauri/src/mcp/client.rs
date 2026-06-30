@@ -169,7 +169,7 @@ impl McpSession {
     }
 }
 
-fn validate_external_command(config: &McpServerConfig) -> Result<(), String> {
+pub fn validate_external_command(config: &McpServerConfig) -> Result<(), String> {
     if config.command.trim().is_empty() {
         return Err("Commande MCP vide".into());
     }

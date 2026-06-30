@@ -1,12 +1,14 @@
 mod activity;
 mod agent;
 mod assistant_output;
+mod chat_pipeline;
 mod chat_queue;
 mod cloud_keys;
 mod context;
 mod creatives;
 mod paths;
 mod conversation_summary;
+mod cursor_mcp;
 mod mcp;
 mod dpapi;
 mod playbooks;
@@ -16,6 +18,7 @@ mod hardware;
 mod history;
 mod jobs;
 mod local_chat;
+mod media;
 mod providers;
 mod share;
 mod process;
@@ -23,6 +26,7 @@ mod host_status;
 mod local_metrics;
 mod model_routing;
 mod ollama;
+mod openai_gateway;
 mod relay;
 mod settings;
 mod sync_schedule;
@@ -35,14 +39,18 @@ use agent::{
     collect_git_diff, collect_gh_pr_diff, find_git_repos, is_gh_available, review_git_diff,
     PrReviewInput, PrReviewResult,
 };
-use credentials::{delete_credentials, get_credentials, save_credentials, StoredCredentials};
+use credentials::{
+    delete_credentials, generate_cursor_api_token, get_credentials, save_credentials,
+    StoredCredentials,
+};
 use host_status::{build_snapshot, set_app_handle, HostStatusSnapshot};
 use context::{
     create_knowledge_base, delete_knowledge_base, export_knowledge_base, import_knowledge_base,
     init_context_db, link_context_file, link_context_folder, link_context_repo, list_audit_log,
     list_context_links, list_documents, list_knowledge_bases, reindex_uploaded_documents,
-    set_context_link_enabled, set_knowledge_base_system_instruction, update_context_link_extensions,
-    sync_all_links, sync_link, unlink_context_link, get_context_link, AuditEntry, ContextLink,
+    read_last_sync_report, run_scheduled_sync_now, set_context_link_enabled,
+    set_knowledge_base_system_instruction, update_context_link_extensions, sync_all_links,
+    sync_link, unlink_context_link, get_context_link, AuditEntry, ContextLink, ScheduledSyncReport,
 };
 use projects::{
     create_project, delete_project, list_projects, open_project, update_project, ProjectSummary,
@@ -58,8 +66,8 @@ use relay::{start_background_services, stop_background_services};
 use paths::default_data_dir;
 use settings::{
     default_ollama_models_path, get_active_project_id, get_settings, host_data_layout,
-    resolved_context_limits, save_data_dir_only, save_settings, set_user_memory_enabled,
-    HostSettings,
+    resolved_context_limits, save_data_dir_only, save_settings, set_scheduled_sync,
+    set_user_memory_enabled, HostSettings, ScheduledSyncSettings,
 };
 use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemoryState};
 use jobs::{cancel_job, list_jobs, submit_job, JobKind, JobSnapshot};
@@ -96,7 +104,9 @@ fn get_host_settings_cmd() -> Result<HostSettings, String> {
 
 #[tauri::command(rename = "save_host_settings")]
 fn save_host_settings_cmd(settings: HostSettings) -> Result<(), String> {
-    save_settings(&settings)
+    save_settings(&settings)?;
+    mcp::close_all_sessions();
+    Ok(())
 }
 
 #[tauri::command(rename = "get_default_models_dir")]
@@ -168,6 +178,7 @@ async fn complete_pairing_cmd(
         host_id: data.host_id,
         device_secret: data.device_secret,
         supabase_url: Some(supabase_url.trim_end_matches('/').to_string()),
+        cursor_api_token: Some(generate_cursor_api_token()),
     };
     save_credentials(&creds)?;
     start_background_services(Some(creds.clone())).await?;
@@ -547,6 +558,28 @@ fn set_user_memory_enabled_cmd(enabled: bool) -> Result<(), String> {
     set_user_memory_enabled(enabled)
 }
 
+#[tauri::command(rename = "get_scheduled_sync")]
+fn get_scheduled_sync_cmd() -> ScheduledSyncSettings {
+    settings::resolved_scheduled_sync()
+}
+
+#[tauri::command(rename = "set_scheduled_sync")]
+fn set_scheduled_sync_cmd(settings: ScheduledSyncSettings) -> Result<(), String> {
+    set_scheduled_sync(settings)
+}
+
+#[tauri::command(rename = "run_scheduled_sync_now")]
+async fn run_scheduled_sync_now_cmd() -> Result<ScheduledSyncReport, String> {
+    init_context_db()?;
+    ensure_embedding_model(None).await?;
+    Ok(run_scheduled_sync_now().await)
+}
+
+#[tauri::command(rename = "get_last_scheduled_sync_report")]
+fn get_last_scheduled_sync_report_cmd() -> Option<ScheduledSyncReport> {
+    read_last_sync_report()
+}
+
 #[tauri::command(rename = "list_audit_log")]
 fn list_audit_log_cmd(
     limit: Option<u32>,
@@ -586,6 +619,88 @@ async fn check_for_updates_cmd(app: tauri::AppHandle) -> Result<updater::UpdateC
 #[tauri::command(rename = "install_host_update")]
 async fn install_host_update_cmd(app: tauri::AppHandle) -> Result<(), String> {
     updater::check_and_install(&app).await
+}
+
+#[tauri::command(rename = "preview_cursor_mcp_config")]
+fn preview_cursor_mcp_config_cmd() -> cursor_mcp::CursorMcpPreview {
+    cursor_mcp::preview_cursor_mcp_config()
+}
+
+#[tauri::command(rename = "write_cursor_mcp_config")]
+fn write_cursor_mcp_config_cmd(project_dir: String) -> Result<cursor_mcp::CursorMcpWriteResult, String> {
+    cursor_mcp::write_cursor_mcp_config(&project_dir)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CursorIntegrationInfo {
+    base_url: String,
+    api_token: String,
+    enabled: bool,
+    port: u16,
+    default_model: String,
+    settings_json: String,
+}
+
+fn cursor_gateway_base_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/v1")
+}
+
+fn build_cursor_settings_json(
+    base_url: &str,
+    api_token: &str,
+    model: &str,
+) -> Result<String, String> {
+    serde_json::to_string_pretty(&serde_json::json!({
+        "openai.apiKey": api_token,
+        "openai.baseUrl": base_url,
+        "cursor.general.openAiKey": api_token,
+        "cursor.general.openAiBaseUrl": base_url,
+        "cursor.model": model,
+        "model": model,
+    }))
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command(rename = "list_mcp_servers")]
+fn list_mcp_servers_cmd() -> Vec<mcp::McpServerSummary> {
+    mcp::list_servers()
+}
+
+#[tauri::command(rename = "list_mcp_tools")]
+fn list_mcp_tools_cmd() -> Result<Vec<mcp::McpToolDescriptor>, String> {
+    mcp::list_all_tools()
+}
+
+#[tauri::command(rename = "get_tts_status")]
+fn get_tts_status_cmd() -> media::TtsStatus {
+    media::detect_tts_status()
+}
+
+#[tauri::command(rename = "synthesize_speech")]
+async fn synthesize_speech_cmd(request: media::TtsRequest) -> Result<media::TtsResult, String> {
+    media::synthesize_speech(request).await
+}
+
+#[tauri::command(rename = "get_cursor_integration")]
+fn get_cursor_integration_cmd() -> Result<CursorIntegrationInfo, String> {
+    let settings = get_settings()?;
+    let creds = get_credentials()?.ok_or("Ce PC n'est pas encore lié.")?;
+    let api_token = creds
+        .cursor_api_token
+        .filter(|t| !t.is_empty())
+        .ok_or("Token Cursor introuvable. Reliez ce PC.")?;
+    let port = settings.cursor_gateway_port;
+    let base_url = cursor_gateway_base_url(port);
+    let settings_json = build_cursor_settings_json(&base_url, &api_token, &settings.default_model)?;
+    Ok(CursorIntegrationInfo {
+        base_url,
+        api_token,
+        enabled: settings.cursor_gateway_enabled,
+        port,
+        default_model: settings.default_model,
+        settings_json,
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -656,12 +771,23 @@ pub fn run() {
             add_user_memory_fact_cmd,
             delete_user_memory_fact_cmd,
             set_user_memory_enabled_cmd,
+            get_scheduled_sync_cmd,
+            set_scheduled_sync_cmd,
+            run_scheduled_sync_now_cmd,
+            get_last_scheduled_sync_report_cmd,
             list_audit_log_cmd,
             restart_background_services_cmd,
             local_chat_cmd,
             cancel_local_chat_cmd,
             check_for_updates_cmd,
             install_host_update_cmd,
+            get_cursor_integration_cmd,
+            preview_cursor_mcp_config_cmd,
+            write_cursor_mcp_config_cmd,
+            list_mcp_servers_cmd,
+            list_mcp_tools_cmd,
+            get_tts_status_cmd,
+            synthesize_speech_cmd,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -670,6 +796,7 @@ pub fn run() {
             set_app_handle(app.handle().clone());
             tray::setup(app)?;
             ollama::start_status_poller();
+            openai_gateway::start();
             let tray_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Ok(snapshot) =
