@@ -10,8 +10,6 @@ import {
   type PaletteCommand,
 } from "./command-palette/command-palette-provider";
 import AuditTrail from "./AuditTrail";
-import CloudProvidersPanel from "./CloudProvidersPanel";
-import CursorIntegration from "./CursorIntegration";
 import ContextManager from "./ContextManager";
 import HostBreadcrumbs from "./dashboard/HostBreadcrumbs";
 import HostSidebar from "./dashboard/HostSidebar";
@@ -19,7 +17,6 @@ import { DASHBOARD_NAV, type DashboardTab } from "./dashboard/dashboard-nav";
 import HostSettingsPanel from "./HostSettingsPanel";
 import PrReviewPanel from "./PrReviewPanel";
 import ProjectManager from "./ProjectManager";
-import UserMemoryPanel from "./UserMemoryPanel";
 import UpdatesPanel from "./UpdatesPanel";
 import LocalChat from "./LocalChat";
 import McpServersManager from "./McpServersManager";
@@ -316,17 +313,12 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             )}
 
             {tab === "models" && (
-              <>
-                <CloudProvidersPanel onChanged={refresh} />
-                <ModelManager
-                  installedModels={status?.models ?? []}
-                  defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
-                  onDefaultChanged={refresh}
-                />
-              </>
+              <ModelManager
+                installedModels={status?.models ?? []}
+                defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
+                onDefaultChanged={refresh}
+              />
             )}
-
-            {tab === "cursor" && <CursorIntegration />}
 
             {tab === "context" && <ContextManager />}
 
@@ -335,8 +327,6 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             {tab === "projects" && <ProjectManager />}
 
             {tab === "mcp" && <McpServersManager />}
-
-            {tab === "memory" && <UserMemoryPanel />}
 
             {tab === "settings" && (
               <HostSettingsPanel
