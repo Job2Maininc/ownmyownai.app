@@ -51,6 +51,21 @@ Deno.serve(async (req) => {
       message?: string;
       kind?: string;
     } | null;
+    last_metrics?: {
+      model?: string;
+      tokensPerSecond?: number;
+      tokens_per_second?: number;
+      latencyMs?: number;
+      latency_ms?: number;
+      ramUsedGb?: number;
+      ram_used_gb?: number;
+      promptTokens?: number;
+      prompt_tokens?: number;
+      completionTokens?: number;
+      completion_tokens?: number;
+      completedAt?: string;
+      completed_at?: string;
+    } | null;
   };
   const status = body.status === "busy" ? "busy" : "online";
 
@@ -62,6 +77,7 @@ Deno.serve(async (req) => {
     disk_free_gb?: number;
     context_summary?: unknown[];
     indexing_progress?: unknown;
+    last_metrics?: Record<string, unknown> | null;
   } = {
     status,
     last_seen_at: new Date().toISOString(),
@@ -107,6 +123,74 @@ Deno.serve(async (req) => {
       };
     } else {
       update.indexing_progress = null;
+    }
+  }
+
+  if (body.last_metrics === null) {
+    update.last_metrics = null;
+  } else if (body.last_metrics && typeof body.last_metrics === "object") {
+    const lm = body.last_metrics;
+    const model = typeof lm.model === "string" ? lm.model.trim().slice(0, 200) : "";
+    const tokensPerSecond =
+      typeof lm.tokensPerSecond === "number"
+        ? lm.tokensPerSecond
+        : typeof lm.tokens_per_second === "number"
+          ? lm.tokens_per_second
+          : null;
+    const latencyMs =
+      typeof lm.latencyMs === "number"
+        ? lm.latencyMs
+        : typeof lm.latency_ms === "number"
+          ? lm.latency_ms
+          : null;
+    const ramUsedGb =
+      typeof lm.ramUsedGb === "number"
+        ? lm.ramUsedGb
+        : typeof lm.ram_used_gb === "number"
+          ? lm.ram_used_gb
+          : null;
+    const completedAt =
+      typeof lm.completedAt === "string"
+        ? lm.completedAt
+        : typeof lm.completed_at === "string"
+          ? lm.completed_at
+          : new Date().toISOString();
+
+    if (
+      model &&
+      tokensPerSecond != null &&
+      Number.isFinite(tokensPerSecond) &&
+      latencyMs != null &&
+      Number.isFinite(latencyMs) &&
+      ramUsedGb != null &&
+      Number.isFinite(ramUsedGb)
+    ) {
+      const normalized: Record<string, unknown> = {
+        model,
+        tokensPerSecond,
+        latencyMs,
+        ramUsedGb,
+        completedAt,
+      };
+      const promptTokens =
+        typeof lm.promptTokens === "number"
+          ? lm.promptTokens
+          : typeof lm.prompt_tokens === "number"
+            ? lm.prompt_tokens
+            : undefined;
+      const completionTokens =
+        typeof lm.completionTokens === "number"
+          ? lm.completionTokens
+          : typeof lm.completion_tokens === "number"
+            ? lm.completion_tokens
+            : undefined;
+      if (promptTokens != null && Number.isFinite(promptTokens)) {
+        normalized.promptTokens = promptTokens;
+      }
+      if (completionTokens != null && Number.isFinite(completionTokens)) {
+        normalized.completionTokens = completionTokens;
+      }
+      update.last_metrics = normalized;
     }
   }
 

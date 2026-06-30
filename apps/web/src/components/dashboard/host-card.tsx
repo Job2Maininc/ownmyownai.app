@@ -11,6 +11,11 @@ import {
   hostStatusLabel,
   hostStatusPillVariant,
 } from "@/lib/host-status";
+import {
+  formatLatency,
+  formatTokensPerSecond,
+  parseHostLastMetrics,
+} from "@/lib/host-metrics";
 import { IndexingProgressBar } from "@/components/chat/indexing-progress-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,6 +42,8 @@ export function HostCard({ host: initialHost }: HostCardProps) {
   const indexing = getHostIndexingProgress(host);
   const chatDisabled = displayStatus === "offline";
   const chatTitle = displayStatus === "offline" ? "Host hors ligne" : undefined;
+  const lastMetrics =
+    displayStatus !== "offline" ? parseHostLastMetrics(host.last_metrics) : null;
 
   async function handleRename() {
     const trimmed = name.trim();
@@ -135,6 +142,12 @@ export function HostCard({ host: initialHost }: HostCardProps) {
               label={hostStatusLabel(displayStatus)}
             />
             {host.disk_free_gb != null && <span>{host.disk_free_gb} Go libres</span>}
+            {lastMetrics && (
+              <>
+                <span>{formatTokensPerSecond(lastMetrics.tokensPerSecond)} tokens/s</span>
+                <span>{formatLatency(lastMetrics.latencyMs)} latence</span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

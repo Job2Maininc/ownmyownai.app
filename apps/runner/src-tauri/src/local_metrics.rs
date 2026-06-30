@@ -152,15 +152,5 @@ pub fn get_last_metrics() -> Option<LastRequestMetrics> {
 }
 
 pub fn heartbeat_payload() -> Option<serde_json::Value> {
-    get_last_metrics().map(|m| {
-        serde_json::json!({
-            "model": m.model,
-            "tokens_per_second": m.tokens_per_second,
-            "latency_ms": m.latency_ms,
-            "ram_used_gb": m.ram_used_gb,
-            "prompt_tokens": m.prompt_tokens,
-            "completion_tokens": m.completion_tokens,
-            "completed_at": m.completed_at,
-        })
-    })
+    get_last_metrics().and_then(|m| serde_json::to_value(m).ok())
 }

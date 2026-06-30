@@ -21,6 +21,7 @@ function makeHost(overrides: Partial<Host> = {}): Host {
     indexing_progress: null,
     status: "online",
     last_seen_at: new Date().toISOString(),
+    last_metrics: null,
     created_at: new Date().toISOString(),
     ...overrides,
   };

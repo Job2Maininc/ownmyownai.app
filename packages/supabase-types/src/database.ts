@@ -22,6 +22,17 @@ export interface HostIndexingProgress {
   kind?: string;
 }
 
+/** Dernières métriques d'inférence (heartbeat Supabase → dashboard). */
+export interface HostLastMetrics {
+  model: string;
+  tokensPerSecond: number;
+  latencyMs: number;
+  ramUsedGb: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  completedAt: string;
+}
+
 export interface Host {
   id: string;
   user_id: string;
@@ -35,6 +46,7 @@ export interface Host {
   indexing_progress: HostIndexingProgress | null;
   status: HostStatus;
   last_seen_at: string | null;
+  last_metrics: HostLastMetrics | null;
   created_at: string;
 }
 
@@ -79,6 +91,7 @@ export interface Database {
           disk_free_gb?: number | null;
           context_summary?: ContextSummaryEntry[];
           indexing_progress?: HostIndexingProgress | null;
+          last_metrics?: HostLastMetrics | null;
           status?: HostStatus;
           last_seen_at?: string | null;
         };
