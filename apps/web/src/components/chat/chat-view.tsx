@@ -44,7 +44,6 @@ import { Card } from "@/components/ui/card";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { formatRelayError, type UserError } from "@/lib/user-errors";
 import { ArtifactsPanel } from "./artifacts-panel";
-import { MediaGalleryPanel } from "./media-gallery-panel";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage as ChatMessageBubble, ChatTypingIndicator } from "./chat-message";
 import { ChatToolbar } from "./chat-toolbar";
@@ -59,7 +58,7 @@ import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
 
-type SidebarTab = "context" | "artifacts" | "media" | "memory" | "mcp" | "terminal";
+type SidebarTab = "context" | "artifacts" | "memory" | "mcp" | "terminal";
 
 interface UiMessage {
   role: "user" | "assistant";
@@ -177,7 +176,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, []);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("context");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
-  const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
   const [conversationTree, setConversationTree] = useState<ConversationTree | null>(null);
   const [branchMeta, setBranchMeta] = useState<ConversationBranchMeta[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -1135,14 +1133,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               <button
                 type="button"
                 role="tab"
-                aria-selected={sidebarTab === "media"}
-                onClick={() => setSidebarTab("media")}
-              >
-                Médias
-              </button>
-              <button
-                type="button"
-                role="tab"
                 aria-selected={sidebarTab === "memory"}
                 onClick={() => setSidebarTab("memory")}
               >
@@ -1190,13 +1180,6 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 onSelect={setActiveArtifactId}
                 relay={relayRef.current}
                 connected={connected}
-              />
-            ) : sidebarTab === "media" ? (
-              <MediaGalleryPanel
-                relay={relayRef.current}
-                connected={connected}
-                activeId={activeMediaId}
-                onActiveChange={setActiveMediaId}
               />
             ) : null}
           </aside>

@@ -1939,7 +1939,7 @@ async fn handle_media_generate(
     match crate::media::parse_media_generate_payload(&envelope.payload) {
         Ok(request) => {
             let kind = request.kind.type_name().to_string();
-            let job_id = crate::media::submit_media_job(request, envelope.requestId.clone());
+            let job_id = crate::media::submit_media_job(request);
             send_ws_response(
                 write,
                 "media.progress",
