@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { EmptyStatePanel } from "./EmptyState";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { HostSettings, McpServerConfig, McpServerSummary } from "../types";
 
@@ -396,7 +397,13 @@ export default function McpServersManager() {
 
       <ul className="context-base-list" style={{ marginTop: 12 }}>
         {externalServers.length === 0 ? (
-          <li className="panel__empty">Aucun serveur MCP externe configuré.</li>
+          <li>
+            <EmptyStatePanel
+              icon="plug"
+              title="Aucun serveur MCP"
+              description="Ajoutez un serveur externe pour étendre les outils disponibles à l'agent."
+            />
+          </li>
         ) : (
           externalServers.map((server) => {
             const enabled = server.enabled;

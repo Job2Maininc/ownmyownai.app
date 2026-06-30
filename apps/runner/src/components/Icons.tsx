@@ -108,6 +108,111 @@ export function ClockIcon(props: IconProps) {
   );
 }
 
+export function MessageIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </Svg>
+  );
+}
+
+export function BrainIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+      <path d="M9 18h6" />
+    </Svg>
+  );
+}
+
+export function SparklesIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.964 0z" />
+      <path d="M20 3v4" />
+      <path d="M22 5h-4" />
+    </Svg>
+  );
+}
+
+export function MonitorIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect width="20" height="14" x="2" y="3" rx="2" />
+      <path d="M8 21h8" />
+      <path d="M12 17v4" />
+    </Svg>
+  );
+}
+
+export function UsersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </Svg>
+  );
+}
+
+export function PlugIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
+    </Svg>
+  );
+}
+
+export function ActivityIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
+    </Svg>
+  );
+}
+
+export type EmptyStateIconId =
+  | "message"
+  | "brain"
+  | "sparkles"
+  | "monitor"
+  | "package"
+  | "folder"
+  | "git-branch"
+  | "clock"
+  | "users"
+  | "link"
+  | "plug"
+  | "activity"
+  | "file";
+
+const EMPTY_STATE_ICONS: Record<EmptyStateIconId, (props: IconProps) => ReactNode> = {
+  message: MessageIcon,
+  brain: BrainIcon,
+  sparkles: SparklesIcon,
+  monitor: MonitorIcon,
+  package: PackageIcon,
+  folder: FolderIcon,
+  "git-branch": GitBranchIcon,
+  clock: ClockIcon,
+  users: UsersIcon,
+  link: LinkIcon,
+  plug: PlugIcon,
+  activity: ActivityIcon,
+  file: FileIcon,
+};
+
+export function EmptyStateIcon({ id, ...props }: IconProps & { id: EmptyStateIconId }) {
+  const Component = EMPTY_STATE_ICONS[id];
+  return <Component {...props} />;
+}
+
 export type SourceIconId = "file" | "folder" | "repo" | "drive";
 
 const SOURCE_ICONS: Record<SourceIconId, (props: IconProps) => ReactNode> = {

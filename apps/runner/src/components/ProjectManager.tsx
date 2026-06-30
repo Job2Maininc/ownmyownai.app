@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import EmptyState, { EmptyStatePanel } from "./EmptyState";
 
 interface KnowledgeBase {
   id: string;
@@ -205,7 +206,12 @@ export default function ProjectManager() {
                 </button>
                 <p className="panel__meta">Bases associées</p>
                 {bases.length === 0 ? (
-                  <p className="panel__empty">Créez d&apos;abord une base dans l&apos;onglet Contexte.</p>
+                  <EmptyState
+                    icon="folder"
+                    variant="compact"
+                    title="Aucune base de contexte"
+                    description="Créez d'abord une base dans l'onglet Contexte."
+                  />
                 ) : (
                   <ul className="model-chips">
                     {bases.map((kb) => {
@@ -232,7 +238,11 @@ export default function ProjectManager() {
       </ul>
 
       {projects.length === 0 && (
-        <p className="panel__empty">Aucun projet — créez-en un pour grouper vos bases.</p>
+        <EmptyStatePanel
+          icon="package"
+          title="Aucun projet"
+          description="Créez un espace de travail pour regrouper vos bases de contexte et activer plusieurs bases en un clic."
+        />
       )}
       {error && (
         <p className="error-banner" role="alert">

@@ -15,6 +15,7 @@ import { fetchOllamaRegistry, searchRegistry, type RegistryModel } from "../data
 import FallbackModelSelect from "./FallbackModelSelect";
 import ModelTaskRoutingPanel from "./ModelTaskRoutingPanel";
 import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
+import { EmptyStatePanel } from "./EmptyState";
 import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
 import type { HostSettings, SetupProgress } from "../types";
 
@@ -181,6 +182,13 @@ export default function ModelManager({
             <span className="gpu-badge gpu-badge--discrete"> GPU dédié</span>
           )}
         </p>
+      )}
+      {installedModels.length === 0 && (
+        <EmptyStatePanel
+          icon="sparkles"
+          title="Aucun modèle installé"
+          description="Téléchargez un modèle recommandé ci-dessous ou recherchez dans le catalogue Ollama."
+        />
       )}
       <div className="flux-image-panel">
         <div className="flux-image-panel__head">

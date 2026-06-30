@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { EmptyStatePanel } from "./EmptyState";
 
 interface AuditEntry {
   id: string;
@@ -15,6 +16,11 @@ const ACTION_LABELS: Record<string, string> = {
   index_error: "Erreur d'indexation",
   delete: "Suppression",
   agent_access: "Accès agent",
+};
+
+const TARGET_LABELS: Record<string, string> = {
+  openai_gateway: "Gateway Cursor",
+  chat: "Chat web",
 };
 
 const FILTER_OPTIONS = [
@@ -42,9 +48,10 @@ function summarizeDetails(entry: AuditEntry): string {
     const data = JSON.parse(entry.details) as Record<string, unknown>;
     if (typeof data.filename === "string") return data.filename;
     if (typeof data.relativePath === "string") return data.relativePath;
-    if (Array.isArray(data.contextIds)) {
+    if (Array.isArray(data.contextIds) && data.contextIds.length > 0) {
       return `${data.contextIds.length} base(s) de contexte`;
     }
+    if (typeof data.model === "string") return data.model;
     if (typeof data.path === "string") return data.path;
   } catch {
     return entry.details.slice(0, 80);
@@ -87,7 +94,7 @@ export default function AuditTrail() {
         </button>
       </div>
       <p className="muted">
-        Historique des indexations, suppressions et accès agent au contexte — stocké uniquement sur ce PC.
+        Historique des indexations, suppressions et accès agent (chat, gateway Cursor) — stocké uniquement sur ce PC.
       </p>
       <div className="model-filters">
         {FILTER_OPTIONS.map((opt) => (
@@ -102,7 +109,11 @@ export default function AuditTrail() {
         ))}
       </div>
       {entries.length === 0 && !loading ? (
-        <p className="panel__empty">Aucune entrée pour le moment.</p>
+        <EmptyStatePanel
+          icon="clock"
+          title="Journal vide"
+          description="Les indexations, suppressions et accès agent au contexte apparaîtront ici."
+        />
       ) : (
         <ul className="audit-list">
           {entries.map((entry) => (
@@ -112,7 +123,9 @@ export default function AuditTrail() {
               </span>
               <span className="audit-list__time">{formatTime(entry.createdAt)}</span>
               {entry.targetType && (
-                <span className="muted audit-list__target">{entry.targetType}</span>
+                <span className="muted audit-list__target">
+                  {TARGET_LABELS[entry.targetType] ?? entry.targetType}
+                </span>
               )}
               {summarizeDetails(entry) && (
                 <span className="audit-list__detail">{summarizeDetails(entry)}</span>

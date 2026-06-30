@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ReviewIcon, type ReviewIconId } from "./Icons";
+import { EmptyStatePanel } from "./EmptyState";
 
 interface GitRepoInfo {
   linkId: string;
@@ -233,13 +234,11 @@ export default function PrReviewPanel() {
       </div>
 
       {repos.length === 0 ? (
-        <div className="review-empty">
-          <p>
-            Aucun dépôt Git détecté. Dans l&apos;onglet{" "}
-            <strong>Base de données IA</strong>, liez un dossier de projet avec un dossier{" "}
-            <code className="inline-code">.git</code> (carte « Dépôt Git »).
-          </p>
-        </div>
+        <EmptyStatePanel
+          icon="git-branch"
+          title="Aucun dépôt Git détecté"
+          description="Dans l'onglet Contexte, liez un dossier de projet contenant un dossier .git via la carte « Dépôt Git »."
+        />
       ) : (
         <>
           <label className="field-label">Projet à analyser</label>

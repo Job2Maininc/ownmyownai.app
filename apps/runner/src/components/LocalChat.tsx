@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { formatShortcutLabel } from "../lib/keyboard-shortcuts";
 import { formatInvokeError } from "../lib/tauri-errors";
+import EmptyState from "./EmptyState";
+
+const SEND_SHORTCUT_LABEL = formatShortcutLabel({ key: "Enter", mod: true });
+
+const CHAT_SUGGESTIONS = [
+  "Résume ce document en 3 points",
+  "Explique-moi ce concept simplement",
+  "Quelles sont les bonnes pratiques ici ?",
+] as const;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -100,9 +110,27 @@ export default function LocalChat({ defaultModel, ollamaRunning }: LocalChatProp
 
       <div className="local-chat__messages" role="log" aria-live="polite">
         {messages.length === 0 ? (
-          <p className="panel__empty">
-            Posez une question à votre modèle local ({defaultModel}).
-          </p>
+          <div className="local-chat__empty">
+            <EmptyState
+              icon="message"
+              title="Votre premier message"
+              description={`Posez une question à votre modèle local (${defaultModel}). Tout reste sur ce PC.`}
+            >
+              <div className="local-chat__suggestions">
+                {CHAT_SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="local-chat__suggestion"
+                    disabled={!ollamaRunning || streaming}
+                    onClick={() => setInput(suggestion)}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </EmptyState>
+          </div>
         ) : (
           messages.map((msg, i) => (
             <div
@@ -127,16 +155,17 @@ export default function LocalChat({ defaultModel, ollamaRunning }: LocalChatProp
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
               e.preventDefault();
               void handleSend();
             }
           }}
           placeholder={
             ollamaRunning
-              ? "Votre message… (Entrée pour envoyer)"
+              ? `Votre message… (${SEND_SHORTCUT_LABEL} pour envoyer)`
               : "Démarrez Ollama pour chatter"
           }
+          aria-keyshortcuts={SEND_SHORTCUT_LABEL}
           disabled={!ollamaRunning || streaming}
           rows={3}
         />
