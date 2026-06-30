@@ -39,6 +39,36 @@ pub struct StoredCredentials {
     /// URL Supabase (sauvegardée au pairing — le .exe n'a pas les variables Vite en runtime).
     #[serde(default)]
     pub supabase_url: Option<String>,
+    /// Token Bearer pour la passerelle OpenAI locale (Cursor).
+    #[serde(default, rename = "cursorApiToken")]
+    pub cursor_api_token: Option<String>,
+}
+
+/// Génère un token opaque pour l'authentification Bearer de la passerelle Cursor.
+pub fn generate_cursor_api_token() -> String {
+    format!("omoa_{}", uuid::Uuid::new_v4().simple())
+}
+
+/// Renseigne `cursor_api_token` s'il est absent. Retourne `true` si un token a été créé.
+pub fn ensure_cursor_api_token(creds: &mut StoredCredentials) -> bool {
+    if creds
+        .cursor_api_token
+        .as_ref()
+        .is_some_and(|t| !t.is_empty())
+    {
+        return false;
+    }
+    creds.cursor_api_token = Some(generate_cursor_api_token());
+    true
+}
+
+/// Token attendu par la passerelle OpenAI locale, si le host est appairé.
+pub fn cursor_api_token_for_gateway() -> Option<String> {
+    get_credentials()
+        .ok()
+        .flatten()?
+        .cursor_api_token
+        .filter(|t| !t.is_empty())
 }
 
 pub fn resolve_supabase_url(creds: &StoredCredentials) -> Result<String, String> {
@@ -74,7 +104,7 @@ pub fn save_credentials(creds: &StoredCredentials) -> Result<(), String> {
     write_credentials_file(&json)
 }
 
-pub fn get_credentials() -> Result<Option<StoredCredentials>, String> {
+fn load_credentials_raw() -> Result<Option<StoredCredentials>, String> {
     let entry = Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())?;
     match entry.get_password() {
         Ok(json) => {
@@ -86,6 +116,16 @@ pub fn get_credentials() -> Result<Option<StoredCredentials>, String> {
     }
 
     read_credentials_file()
+}
+
+pub fn get_credentials() -> Result<Option<StoredCredentials>, String> {
+    let mut creds = load_credentials_raw()?;
+    if let Some(ref mut c) = creds {
+        if ensure_cursor_api_token(c) {
+            save_credentials(c)?;
+        }
+    }
+    Ok(creds)
 }
 
 pub fn delete_credentials() -> Result<(), String> {
