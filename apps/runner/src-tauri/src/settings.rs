@@ -266,6 +266,12 @@ pub struct HostSettings {
     /// Nombre de messages récents conservés verbatim après compaction.
     #[serde(default = "default_chat_recent_messages")]
     pub chat_recent_messages: u32,
+    /// Proxy OpenAI local pour Cursor (GET /v1/models, POST /v1/chat/completions).
+    #[serde(default)]
+    pub cursor_gateway_enabled: bool,
+    /// Port HTTP du gateway Cursor (localhost uniquement par défaut).
+    #[serde(default = "default_cursor_gateway_port")]
+    pub cursor_gateway_port: u16,
 }
 
 fn default_chat_token_threshold() -> u32 {
@@ -274,6 +280,10 @@ fn default_chat_token_threshold() -> u32 {
 
 fn default_chat_recent_messages() -> u32 {
     12
+}
+
+fn default_cursor_gateway_port() -> u16 {
+    8765
 }
 
 fn default_desktop_notifications() -> bool {
@@ -330,6 +340,8 @@ impl Default for HostSettings {
             air_gapped: false,
             chat_token_threshold: default_chat_token_threshold(),
             chat_recent_messages: default_chat_recent_messages(),
+            cursor_gateway_enabled: false,
+            cursor_gateway_port: default_cursor_gateway_port(),
         }
     }
 }
@@ -449,6 +461,38 @@ pub fn get_settings() -> Result<HostSettings, String> {
     Ok(settings)
 }
 
+pub fn validate_mcp_servers(servers: &[McpServerConfig]) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
+    for srv in servers {
+        if srv.builtin {
+            return Err(format!(
+                "Le serveur intégré « {} » ne doit pas figurer dans mcp_servers",
+                srv.id
+            ));
+        }
+        if crate::mcp::builtin::is_builtin(&srv.id) {
+            return Err(format!(
+                "L'identifiant « {} » est réservé au serveur intégré",
+                srv.id
+            ));
+        }
+        let id = srv.id.trim();
+        if id.is_empty() {
+            return Err("Identifiant serveur MCP requis".into());
+        }
+        if srv.name.trim().is_empty() {
+            return Err(format!("Nom requis pour le serveur « {id} »"));
+        }
+        if !seen.insert(id.to_string()) {
+            return Err(format!("Identifiant MCP en double : {id}"));
+        }
+        if srv.enabled || !srv.command.trim().is_empty() {
+            crate::mcp::validate_external_config(srv)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn save_settings(settings: &HostSettings) -> Result<(), String> {
     if settings.selected_models.is_empty() {
         return Err("Sélectionnez au moins un modèle".into());
@@ -461,6 +505,7 @@ pub fn save_settings(settings: &HostSettings) -> Result<(), String> {
     }
 
     validate_scheduled_sync(&settings.scheduled_sync)?;
+    validate_mcp_servers(&settings.mcp_servers)?;
 
     let mut normalized = settings.clone();
     let data_path = if normalized.data_dir.trim().is_empty() {
