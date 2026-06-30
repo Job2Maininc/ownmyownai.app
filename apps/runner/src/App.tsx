@@ -226,7 +226,7 @@ export default function App() {
         {step === "pairing" && (
           <>
             <h1>Lier votre compte</h1>
-            <p className="muted" style={{ fontSize: 14 }}>
+            <p className="muted type-small">
               1. Ouvrez le site et connectez-vous
               <br />
               2. Générez un code de pairing

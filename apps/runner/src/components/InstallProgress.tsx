@@ -89,7 +89,7 @@ export default function InstallProgress({
       )}
 
       {progress?.currentModel && (
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="muted type-caption">
           Modèle : <code className="inline-code">{progress.currentModel}</code>
           {progress.modelIndex && progress.modelCount
             ? ` (${progress.modelIndex}/${progress.modelCount})`
@@ -98,7 +98,7 @@ export default function InstallProgress({
       )}
 
       {ollamaStatus && (
-        <p className="muted" style={{ fontSize: 14 }}>
+        <p className="muted type-small">
           {ollamaStatus.running ? "Moteur IA actif" : "Installation ou démarrage…"}
           {ollamaStatus.models.length > 0 &&
             ` · ${ollamaStatus.models.length} modèle(s) installé(s)`}

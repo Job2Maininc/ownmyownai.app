@@ -88,7 +88,7 @@ export default function StorageSetup({ onContinue, error }: StorageSetupProps) {
   return (
     <>
       <h1>Dossier de données</h1>
-      <p className="muted" style={{ fontSize: 14 }}>
+      <p className="muted type-small">
         Choisissez où le Host stocke tout : modèles IA, contexte, historique des
         conversations, activité des clients et créations générées. Un disque entier
         ou un simple dossier convient — si vous choisissez la racine d&apos;un disque,
@@ -110,7 +110,7 @@ export default function StorageSetup({ onContinue, error }: StorageSetupProps) {
       </div>
 
       {layout && (
-        <ul className="storage-layout muted" style={{ fontSize: 13, marginTop: 12 }}>
+        <ul className="storage-layout muted type-caption" style={{ marginTop: 12 }}>
           <li>
             <strong>Modèles IA</strong> — {layout.modelsDir}
           </li>
