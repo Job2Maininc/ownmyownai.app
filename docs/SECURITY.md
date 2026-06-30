@@ -59,7 +59,7 @@ La passerelle (`apps/runner/src-tauri/src/openai_gateway.rs`) expose une API com
 |---------|--------|
 | Composant | Serveur HTTP Axum embarqué dans le Host Tauri |
 | Endpoints | `GET /health`, `GET /v1/models`, `POST /v1/chat/completions` (JSON ou SSE) |
-| Écoute réseau | `127.0.0.1` uniquement (loopback) — port par défaut `8765` (`cursorGatewayPort`) |
+| Écoute réseau | `127.0.0.1` par défaut (`cursorGatewayLan: false`) ; option LAN (`0.0.0.0`, `cursorGatewayLan: true`) — port `8765` (`cursorGatewayPort`) |
 | Données en transit | Requêtes et réponses restent sur la machine ; aucun transit Supabase pour le chat |
 
 **Objectif de sécurité** : permettre l'intégration IDE sans exposer le contexte local ni les clés cloud à Internet, tout en limitant l'abus par d'autres processus ou utilisateurs sur le même poste.
@@ -115,7 +115,7 @@ flowchart TB
 
 | Contrôle | Implémentation | Limite connue |
 |----------|----------------|---------------|
-| Écoute loopback | `TcpListener::bind("127.0.0.1:8765")` | Non joignable depuis le LAN sans tunnel ; le port n'est pas configurable dynamiquement dans le binaire actuel |
+| Écoute loopback / LAN | `127.0.0.1` par défaut ; `cursorGatewayLan` pour `0.0.0.0` | En mode LAN, tout client du réseau local peut tenter d'appeler la passerelle (Bearer requis) |
 | Validation modèle | `is_available_model()` — refus des modèles absents ou non configurés | N'empêche pas l'abus d'un modèle légitime |
 | Plafond historique | 20 derniers messages conservés par requête | Réduit la fenêtre d'injection, pas le volume de requêtes |
 | Plafond corps | 2 Mo max sur le body JSON | Protection mémoire basique |
@@ -144,7 +144,7 @@ Priorité documentée dans [ROADMAP.md](./ROADMAP.md) (phase P2 — Sécurité &
 1. **Authentification Bearer** — comparer `Authorization: Bearer <cursorApiToken>` via `cursor_api_token_for_gateway()` sur chaque route `/v1/*` ; répondre `401` si absent ou invalide.
 2. **Rate limiting** — limiter les requêtes par fenêtre temporelle pour protéger Ollama et les quotas cloud.
 3. **Interrupteur réel** — ne pas lier le socket HTTP si `cursorGatewayEnabled` est `false`.
-4. **Option localhost vs LAN** — si un jour l'écoute dépasse `127.0.0.1`, exiger TLS + auth forte et documenter le modèle de menace réseau.
+4. **Option localhost vs LAN** — livré (`cursorGatewayLan`) ; en mode LAN, documenter le risque réseau et conserver l'auth Bearer obligatoire.
 5. **Audit étendu** — journaliser chaque appel `/v1/chat/completions` (modèle, projet, présence RAG), pas seulement les accès avec chunks.
 
 ### Recommandations opérationnelles
@@ -161,6 +161,6 @@ Priorité documentée dans [ROADMAP.md](./ROADMAP.md) (phase P2 — Sécurité &
 |---------|------|
 | `openai_gateway.rs` | Serveur HTTP, enrichissement messages, audit RAG |
 | `credentials.rs` | Génération et stockage `cursorApiToken` |
-| `settings.rs` | `cursorGatewayEnabled`, `cursorGatewayPort` |
+| `settings.rs` | `cursorGatewayEnabled`, `cursorGatewayPort`, `cursorGatewayLan` |
 | `CursorIntegration.tsx` | UI copie URL / token / snippet Cursor |
 | [CURSOR.md](./CURSOR.md) | Guide de configuration utilisateur |

@@ -126,7 +126,7 @@ Le bouton **Copier config Cursor** génère un JSON au format Cursor Settings :
 
 ### Port personnalisé
 
-Par défaut : port **8765** (`cursorGatewayPort` dans `settings.json`). Après changement, redémarrez le Host et mettez à jour l'URL dans Cursor.
+Par défaut : port **8765** (`cursorGatewayPort` dans `settings.json`), écoute **localhost** (`cursorGatewayLan: false`). Pour joindre le Host depuis un autre PC du réseau, activez **Réseau local (LAN)** dans l'onglet Cursor du Host (`cursorGatewayLan: true`) — l'URL affichée utilisera l'IP locale. Après changement de port ou de mode, le gateway se recharge automatiquement ; mettez à jour l'URL dans Cursor si besoin.
 
 ---
 

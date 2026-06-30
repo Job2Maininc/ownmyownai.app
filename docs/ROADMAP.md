@@ -23,7 +23,7 @@ Objectif : permettre à Cursor d'utiliser le Host OwnMyOwnAI pour l'inférence (
 | **P0** (2–4 sem.) | Gateway OpenAI local | `openai_gateway.rs` : `GET /v1/models`, `POST /v1/chat/completions` (SSE) ; token Bearer local (`cursorApiToken`) ; settings `cursorGatewayEnabled` / `cursorGatewayPort` ; panneau Host `CursorIntegration.tsx` ; snippet JSON Settings Cursor ; factorisation `chat_pipeline.rs` (relay + gateway) |
 | **P0** | Doc & fallback | `docs/CURSOR.md` (3 chemins, dépannage) ; chemin Ollama direct documenté comme solution immédiate sans RAG |
 | **P1** (4–6 sem.) | MCP + polish | Serveur MCP stdio ; wizard « Ajouter à Cursor » (`.cursor/mcp.json`) ; header `X-Project-Id` pour contexte projet ; page onboarding « Connecter Cursor » ; tests tool-calling OpenAI via gateway |
-| **P2** | Sécurité & ops | Rate limiting gateway ; option localhost vs LAN ; audit trail accès gateway ; modèle de menace dans `docs/SECURITY.md` |
+| **P2** | Sécurité & ops | Rate limiting gateway ; ~~option localhost vs LAN~~ ; audit trail accès gateway ; modèle de menace dans `docs/SECURITY.md` |
 
 ### Dépendances techniques
 
