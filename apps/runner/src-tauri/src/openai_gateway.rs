@@ -33,11 +33,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Configuration d'écoute du gateway (port + loopback ou LAN).
+/// Configuration d'écoute du gateway (port + loopback ou LAN + interrupteur).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GatewayBindConfig {
     pub port: u16,
     pub lan: bool,
+    pub enabled: bool,
 }
 
 fn read_gateway_bind_config() -> GatewayBindConfig {
@@ -45,7 +46,21 @@ fn read_gateway_bind_config() -> GatewayBindConfig {
     GatewayBindConfig {
         port: settings.cursor_gateway_port,
         lan: settings.cursor_gateway_lan,
+        enabled: settings.cursor_gateway_enabled,
     }
+}
+
+fn gateway_feature_enabled() -> bool {
+    crate::settings::get_settings()
+        .map(|s| s.cursor_gateway_enabled)
+        .unwrap_or(false)
+}
+
+static GATEWAY_LISTENING: AtomicBool = AtomicBool::new(false);
+
+/// Indique si le socket HTTP de la passerelle est actuellement lié.
+pub fn is_gateway_listening() -> bool {
+    GATEWAY_LISTENING.load(Ordering::SeqCst)
 }
 
 /// Adresse socket `host:port` pour `TcpListener::bind`.
@@ -337,6 +352,16 @@ fn build_gateway_router(auth_state: GatewayAuthState) -> Router {
 async fn gateway_supervisor(mut rx: watch::Receiver<GatewayBindConfig>) {
     loop {
         let config = rx.borrow_and_update().clone();
+
+        if !config.enabled {
+            GATEWAY_LISTENING.store(false, Ordering::SeqCst);
+            eprintln!("OpenAI gateway : désactivé (cursorGatewayEnabled=false)");
+            if rx.changed().await.is_err() {
+                break;
+            }
+            continue;
+        }
+
         let socket_addr = bind_socket_addr(&config);
 
         let expected_token = cursor_api_token_for_gateway().unwrap_or_default();
@@ -367,6 +392,8 @@ async fn gateway_supervisor(mut rx: watch::Receiver<GatewayBindConfig>) {
             eprintln!("OpenAI gateway → {client_url} (localhost uniquement, Bearer requis)");
         }
 
+        GATEWAY_LISTENING.store(true, Ordering::SeqCst);
+
         let app = build_gateway_router(auth_state);
         let mut shutdown_rx = rx.clone();
         let shutdown = async move {
@@ -380,10 +407,13 @@ async fn gateway_supervisor(mut rx: watch::Receiver<GatewayBindConfig>) {
             eprintln!("OpenAI gateway : {e}");
         }
 
+        GATEWAY_LISTENING.store(false, Ordering::SeqCst);
+
         if rx.has_changed().is_err() {
             break;
         }
     }
+    GATEWAY_LISTENING.store(false, Ordering::SeqCst);
     GATEWAY_SUPERVISOR_STARTED.store(false, Ordering::SeqCst);
 }
 
@@ -409,6 +439,9 @@ struct ModelObject {
 }
 
 async fn list_models() -> Result<Json<ModelsListResponse>, StatusCode> {
+    if !gateway_feature_enabled() {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
     let models = tokio::task::spawn_blocking(list_available_models)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -489,6 +522,13 @@ impl IntoResponse for ApiError {
 }
 
 async fn chat_completions(request: Request) -> Result<Response, ApiError> {
+    if !gateway_feature_enabled() {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Passerelle Cursor désactivée. Activez-la dans les paramètres Host.",
+        ));
+    }
+
     let project_id = resolve_gateway_project_id(request.headers())
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e))?;
 
@@ -1110,6 +1150,7 @@ mod tests {
         let addr = bind_socket_addr(&GatewayBindConfig {
             port: 8765,
             lan: false,
+            enabled: true,
         });
         assert_eq!(addr, "127.0.0.1:8765");
     }
@@ -1119,6 +1160,7 @@ mod tests {
         let addr = bind_socket_addr(&GatewayBindConfig {
             port: 9000,
             lan: true,
+            enabled: true,
         });
         assert_eq!(addr, "0.0.0.0:9000");
     }
@@ -1128,6 +1170,7 @@ mod tests {
         let url = client_base_url(&GatewayBindConfig {
             port: 8765,
             lan: false,
+            enabled: true,
         });
         assert_eq!(url, "http://127.0.0.1:8765/v1");
     }

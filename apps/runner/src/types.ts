@@ -276,4 +276,7 @@ export interface HostStatusSnapshot {
   queuePosition?: number;
   activeMediaGenerations?: number;
   mediaJobs?: MediaJobSnapshot[];
+  cursorGatewayEnabled?: boolean;
+  cursorGatewayListening?: boolean;
+  cursorGatewayPort?: number;
 }

@@ -120,6 +120,12 @@ pub struct HostStatusSnapshot {
     pub active_media_generations: u32,
     /// Détail des jobs média en cours ou en file.
     pub media_jobs: Vec<MediaJobSnapshot>,
+    /// Passerelle Cursor activée dans les paramètres.
+    pub cursor_gateway_enabled: bool,
+    /// Socket HTTP gateway actuellement lié.
+    pub cursor_gateway_listening: bool,
+    /// Port configuré pour la passerelle Cursor.
+    pub cursor_gateway_port: u16,
 }
 
 pub fn build_snapshot() -> HostStatusSnapshot {
@@ -143,6 +149,8 @@ pub fn build_snapshot() -> HostStatusSnapshot {
 
     let last_heartbeat_error = LAST_HEARTBEAT_ERR.lock().ok().and_then(|g| g.clone());
     let last_relay_error = LAST_RELAY_ERR.lock().ok().and_then(|g| g.clone());
+
+    let gateway_settings = crate::settings::get_settings().unwrap_or_default();
 
     HostStatusSnapshot {
         host_id,
@@ -170,6 +178,9 @@ pub fn build_snapshot() -> HostStatusSnapshot {
         queue_position: if crate::chat_queue::worker_busy() { 1 } else { 0 },
         active_media_generations: crate::media::active_count(),
         media_jobs: crate::media::list_active_jobs(),
+        cursor_gateway_enabled: gateway_settings.cursor_gateway_enabled,
+        cursor_gateway_listening: crate::openai_gateway::is_gateway_listening(),
+        cursor_gateway_port: gateway_settings.cursor_gateway_port,
     }
 }
 

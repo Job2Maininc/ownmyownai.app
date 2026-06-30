@@ -120,6 +120,7 @@ fn gateway_bind_changed(prev: Option<&HostSettings>, next: &HostSettings) -> boo
         Some(p) => {
             p.cursor_gateway_port != next.cursor_gateway_port
                 || p.cursor_gateway_lan != next.cursor_gateway_lan
+                || p.cursor_gateway_enabled != next.cursor_gateway_enabled
         }
     }
 }
@@ -758,6 +759,7 @@ fn get_cursor_integration_cmd() -> Result<CursorIntegrationInfo, String> {
     let bind_config = openai_gateway::GatewayBindConfig {
         port,
         lan: settings.cursor_gateway_lan,
+        enabled: settings.cursor_gateway_enabled,
     };
     let base_url = openai_gateway::client_base_url(&bind_config);
     let lan_ip = if settings.cursor_gateway_lan {

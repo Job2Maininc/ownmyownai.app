@@ -16,6 +16,8 @@ import HostBreadcrumbs from "./dashboard/HostBreadcrumbs";
 import HostSidebar from "./dashboard/HostSidebar";
 import { DASHBOARD_NAV, type DashboardTab } from "./dashboard/dashboard-nav";
 import HostSettingsPanel from "./HostSettingsPanel";
+import CursorIntegration from "./CursorIntegration";
+import UserMemoryPanel from "./UserMemoryPanel";
 import LocalImagePanel from "./LocalImagePanel";
 import PrReviewPanel from "./PrReviewPanel";
 import ProjectManager from "./ProjectManager";
@@ -34,6 +36,7 @@ import EmptyState from "./EmptyState";
 interface DashboardProps {
   appUrl: string;
   onUnpaired: () => void;
+  initialTab?: DashboardTab;
 }
 
 function formatRelativeTime(iso: string | null): string {
@@ -107,12 +110,12 @@ function StatusPill({
   );
 }
 
-function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
+function DashboardContent({ appUrl, onUnpaired, initialTab }: DashboardProps) {
   const [status, setStatus] = useState<HostStatusSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [unpairing, setUnpairing] = useState(false);
-  const [tab, setTab] = useState<DashboardTab>("status");
+  const [tab, setTab] = useState<DashboardTab>(initialTab ?? "status");
   const [openError, setOpenError] = useState<string | null>(null);
   const [airGapped, setAirGapped] = useState(false);
   const [fallbackModel, setFallbackModel] = useState<string | null>(null);
@@ -335,6 +338,10 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
 
             {tab === "mcp" && <McpServersManager />}
 
+            {tab === "cursor" && <CursorIntegration />}
+
+            {tab === "memory" && <UserMemoryPanel />}
+
             {tab === "settings" && (
               <HostSettingsPanel
                 installedModels={status?.models ?? []}
@@ -381,6 +388,18 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             airGappedMode
               ? "Désactivé"
               : formatRelativeTime(status?.lastHeartbeatAt ?? null)
+          }
+        />
+        <StatusPill
+          label="Gateway Cursor"
+          ok={!!status?.cursorGatewayListening}
+          warn={!!status?.cursorGatewayEnabled && !status?.cursorGatewayListening}
+          detail={
+            !status?.cursorGatewayEnabled
+              ? "Désactivé"
+              : status?.cursorGatewayListening
+                ? `Port ${status?.cursorGatewayPort ?? 8765}`
+                : "Démarrage…"
           }
         />
       </section>
