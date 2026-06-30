@@ -55,7 +55,8 @@ use context::{
 use projects::{
     create_project, delete_project, list_projects, open_project, update_project, ProjectSummary,
 };
-use hardware::{advise_quantization, get_hardware_info};
+use hardware::{advise_music_device, advise_quantization, get_hardware_info, MusicDeviceAdvice};
+use media::{probe_musicgen_status, MusicGenStatus};
 use cloud_keys::CloudProviderId;
 use ollama::{
     check_ollama, delete_model, disk_free_gb_for_models_dir, ensure_embedding_model,
@@ -695,6 +696,56 @@ async fn synthesize_speech_cmd(request: media::TtsRequest) -> Result<media::TtsR
     media::synthesize_speech(request).await
 }
 
+#[tauri::command(rename = "get_voice_stt_status")]
+fn get_voice_stt_status_cmd() -> media::VoiceSttStatus {
+    media::get_stt_status()
+}
+
+#[tauri::command(rename = "ensure_whisper_model")]
+async fn ensure_whisper_model_cmd(model: Option<String>) -> Result<String, String> {
+    media::ensure_whisper_model(model)
+        .await
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command(rename = "transcribe_audio")]
+async fn transcribe_audio_cmd(path: String) -> Result<media::TranscribeAudioResult, String> {
+    media::transcribe_audio_file(std::path::Path::new(&path)).await
+}
+
+#[tauri::command(rename = "get_musicgen_status")]
+fn get_musicgen_status_cmd() -> MusicGenStatus {
+    probe_musicgen_status()
+}
+
+#[tauri::command(rename = "get_music_device_advice")]
+fn get_music_device_advice_cmd(force_cpu: Option<bool>) -> MusicDeviceAdvice {
+    advise_music_device(force_cpu.unwrap_or(false))
+}
+
+#[tauri::command(rename = "get_local_image_status")]
+fn get_local_image_status_cmd() -> media::LocalImageStatus {
+    let settings = get_settings().unwrap_or_default().local_image;
+    media::check_local_image_status(&settings)
+}
+
+#[tauri::command(rename = "list_comfyui_checkpoints")]
+async fn list_comfyui_checkpoints_cmd(base_url: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || media::list_comfyui_checkpoints(&base_url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(rename = "generate_local_image")]
+async fn generate_local_image_cmd(
+    input: media::GenerateImageInput,
+) -> Result<media::LocalImageResult, String> {
+    let settings = get_settings()?.local_image;
+    tauri::async_runtime::spawn_blocking(move || media::generate_local_image(&settings, &input))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command(rename = "get_cursor_integration")]
 fn get_cursor_integration_cmd() -> Result<CursorIntegrationInfo, String> {
     let settings = get_settings()?;
@@ -813,6 +864,14 @@ pub fn run() {
             list_mcp_tools_cmd,
             get_tts_status_cmd,
             synthesize_speech_cmd,
+            get_voice_stt_status_cmd,
+            ensure_whisper_model_cmd,
+            transcribe_audio_cmd,
+            get_musicgen_status_cmd,
+            get_music_device_advice_cmd,
+            get_local_image_status_cmd,
+            list_comfyui_checkpoints_cmd,
+            generate_local_image_cmd,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

@@ -788,6 +788,17 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] WS `inline_edit.preview` / `inline_edit.apply` sur documents .md liés
 - [x] Web : `inline-edit-panel.tsx`
 
+## Génération média (post-V1)
+
+- [x] Image locale : ComfyUI / SD WebUI via HTTP localhost configurable (`media/image.rs`, `localImage` settings)
+- [x] Commandes Tauri `get_local_image_status`, `list_comfyui_checkpoints`, `generate_local_image`
+- [x] WS `media.generate` / `media.progress` / `media.done` (kind `image`)
+- [x] UI Host `LocalImagePanel.tsx` (onglet Images)
+- [x] Voix TTS : Piper (offline) / edge-tts / OpenAI dans `media/voice.rs` (`voiceTts` settings)
+- [x] Commandes Tauri `get_tts_status`, `synthesize_speech`
+- [x] WS `media.generate` kind `voice` (TTS par défaut, STT Whisper via `voiceMode=stt`)
+- [x] `cargo check` dans `apps/runner/src-tauri`
+
 ## Build local
 
 ```bash
