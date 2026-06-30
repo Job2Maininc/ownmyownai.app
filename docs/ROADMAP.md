@@ -1,6 +1,6 @@
 # Roadmap post-V1
 
-Feuille de route après la V1 : intégration **Cursor IDE** (inférence locale sans crédits cloud) et **génération multimédia** (image, voix, musique, vidéo). Référence produit : page marketing `/cursor`, guide `docs/CURSOR.md` (à venir).
+Feuille de route après la V1 : intégration **Cursor IDE** (inférence locale sans crédits cloud) et **génération multimédia** (image, voix, musique, vidéo). Référence produit : page marketing `/cursor`, guide [docs/CURSOR.md](./CURSOR.md).
 
 ---
 
@@ -124,5 +124,5 @@ OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 | `docs/SUBAGENTS.md` | Registre skills Cursor / Claude / Codex |
 | `docs/V1_CHECKLIST.md` | Critères d'acceptation V1 |
 | `docs/ARCHITECTURE.md` | Couches relay / Host / web |
-| `docs/CURSOR.md` | Guide intégration Cursor (à créer, P0) |
+| `docs/CURSOR.md` | Guide intégration Cursor (chemin Ollama direct + gateway/MCP) |
 | `docs/MEDIA_GENERATION.md` | Guide génération média (à créer, P2) |
