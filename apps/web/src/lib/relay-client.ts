@@ -13,15 +13,20 @@ import {
   type InlineEditPreviewRequest,
   type InlineEditPreviewResponse,
   type KnowledgeBaseSummary,
+  type ChatAgentStepPayload,
   type RagCitation,
   type ModelPullProgressPayload,
   type ChatMentionScope,
   type ChatTaskIntent,
   type ProjectOpenedPayload,
   type ProjectSummary,
+  type UserMemoryFact,
+  type UserMemoryState,
   type PatchApplyRequest,
   type PatchPreviewRequest,
   type PatchPreviewResponse,
+  type McpServerSummary,
+  type McpToolDescriptor,
   type PlaybookSummary,
   type TerminalExecPayload,
   type TerminalOutputPayload,
@@ -61,6 +66,7 @@ export interface RelayClientCallbacks {
   onQueued?: (position: number, waitingAhead: number) => void;
   onDelta?: (content: string) => void;
   onThinkingDelta?: (thinking: string) => void;
+  onAgentStep?: (step: ChatAgentStepPayload) => void;
   onCitations?: (citations: RagCitation[]) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -339,6 +345,33 @@ export class RelayClient {
         }
         break;
       }
+      case WS_MESSAGE_TYPES.CHAT_AGENT_STEP: {
+        if (!this.isActiveRequest(envelope)) return;
+        this.clearChatFirstResponseTimer();
+        this.resetChatIdleTimer();
+        const payload = envelope.payload as {
+          step?: number;
+          maxSteps?: number;
+          tool?: string;
+          status?: string;
+        };
+        if (
+          typeof payload.step === "number" &&
+          typeof payload.tool === "string" &&
+          payload.tool.length > 0
+        ) {
+          this.callbacks.onAgentStep?.({
+            step: payload.step,
+            maxSteps:
+              typeof payload.maxSteps === "number" && payload.maxSteps >= 1
+                ? payload.maxSteps
+                : 10,
+            tool: payload.tool,
+            status: normalizeAgentStepStatus(payload.status ?? "running"),
+          });
+        }
+        break;
+      }
       case WS_MESSAGE_TYPES.CHAT_CITATIONS: {
         if (!this.isActiveRequest(envelope)) return;
         const payload = envelope.payload as { citations?: RagCitation[] };
@@ -478,6 +511,32 @@ export class RelayClient {
       throw new Error(this.payloadMessage(env, "Impossible de charger les playbooks"));
     }
     return ((env.payload as { playbooks?: PlaybookSummary[] }).playbooks ?? []);
+  }
+
+  async listMcpServers(): Promise<McpServerSummary[]> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MCP_LIST, {}) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.MCP_SERVERS, WS_MESSAGE_TYPES.MCP_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type !== WS_MESSAGE_TYPES.MCP_SERVERS) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger les serveurs MCP"));
+    }
+    return ((env.payload as { servers?: McpServerSummary[] }).servers ?? []);
+  }
+
+  async listMcpTools(): Promise<McpToolDescriptor[]> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MCP_TOOLS, {}) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.MCP_TOOLS, WS_MESSAGE_TYPES.MCP_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type !== WS_MESSAGE_TYPES.MCP_TOOLS) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger les outils MCP"));
+    }
+    return ((env.payload as { tools?: McpToolDescriptor[] }).tools ?? []);
   }
 
   async listContextBases(): Promise<KnowledgeBaseSummary[]> {
@@ -702,6 +761,54 @@ export class RelayClient {
     return env.payload as PatchPreviewResponse;
   }
 
+  async listMemory(): Promise<UserMemoryState> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MEMORY_LIST, {}) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.MEMORY_LIST, WS_MESSAGE_TYPES.MEMORY_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.MEMORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger la mémoire"));
+    }
+    return env.payload as UserMemoryState;
+  }
+
+  async addMemoryFact(content: string): Promise<UserMemoryFact> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MEMORY_ADD, { content }) ?? "";
+    const env = await this.waitFor(requestId, [
+      WS_MESSAGE_TYPES.MEMORY_ADDED,
+      WS_MESSAGE_TYPES.MEMORY_ERROR,
+    ]);
+    if (env.type === WS_MESSAGE_TYPES.MEMORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible d'ajouter le fait"));
+    }
+    return (env.payload as { fact: UserMemoryFact }).fact;
+  }
+
+  async deleteMemoryFact(id: string): Promise<void> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MEMORY_DELETE, { id }) ?? "";
+    const env = await this.waitFor(requestId, [
+      WS_MESSAGE_TYPES.MEMORY_DELETED,
+      WS_MESSAGE_TYPES.MEMORY_ERROR,
+    ]);
+    if (env.type === WS_MESSAGE_TYPES.MEMORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de supprimer le fait"));
+    }
+  }
+
+  async setMemoryEnabled(enabled: boolean): Promise<boolean> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MEMORY_SET_ENABLED, { enabled }) ?? "";
+    const env = await this.waitFor(requestId, [
+      WS_MESSAGE_TYPES.MEMORY_UPDATED,
+      WS_MESSAGE_TYPES.MEMORY_ERROR,
+    ]);
+    if (env.type === WS_MESSAGE_TYPES.MEMORY_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de modifier la mémoire"));
+    }
+    return (env.payload as { enabled: boolean }).enabled;
+  }
+
   async listProjects(): Promise<{
     projects: ProjectSummary[];
     activeProjectId?: string | null;
@@ -900,4 +1007,14 @@ export class RelayClient {
       this.ws = null;
     }
   }
+}
+
+/** Mappe les statuts Host (FR ou protocole) vers l'enum du schéma. */
+function normalizeAgentStepStatus(
+  raw: string,
+): ChatAgentStepPayload["status"] {
+  const s = raw.toLowerCase();
+  if (s === "done" || s === "terminé" || s === "termine") return "done";
+  if (s === "error" || s === "erreur") return "error";
+  return "running";
 }

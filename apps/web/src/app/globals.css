@@ -1212,6 +1212,10 @@ body {
   color: var(--muted);
 }
 
+.onboarding-step-detail__body {
+  margin-top: 1rem;
+}
+
 /* Empty states */
 .empty-state {
   display: flex;

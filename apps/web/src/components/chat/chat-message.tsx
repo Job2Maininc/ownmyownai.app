@@ -1,6 +1,6 @@
 "use client";
 
-import type { RagCitation } from "@ownmyownai/protocol";
+import type { ChatAgentStepPayload, RagCitation } from "@ownmyownai/protocol";
 import type { ParsedArtifact } from "@/lib/artifacts";
 import type { RelayClient } from "@/lib/relay-client";
 import { MarkdownMessage } from "./markdown-message";
@@ -10,6 +10,7 @@ export interface ChatMessageData {
   role: "user" | "assistant";
   content: string;
   thinking?: string;
+  agentSteps?: ChatAgentStepPayload[];
   citations?: RagCitation[];
 }
 
@@ -26,6 +27,60 @@ interface ChatMessageProps {
   connected: boolean;
 }
 
+function agentStepStatusLabel(status: ChatAgentStepPayload["status"]): string {
+  switch (status) {
+    case "done":
+      return "Terminé";
+    case "error":
+      return "Erreur";
+    default:
+      return "En cours";
+  }
+}
+
+function AgentStepList({
+  steps,
+  streaming,
+}: {
+  steps: ChatAgentStepPayload[];
+  streaming: boolean;
+}) {
+  if (steps.length === 0) return null;
+
+  const maxSteps = steps.reduce((max, s) => Math.max(max, s.maxSteps), 1);
+  const latestStep = steps.reduce((max, s) => (s.step > max ? s.step : max), 0);
+
+  return (
+    <div className="chat-message__agent-steps" aria-live={streaming ? "polite" : undefined}>
+      <p className="chat-message__agent-steps-title">
+        Étapes agent ({latestStep}/{maxSteps})
+      </p>
+      <ol className="chat-message__agent-steps-list">
+        {steps.map((step, i) => {
+          const isLast = i === steps.length - 1;
+          const isActive = streaming && isLast && step.status === "running";
+          return (
+            <li
+              key={`${step.step}-${step.tool}-${i}`}
+              className={`chat-message__agent-step chat-message__agent-step--${step.status}${
+                isActive ? " chat-message__agent-step--active" : ""
+              }`}
+            >
+              <span className="chat-message__agent-step-index" aria-hidden>
+                {step.step}
+              </span>
+              <span className="chat-message__agent-step-tool">{step.tool}</span>
+              <span className="chat-message__agent-step-status">
+                {agentStepStatusLabel(step.status)}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 export function ChatMessage({
   message,
   index,
@@ -38,7 +93,14 @@ export function ChatMessage({
   contextIds,
   connected,
 }: ChatMessageProps) {
-  if (message.role === "assistant" && !message.content.trim() && !message.thinking?.trim()) {
+  const hasAgentSteps = (message.agentSteps?.length ?? 0) > 0;
+
+  if (
+    message.role === "assistant" &&
+    !message.content.trim() &&
+    !message.thinking?.trim() &&
+    !hasAgentSteps
+  ) {
     return null;
   }
 
@@ -62,6 +124,8 @@ export function ChatMessage({
     );
   }
 
+  const isStreamingMessage = streaming && index === messagesLength - 1;
+
   return (
     <div className="chat-message chat-message--assistant group">
       <div className="chat-message__avatar" aria-hidden>
@@ -71,11 +135,14 @@ export function ChatMessage({
         {message.thinking?.trim() && (
           <details
             className="chat-message__thinking"
-            open={streaming && index === messagesLength - 1}
+            open={isStreamingMessage}
           >
             <summary>Chaîne de pensée</summary>
             <pre>{message.thinking}</pre>
           </details>
+        )}
+        {hasAgentSteps && message.agentSteps && (
+          <AgentStepList steps={message.agentSteps} streaming={isStreamingMessage} />
         )}
         {message.content.trim() ? (
           <div className="chat-message__content prose-chat">

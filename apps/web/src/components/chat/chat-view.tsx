@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
+  ChatAgentStepPayload,
   ChatMessage,
   ChatThreadSummary,
   HostStatus,
@@ -49,17 +50,21 @@ import { ChatToolbar } from "./chat-toolbar";
 import { IndexingProgressBar } from "./indexing-progress-bar";
 import type { IndexingProgressPayload } from "@/lib/relay-client";
 import { ContextPanel, loadActiveContextIds } from "./context-panel";
+import { TerminalPanel } from "./terminal-panel";
+import { MemoryPanel } from "./memory-panel";
+import { McpToolsPanel } from "./mcp-tools-panel";
 import { FeatureIcon } from "@/components/ui/icon";
 import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
 
-type SidebarTab = "context" | "artifacts";
+type SidebarTab = "context" | "artifacts" | "memory" | "terminal";
 
 interface UiMessage {
   role: "user" | "assistant";
   content: string;
   thinking?: string;
+  agentSteps?: ChatAgentStepPayload[];
   citations?: RagCitation[];
 }
 
@@ -89,10 +94,23 @@ function thinkingModeKey(hostId: string) {
   return `thinking-mode:${hostId}`;
 }
 
+function agentModeKey(hostId: string) {
+  return `agent-mode:${hostId}`;
+}
+
 function loadThinkingMode(hostId: string): boolean {
   if (typeof window === "undefined") return false;
   try {
     return localStorage.getItem(thinkingModeKey(hostId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function loadAgentMode(hostId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(agentModeKey(hostId)) === "1";
   } catch {
     return false;
   }
@@ -139,6 +157,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const [model, setModel] = useState(defaultModel);
   const [modelSearch, setModelSearch] = useState("");
   const [thinkingMode, setThinkingMode] = useState(false);
+  const [agentMode, setAgentMode] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [hostStatus, setHostStatus] = useState<HostStatus>("offline");
   const [error, setError] = useState<UserError | null>(null);
@@ -174,6 +193,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   const hasConnectedRef = useRef(false);
   const assistantBuffer = useRef("");
   const thinkingBuffer = useRef("");
+  const agentStepsBuffer = useRef<ChatAgentStepPayload[]>([]);
   const assistantMessageIndex = useRef<number | null>(null);
   const pendingUserMessage = useRef<UiMessage | null>(null);
   const pendingCitations = useRef<RagCitation[] | undefined>(undefined);
@@ -204,8 +224,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, []);
 
   const commitAssistantTurn = useCallback(
-    (prev: UiMessage[], content: string, thinking?: string): UiMessage[] => {
-      if (!content.trim() && !thinking?.trim()) return prev;
+    (
+      prev: UiMessage[],
+      content: string,
+      thinking?: string,
+      agentSteps?: ChatAgentStepPayload[],
+    ): UiMessage[] => {
+      if (!content.trim() && !thinking?.trim() && !(agentSteps?.length ?? 0)) return prev;
 
       const next = [...prev];
       const pending = pendingUserMessage.current;
@@ -226,6 +251,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         role: "assistant",
         content,
         thinking: thinking ?? existing?.thinking,
+        agentSteps: agentSteps ?? existing?.agentSteps,
         citations: pendingCitations.current ?? existing?.citations,
       };
 
@@ -240,12 +266,24 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     [],
   );
 
+  const upsertAgentStep = useCallback((step: ChatAgentStepPayload) => {
+    const buf = agentStepsBuffer.current;
+    const idx = buf.findIndex((s) => s.step === step.step);
+    if (idx >= 0) {
+      buf[idx] = step;
+    } else {
+      buf.push(step);
+      buf.sort((a, b) => a.step - b.step);
+    }
+  }, []);
+
   const clearAssistantTurn = useCallback(() => {
     assistantMessageIndex.current = null;
     pendingUserMessage.current = null;
     pendingCitations.current = undefined;
     assistantBuffer.current = "";
     thinkingBuffer.current = "";
+    agentStepsBuffer.current = [];
   }, []);
 
   const attachCitations = useCallback((citations: RagCitation[]) => {
@@ -284,6 +322,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     applyTree(tree);
     setActiveContextIds(loadActiveContextIds(hostId));
     setThinkingMode(loadThinkingMode(hostId));
+    setAgentMode(loadAgentMode(hostId));
     try {
       const raw = sessionStorage.getItem(projectKey(hostId));
       setActiveProjectId(raw ? (JSON.parse(raw) as string) : null);
@@ -311,6 +350,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   useEffect(() => {
     localStorage.setItem(thinkingModeKey(hostId), thinkingMode ? "1" : "0");
   }, [hostId, thinkingMode]);
+
+  useEffect(() => {
+    localStorage.setItem(agentModeKey(hostId), agentMode ? "1" : "0");
+  }, [hostId, agentMode]);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -445,9 +488,18 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         setQueueHint(null);
         activeRequestId.current = null;
         const content = assistantBuffer.current;
-        if (content.trim() || thinkingBuffer.current.trim()) {
+        if (
+          content.trim() ||
+          thinkingBuffer.current.trim() ||
+          agentStepsBuffer.current.length > 0
+        ) {
           setMessages((prev) =>
-            commitAssistantTurn(prev, content, thinkingBuffer.current),
+            commitAssistantTurn(
+              prev,
+              content,
+              thinkingBuffer.current,
+              [...agentStepsBuffer.current],
+            ),
           );
         }
         clearAssistantTurn();
@@ -460,7 +512,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       client.disconnect();
       relayRef.current = null;
     };
-  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn]);
+  }, [hostId, attachCitations, clearAssistantTurn, commitAssistantTurn, upsertAgentStep]);
 
   const connected = relayStatus === "connected";
 
@@ -761,6 +813,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setError(null);
     assistantBuffer.current = "";
     thinkingBuffer.current = "";
+    agentStepsBuffer.current = [];
     pendingCitations.current = undefined;
 
     const chatMessages: ChatMessage[] = newMessages.map((m) => ({
@@ -777,6 +830,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       activeProjectId ?? undefined,
       mentionScope,
       thinkingMode,
+      agentMode || undefined,
     );
     activeRequestId.current = requestId ?? null;
   }, [
@@ -790,7 +844,13 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     model,
     streaming,
     thinkingMode,
+    agentMode,
   ]);
+
+  const openTerminalPanel = useCallback(() => {
+    setSidebarTab("terminal");
+    setShowSidebar(true);
+  }, []);
 
   const paletteCommands = useMemo(
     () => [
@@ -805,9 +865,17 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       {
         id: "chat-toggle-context",
         label: showSidebar ? "Masquer le panneau latéral" : "Afficher le panneau latéral",
-        keywords: "bases documents rag projet artefacts",
+        keywords: "bases documents rag projet artefacts mémoire",
         group: "Chat",
         onSelect: () => setShowSidebar((value) => !value),
+      },
+      {
+        id: "chat-toggle-terminal",
+        label: "Ouvrir le terminal intégré",
+        keywords: "shell commande git cargo npm exec",
+        group: "Chat",
+        disabled: !connected,
+        onSelect: openTerminalPanel,
       },
       {
         id: "chat-export",
@@ -845,6 +913,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       handleExportConversation,
       handleNewConversation,
       handleStop,
+      openTerminalPanel,
+      connected,
       messages.length,
       router,
       showSidebar,
@@ -887,6 +957,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         filteredModels={filteredModels}
         thinkingMode={thinkingMode}
         onThinkingModeChange={setThinkingMode}
+        agentMode={agentMode}
+        onAgentModeChange={setAgentMode}
         streaming={streaming}
         showSidebar={showSidebar}
         onToggleSidebar={() => setShowSidebar((v) => !v)}
@@ -1044,6 +1116,22 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               >
                 Artefacts{artifacts.length > 0 ? ` (${artifacts.length})` : ""}
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sidebarTab === "memory"}
+                onClick={() => setSidebarTab("memory")}
+              >
+                Mémoire
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sidebarTab === "terminal"}
+                onClick={() => setSidebarTab("terminal")}
+              >
+                Terminal
+              </button>
             </div>
             {sidebarTab === "context" ? (
               <ContextPanel
@@ -1057,6 +1145,10 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                   setActiveContextIds(kbaseIds);
                 }}
               />
+            ) : sidebarTab === "memory" ? (
+              <MemoryPanel relay={relayRef.current} connected={connected} />
+            ) : sidebarTab === "terminal" ? (
+              <TerminalPanel relay={relayRef.current} connected={connected} />
             ) : (
               <ArtifactsPanel
                 artifacts={artifacts}
