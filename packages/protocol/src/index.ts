@@ -404,6 +404,10 @@ export const WS_MESSAGE_TYPES = {
   JOB_CANCELLED: "job.cancelled",
   JOB_LIST: "job.list",
   JOB_STATUS: "job.status",
+  /** Génération média locale/cloud (image, voix, musique, vidéo). */
+  MEDIA_GENERATE: "media.generate",
+  MEDIA_PROGRESS: "media.progress",
+  MEDIA_DONE: "media.done",
   PLAYBOOK_LIST: "playbook.list",
   PLAYBOOK_RUN: "playbook.run",
   PLAYBOOK_ERROR: "playbook.error",
@@ -609,6 +613,49 @@ export const JobDonePayloadSchema = z.object({
   message: z.string().optional(),
 });
 export type JobDonePayload = z.infer<typeof JobDonePayloadSchema>;
+
+/** Types de média générés localement ou via cloud (Host → `creatives/`). */
+export const MediaKindSchema = z.enum(["image", "voice", "music", "video"]);
+export type MediaKind = z.infer<typeof MediaKindSchema>;
+
+/** Sous-mode voix : synthèse (TTS) ou transcription (STT). */
+export const MediaVoiceModeSchema = z.enum(["tts", "stt"]);
+export type MediaVoiceMode = z.infer<typeof MediaVoiceModeSchema>;
+
+/** Demande de génération média (web → Host). */
+export const MediaGeneratePayloadSchema = z.object({
+  kind: MediaKindSchema,
+  prompt: z.string().min(1),
+  model: z.string().optional(),
+  /** TTS/STT pour `kind=voice` ; ignoré sinon. */
+  voiceMode: MediaVoiceModeSchema.optional(),
+  /** Fichier source local Host (STT, vidéo slideshow). */
+  sourcePath: z.string().optional(),
+  contextIds: z.array(z.string()).optional(),
+});
+export type MediaGeneratePayload = z.infer<typeof MediaGeneratePayloadSchema>;
+
+export const MediaProgressPayloadSchema = z.object({
+  jobId: z.string(),
+  kind: MediaKindSchema.optional(),
+  status: z.enum(["queued", "running"]),
+  message: z.string().optional(),
+  progress: z.number().min(0).max(100).optional(),
+});
+export type MediaProgressPayload = z.infer<typeof MediaProgressPayloadSchema>;
+
+export const MediaDonePayloadSchema = z.object({
+  jobId: z.string(),
+  kind: MediaKindSchema,
+  /** Nom fichier dans `creatives/`. */
+  filename: z.string(),
+  /** Chemin absolu côté Host (lecture seule web). */
+  filepath: z.string(),
+  mimeType: z.string().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  message: z.string().optional(),
+});
+export type MediaDonePayload = z.infer<typeof MediaDonePayloadSchema>;
 
 export const JobCancelPayloadSchema = z.object({
   jobId: z.string(),

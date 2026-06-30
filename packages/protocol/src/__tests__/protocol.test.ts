@@ -14,6 +14,9 @@ import {
   McpCallPayloadSchema,
   McpServerSummarySchema,
   McpToolDescriptorSchema,
+  MediaDonePayloadSchema,
+  MediaGeneratePayloadSchema,
+  MediaProgressPayloadSchema,
   PatchPreviewRequestSchema,
   PatchPreviewResponseSchema,
   PlaybookRunPayloadSchema,
@@ -263,5 +266,36 @@ describe("protocol", () => {
     });
     expect(payload.position).toBe(2);
     expect(WS_MESSAGE_TYPES.CHAT_QUEUED).toBe("chat.queued");
+  });
+
+  it("parse media.generate / progress / done payloads", () => {
+    const generate = MediaGeneratePayloadSchema.parse({
+      kind: "image",
+      prompt: "Paysage montagne au coucher du soleil",
+      model: "flux",
+    });
+    expect(generate.kind).toBe("image");
+
+    const progress = MediaProgressPayloadSchema.parse({
+      jobId: "media-1",
+      kind: "image",
+      status: "running",
+      progress: 42,
+      message: "Rendu en cours…",
+    });
+    expect(progress.progress).toBe(42);
+
+    const done = MediaDonePayloadSchema.parse({
+      jobId: "media-1",
+      kind: "image",
+      filename: "sunset.png",
+      filepath: "C:\\Users\\me\\.ownmyownai\\creatives\\sunset.png",
+      mimeType: "image/png",
+      bytes: 204800,
+    });
+    expect(done.filename).toBe("sunset.png");
+    expect(WS_MESSAGE_TYPES.MEDIA_GENERATE).toBe("media.generate");
+    expect(WS_MESSAGE_TYPES.MEDIA_PROGRESS).toBe("media.progress");
+    expect(WS_MESSAGE_TYPES.MEDIA_DONE).toBe("media.done");
   });
 });
