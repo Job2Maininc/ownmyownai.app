@@ -129,6 +129,8 @@ mod tests {
             last_sync_status: "ok".into(),
             last_sync_error: None,
             doc_count: 0,
+            symbol_count: 0,
+            allowed_extensions: Vec::new(),
         };
         let root = link_root_path(&link).unwrap();
         assert_eq!(root, PathBuf::from(r"C:\repo\src"));

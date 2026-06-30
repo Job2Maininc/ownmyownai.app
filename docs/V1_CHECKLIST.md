@@ -679,6 +679,14 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Chat relay : `enableTools: true` dans `chat.start` déclenche l'agent multi-étapes
 - [x] Playbooks Host (`summarize-folder`) réutilisent la même boucle
 
+## Gateway OpenAI Cursor (tool calling)
+
+- [x] `POST /v1/chat/completions` accepte `tools` / `tool_choice` (format OpenAI)
+- [x] Conversion vers schémas Ollama (`agent/tools.rs`) + réponse `tool_calls` compatible Cursor
+- [x] En-tête `X-Enable-Local-Tools: true` fusionne les outils locaux Host
+- [x] Tool calling requiert `stream: false` ; modèles cloud non supportés pour l'instant
+- [x] Tests unitaires `openai_gateway::tests` (normalisation outils, `tool_calls`, SSE)
+
 ## Quantization advisor (omoa-quantization-advisor)
 
 - [x] Recommandation Q4/Q8 selon RAM et espace disque (`hardware.rs`, `get_quantization_advice`)

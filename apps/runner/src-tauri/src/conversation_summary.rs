@@ -176,7 +176,7 @@ mod tests {
     fn estimate_tokens_uses_char_heuristic() {
         assert_eq!(estimate_tokens(""), 1);
         assert_eq!(estimate_tokens("abcd"), 1);
-        assert_eq!(estimate_tokens("a".repeat(40)), 10);
+        assert_eq!(estimate_tokens(&"a".repeat(40)), 10);
     }
 
     #[test]

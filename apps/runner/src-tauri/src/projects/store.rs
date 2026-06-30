@@ -228,7 +228,7 @@ mod tests {
         init_db().expect("init db");
         let kb = create_knowledge_base("KB test", "", &ContextLimits::default()).unwrap();
         let project = create_project("Projet A", "desc", &[kb.id.clone()]).unwrap();
-        assert_eq!(project.knowledge_base_ids, vec![kb.id]);
+        assert_eq!(project.knowledge_base_ids, vec![kb.id.clone()]);
 
         let (opened, ids) = open_project(&project.id).unwrap();
         assert_eq!(ids, vec![kb.id]);

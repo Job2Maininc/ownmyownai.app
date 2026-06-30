@@ -95,10 +95,12 @@ enum SseLineEvent {
 /// Parse une ligne SSE du flux chat OpenAI/Ollama.
 fn parse_sse_line(line: &str) -> SseLineEvent {
     let trimmed = line.trim();
-    if !trimmed.starts_with("data: ") {
+    let data = trimmed
+        .strip_prefix("data:")
+        .map(|rest| rest.trim());
+    let Some(data) = data else {
         return SseLineEvent::Skip;
-    }
-    let data = trimmed["data: ".len()..].trim();
+    };
     if data == "[DONE]" {
         return SseLineEvent::Done;
     }
