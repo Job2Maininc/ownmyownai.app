@@ -104,9 +104,23 @@ fn get_host_settings_cmd() -> Result<HostSettings, String> {
 
 #[tauri::command(rename = "save_host_settings")]
 fn save_host_settings_cmd(settings: HostSettings) -> Result<(), String> {
+    let prev = get_settings().ok();
     save_settings(&settings)?;
     mcp::close_all_sessions();
+    if gateway_bind_changed(prev.as_ref(), &settings) {
+        openai_gateway::reload();
+    }
     Ok(())
+}
+
+fn gateway_bind_changed(prev: Option<&HostSettings>, next: &HostSettings) -> bool {
+    match prev {
+        None => true,
+        Some(p) => {
+            p.cursor_gateway_port != next.cursor_gateway_port
+                || p.cursor_gateway_lan != next.cursor_gateway_lan
+        }
+    }
 }
 
 #[tauri::command(rename = "get_default_models_dir")]
@@ -638,12 +652,10 @@ struct CursorIntegrationInfo {
     api_token: String,
     enabled: bool,
     port: u16,
+    lan_enabled: bool,
+    lan_ip: Option<String>,
     default_model: String,
     settings_json: String,
-}
-
-fn cursor_gateway_base_url(port: u16) -> String {
-    format!("http://127.0.0.1:{port}/v1")
 }
 
 fn build_cursor_settings_json(
@@ -691,13 +703,24 @@ fn get_cursor_integration_cmd() -> Result<CursorIntegrationInfo, String> {
         .filter(|t| !t.is_empty())
         .ok_or("Token Cursor introuvable. Reliez ce PC.")?;
     let port = settings.cursor_gateway_port;
-    let base_url = cursor_gateway_base_url(port);
+    let bind_config = openai_gateway::GatewayBindConfig {
+        port,
+        lan: settings.cursor_gateway_lan,
+    };
+    let base_url = openai_gateway::client_base_url(&bind_config);
+    let lan_ip = if settings.cursor_gateway_lan {
+        openai_gateway::primary_lan_ip()
+    } else {
+        None
+    };
     let settings_json = build_cursor_settings_json(&base_url, &api_token, &settings.default_model)?;
     Ok(CursorIntegrationInfo {
         base_url,
         api_token,
         enabled: settings.cursor_gateway_enabled,
         port,
+        lan_enabled: settings.cursor_gateway_lan,
+        lan_ip,
         default_model: settings.default_model,
         settings_json,
     })

@@ -101,6 +101,10 @@ export interface CursorIntegrationInfo {
   apiToken: string;
   enabled: boolean;
   port: number;
+  /** Écoute LAN (`0.0.0.0`) au lieu de localhost uniquement. */
+  lanEnabled: boolean;
+  /** IP locale suggérée pour Cursor sur un autre poste du réseau. */
+  lanIp?: string | null;
   defaultModel: string;
   settingsJson: string;
 }
@@ -137,6 +141,8 @@ export interface HostSettings {
   cursorGatewayEnabled?: boolean;
   /** Port HTTP du gateway Cursor (localhost). */
   cursorGatewayPort?: number;
+  /** Écoute LAN (`0.0.0.0`) pour clients sur le réseau local. */
+  cursorGatewayLan?: boolean;
   /** Plafond req/min par token Bearer sur le gateway (0 = désactivé). */
   cursorGatewayMaxReqPerMin?: number;
   /** Nombre de passages RAG injectés par question. */

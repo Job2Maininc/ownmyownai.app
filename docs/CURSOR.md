@@ -112,7 +112,9 @@ Le bouton **Copier config Cursor** génère un JSON au format Cursor Settings :
   "openai.apiKey": "omoa_<uuid>",
   "openai.baseUrl": "http://127.0.0.1:8765/v1",
   "cursor.general.openAiKey": "omoa_<uuid>",
-  "cursor.general.openAiBaseUrl": "http://127.0.0.1:8765/v1"
+  "cursor.general.openAiBaseUrl": "http://127.0.0.1:8765/v1",
+  "cursor.model": "qwen2.5:7b",
+  "model": "qwen2.5:7b"
 }
 ```
 
@@ -120,7 +122,7 @@ Le bouton **Copier config Cursor** génère un JSON au format Cursor Settings :
 |-------|--------|-------------------------|
 | Base URL | `http://127.0.0.1:8765/v1` | **Override OpenAI Base URL** |
 | API Key | token `omoa_…` du Host | **OpenAI API Key** |
-| Modèle | modèle par défaut Host | Sélecteur de modèle Cursor |
+| `model` / `cursor.model` | modèle par défaut Host | Sélecteur de modèle Cursor |
 
 ### Port personnalisé
 
