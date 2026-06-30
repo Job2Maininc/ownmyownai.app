@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-generate-local-image"
+description = "Enables the generate_local_image command without any pre-configured scope."
+commands.allow = ["generate_local_image"]
+
+[[permission]]
+identifier = "deny-generate-local-image"
+description = "Denies the generate_local_image command without any pre-configured scope."
+commands.deny = ["generate_local_image"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-music-device-advice"
+description = "Enables the get_music_device_advice command without any pre-configured scope."
+commands.allow = ["get_music_device_advice"]
+
+[[permission]]
+identifier = "deny-get-music-device-advice"
+description = "Denies the get_music_device_advice command without any pre-configured scope."
+commands.deny = ["get_music_device_advice"]

@@ -43,6 +43,9 @@ quick-xml = "0.37"
 regex = "1"
 sha2 = "0.10"
 image = "0.25"
+hound = "3.5"
+rubato = "0.16"
+symphonia = { version = "0.5", features = ["aac", "flac", "mp3", "pcm", "vorbis", "wav"] }
 omniparse = { version = "0.4.1", default-features = false, features = ["pdf", "ocr"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

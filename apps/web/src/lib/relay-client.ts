@@ -16,12 +16,17 @@ import {
   type ChatAgentStepPayload,
   type RagCitation,
   type ModelPullProgressPayload,
+  type MediaDonePayload,
+  type MediaGeneratePayload,
+  type MediaProgressPayload,
   type ChatMentionScope,
   type ChatTaskIntent,
   type ProjectOpenedPayload,
   type ProjectSummary,
   type UserMemoryFact,
   type UserMemoryState,
+  type CreativeReadResult,
+  type CreativeSummary,
   type PatchApplyRequest,
   type PatchPreviewRequest,
   type PatchPreviewResponse,
@@ -72,6 +77,7 @@ export interface RelayClientCallbacks {
   onError?: (message: string) => void;
   onContextMessage?: (envelope: WsEnvelope) => void;
   onModelPullMessage?: (envelope: WsEnvelope) => void;
+  onMediaMessage?: (envelope: WsEnvelope) => void;
 }
 
 const BASE_BACKOFF_MS = 1_000;
@@ -252,6 +258,13 @@ export class RelayClient {
       pending.onProgress?.(payload.percent ?? 0, payload.message ?? "");
       return true;
     }
+    if (
+      envelope.type === WS_MESSAGE_TYPES.MODEL_PULL_PROGRESS ||
+      envelope.type === WS_MESSAGE_TYPES.MEDIA_PROGRESS
+    ) {
+      pending.resolve(envelope);
+      return true;
+    }
     if (envelope.type === WS_MESSAGE_TYPES.TERMINAL_OUTPUT) {
       pending.resolve(envelope);
       return true;
@@ -273,6 +286,10 @@ export class RelayClient {
     }
     if (envelope.type.startsWith("model.pull")) {
       this.callbacks.onModelPullMessage?.(envelope);
+      return;
+    }
+    if (envelope.type.startsWith("media.")) {
+      this.callbacks.onMediaMessage?.(envelope);
       return;
     }
 
@@ -664,6 +681,53 @@ export class RelayClient {
     });
   }
 
+  /**
+   * Lance une génération média sur le Host et reçoit la progression via `media.progress`
+   * (même `requestId` que `media.generate`, comme `model.pull.progress`).
+   */
+  async generateMedia(
+    payload: MediaGeneratePayload,
+    onProgress?: (progress: MediaProgressPayload) => void,
+  ): Promise<MediaDonePayload> {
+    const requestId = this.send(WS_MESSAGE_TYPES.MEDIA_GENERATE, payload) ?? "";
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(requestId);
+        reject(new Error("Délai de génération média dépassé"));
+      }, 600_000);
+
+      this.pendingRequests.set(requestId, {
+        resolve: (env) => {
+          if (env.type === WS_MESSAGE_TYPES.MEDIA_PROGRESS) {
+            onProgress?.(env.payload as MediaProgressPayload);
+            return;
+          }
+          clearTimeout(timer);
+          this.pendingRequests.delete(requestId);
+          if (env.type === WS_MESSAGE_TYPES.MEDIA_DONE) {
+            resolve(env.payload as MediaDonePayload);
+          } else {
+            reject(
+              new Error(
+                (env.payload as { message?: string }).message ?? "Échec de la génération média",
+              ),
+            );
+          }
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+        types: new Set([
+          WS_MESSAGE_TYPES.MEDIA_PROGRESS,
+          WS_MESSAGE_TYPES.MEDIA_DONE,
+          WS_MESSAGE_TYPES.MEDIA_ERROR,
+        ]),
+      });
+    });
+  }
+
   async execTerminal(
     payload: TerminalExecPayload,
     onOutput?: (output: TerminalOutputPayload) => void,
@@ -772,6 +836,44 @@ export class RelayClient {
       throw new Error(this.payloadMessage(env, "Impossible de charger la mémoire"));
     }
     return env.payload as UserMemoryState;
+  }
+
+  async listCreatives(): Promise<CreativeSummary[]> {
+    const requestId = this.send(WS_MESSAGE_TYPES.CREATIVES_LIST, {}) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.CREATIVES_LIST, WS_MESSAGE_TYPES.CREATIVES_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.CREATIVES_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de charger la galerie"));
+    }
+    const payload = env.payload as { creatives?: CreativeSummary[] };
+    return payload.creatives ?? [];
+  }
+
+  async readCreative(id: string): Promise<CreativeReadResult> {
+    const requestId = this.send(WS_MESSAGE_TYPES.CREATIVES_READ, { id }) ?? "";
+    const env = await this.waitFor(
+      requestId,
+      [WS_MESSAGE_TYPES.CREATIVES_READ, WS_MESSAGE_TYPES.CREATIVES_ERROR],
+      CONTEXT_REQUEST_TIMEOUT_MS,
+    );
+    if (env.type === WS_MESSAGE_TYPES.CREATIVES_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de lire la création"));
+    }
+    return env.payload as CreativeReadResult;
+  }
+
+  async deleteCreative(id: string): Promise<void> {
+    const requestId = this.send(WS_MESSAGE_TYPES.CREATIVES_DELETE, { id }) ?? "";
+    const env = await this.waitFor(requestId, [
+      WS_MESSAGE_TYPES.CREATIVES_DELETED,
+      WS_MESSAGE_TYPES.CREATIVES_ERROR,
+    ]);
+    if (env.type === WS_MESSAGE_TYPES.CREATIVES_ERROR) {
+      throw new Error(this.payloadMessage(env, "Impossible de supprimer la création"));
+    }
   }
 
   async addMemoryFact(content: string): Promise<UserMemoryFact> {

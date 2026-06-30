@@ -57,8 +57,9 @@ fn default_sync_debounce_ms() -> u64 {
 }
 
 /// Extensions extractibles par l'ingestion (sous-ensemble autorisé pour les liens).
-pub const EXTRACTABLE_EXTENSIONS: &[&str] =
-    &["txt", "md", "pdf", "docx", "png", "jpg", "jpeg"];
+pub const EXTRACTABLE_EXTENSIONS: &[&str] = &[
+    "txt", "md", "pdf", "docx", "png", "jpg", "jpeg", "wav", "mp3", "m4a", "ogg", "flac", "webm",
+];
 
 pub fn default_allowed_extensions_list() -> Vec<String> {
     EXTRACTABLE_EXTENSIONS
@@ -213,6 +214,80 @@ impl Default for VoiceTtsSettings {
             piper_model: None,
             edge_tts_voice: default_edge_tts_voice(),
             openai_voice: None,
+        }
+    }
+}
+
+/// Réglages voix locale (STT Whisper.cpp, TTS — voir `media/voice.rs`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceSettings {
+    /// Modèle Whisper GGML (tiny, base, small, medium, large-v3).
+    #[serde(default = "default_whisper_model_setting")]
+    pub whisper_model: String,
+    /// Chemin optionnel vers whisper-cli.exe (sinon auto-détection).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub whisper_cli_path: Option<String>,
+    /// Langue ISO pour STT (auto si vide).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stt_language: Option<String>,
+}
+
+fn default_whisper_model_setting() -> String {
+    crate::media::voice::default_whisper_model()
+}
+
+impl Default for VoiceSettings {
+    fn default() -> Self {
+        Self {
+            whisper_model: default_whisper_model_setting(),
+            whisper_cli_path: None,
+            stt_language: None,
+        }
+    }
+}
+
+/// Génération musicale locale via MusicGen / AudioCraft (Python).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicGenerationSettings {
+    #[serde(default = "default_music_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_music_python")]
+    pub python_command: String,
+    #[serde(default = "default_music_model")]
+    pub model: String,
+    #[serde(default = "default_music_duration")]
+    pub duration_seconds: u32,
+    /// `true` = CPU uniquement ; `false`/`None` = auto (GPU si VRAM suffisante, `hardware.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub force_cpu: Option<bool>,
+}
+
+fn default_music_enabled() -> bool {
+    true
+}
+
+fn default_music_python() -> String {
+    "python".to_string()
+}
+
+fn default_music_model() -> String {
+    "facebook/musicgen-small".to_string()
+}
+
+fn default_music_duration() -> u32 {
+    10
+}
+
+impl Default for MusicGenerationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: default_music_enabled(),
+            python_command: default_music_python(),
+            model: default_music_model(),
+            duration_seconds: default_music_duration(),
+            force_cpu: None,
         }
     }
 }
@@ -387,6 +462,12 @@ pub struct HostSettings {
     /// Synthèse vocale TTS (Piper, edge-tts, OpenAI).
     #[serde(default)]
     pub voice_tts: VoiceTtsSettings,
+    /// Transcription STT locale (Whisper.cpp).
+    #[serde(default)]
+    pub voice: VoiceSettings,
+    /// MusicGen / AudioCraft — génération musicale locale.
+    #[serde(default)]
+    pub music: MusicGenerationSettings,
 }
 
 fn default_chat_token_threshold() -> u32 {
@@ -465,6 +546,8 @@ impl Default for HostSettings {
             cursor_gateway_max_req_per_min: default_cursor_gateway_max_req_per_min(),
             local_image: LocalImageSettings::default(),
             voice_tts: VoiceTtsSettings::default(),
+            voice: VoiceSettings::default(),
+            music: MusicGenerationSettings::default(),
         }
     }
 }
