@@ -1,3 +1,5 @@
+export const DEFAULT_MODEL = "qwen2.5:7b";
+
 export type ModelCategory = "chat" | "code" | "vision" | "embedding";
 
 export interface RecommendedModel {
@@ -17,7 +19,7 @@ export const RECOMMENDED_MODELS: RecommendedModel[] = [
     name: "Llama 3.2 · 3B",
     sizeGb: 2.0,
     ramGb: 8,
-    tags: ["Recommandé", "Léger"],
+    tags: ["Léger"],
     category: "chat",
     description: "Modèle polyvalent et rapide, idéal pour démarrer sur un PC avec 8 Go de RAM.",
     bestFor: ["Chat général", "Résumés", "Questions / réponses"],
@@ -107,7 +109,7 @@ export const RECOMMENDED_MODELS: RecommendedModel[] = [
     name: "Qwen 2.5 · 7B",
     sizeGb: 4.7,
     ramGb: 16,
-    tags: ["Multilingue"],
+    tags: ["Recommandé", "Multilingue"],
     category: "chat",
     description: "Qwen 2.5 plus puissant, multilingue.",
     bestFor: ["Français", "Code", "Analyse"],

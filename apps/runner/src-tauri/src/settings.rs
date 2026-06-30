@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 const SETTINGS_FILE: &str = "settings.json";
-pub const FALLBACK_DEFAULT_MODEL: &str = "llama3.2:3b";
+pub const FALLBACK_DEFAULT_MODEL: &str = "qwen2.5:7b";
 pub const FALLBACK_VISION_MODEL: &str = "moondream:1.8b";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

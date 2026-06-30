@@ -12,7 +12,7 @@ interface ModelPullPanelProps {
 }
 
 export function ModelPullPanel({ hostId, disabled, onDone }: ModelPullPanelProps) {
-  const [model, setModel] = useState("llama3.2:3b");
+  const [model, setModel] = useState("qwen2.5:7b");
   const [pulling, setPulling] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [percent, setPercent] = useState<number | null>(null);
@@ -56,7 +56,7 @@ export function ModelPullPanel({ hostId, disabled, onDone }: ModelPullPanelProps
         <input
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          placeholder="ex. llama3.2:3b"
+          placeholder="ex. qwen2.5:7b"
           disabled={pulling || disabled}
           className="min-w-0 flex-1 rounded border border-[var(--border)] bg-white px-2 py-1 text-sm"
         />

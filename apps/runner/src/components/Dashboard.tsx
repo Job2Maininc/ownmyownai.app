@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { DEFAULT_MODEL } from "../data/models";
 import AuditTrail from "./AuditTrail";
 import ContextManager from "./ContextManager";
 import PrReviewPanel from "./PrReviewPanel";
@@ -286,7 +287,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
       {tab === "models" && (
         <ModelManager
           installedModels={status?.models ?? []}
-          defaultModel={status?.defaultModel ?? "llama3.2:3b"}
+          defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
           onDefaultChanged={refresh}
         />
       )}

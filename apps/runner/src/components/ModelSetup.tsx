@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  DEFAULT_MODEL,
   RECOMMENDED_MODELS,
   compatibilityLabel,
   getCompatibility,
@@ -16,8 +17,8 @@ interface ModelSetupProps {
 
 export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const [modelsDir, setModelsDir] = useState("");
-  const [selectedModels, setSelectedModels] = useState<string[]>(["llama3.2:3b"]);
-  const [defaultModel, setDefaultModel] = useState("llama3.2:3b");
+  const [selectedModels, setSelectedModels] = useState<string[]>([DEFAULT_MODEL]);
+  const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL);
   const [localError, setLocalError] = useState<string | null>(null);
   const [ramGb, setRamGb] = useState(8);
   const [gpuLabel, setGpuLabel] = useState<string | null>(null);

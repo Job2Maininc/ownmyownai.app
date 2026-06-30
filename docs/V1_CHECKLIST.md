@@ -123,7 +123,7 @@
 
 ## Fallback modèle (Host)
 
-- [x] `fallbackModel` dans `settings.json` + chaîne auto (défaut → sélection → `llama3.2:3b`)
+- [x] `fallbackModel` dans `settings.json` + chaîne auto (défaut → sélection → `qwen2.5:7b`)
 - [x] Chat relay : bascule si modèle absent ou premier token &gt; 45 s (`chat.modelFallback` WS)
 - [x] UI Host : sélecteur modèle secours dans le gestionnaire de modèles
 

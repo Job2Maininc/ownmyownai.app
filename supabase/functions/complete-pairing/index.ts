@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
       name: name ?? "Mon PC",
       platform: platform ?? "windows",
       ollama_version: ollama_version ?? null,
-      default_model: default_model ?? "llama3.2:3b",
+      default_model: default_model ?? "qwen2.5:7b",
       status: "offline",
     })
     .select("id, user_id, name, default_model")

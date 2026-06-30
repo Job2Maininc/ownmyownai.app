@@ -14,7 +14,7 @@ function makeHost(overrides: Partial<Host> = {}): Host {
     name: "Test PC",
     platform: "windows",
     ollama_version: null,
-    default_model: "llama3.2:3b",
+    default_model: "qwen2.5:7b",
     installed_models: [],
     disk_free_gb: null,
     context_summary: [],
