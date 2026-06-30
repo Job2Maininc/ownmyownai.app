@@ -319,12 +319,12 @@ fn build_gateway_router(auth_state: GatewayAuthState) -> Router {
         .route("/models", get(list_models))
         .route("/chat/completions", post(chat_completions))
         .layer(middleware::from_fn_with_state(
-            rate_limiter.clone(),
-            rate_limit_middleware,
-        ))
-        .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             bearer_auth_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            rate_limit_middleware,
         ));
 
     Router::new()
@@ -366,8 +366,9 @@ async fn gateway_supervisor(mut rx: watch::Receiver<GatewayBindConfig>) {
         }
 
         let app = build_gateway_router(auth_state);
-        let shutdown = async {
-            let _ = rx.changed().await;
+        let mut shutdown_rx = rx.clone();
+        let shutdown = async move {
+            let _ = shutdown_rx.changed().await;
         };
 
         if let Err(e) = axum::serve(listener, app)
@@ -405,9 +406,13 @@ struct ModelObject {
     owned_by: String,
 }
 
-async fn list_models() -> impl IntoResponse {
+async fn list_models() -> Result<Json<ModelsListResponse>, StatusCode> {
+    let models = tokio::task::spawn_blocking(list_available_models)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let created = chrono::Utc::now().timestamp();
-    let data: Vec<ModelObject> = list_available_models()
+    let data: Vec<ModelObject> = models
         .into_iter()
         .map(|id| ModelObject {
             id: id.clone(),
@@ -421,10 +426,10 @@ async fn list_models() -> impl IntoResponse {
         })
         .collect();
 
-    Json(ModelsListResponse {
+    Ok(Json(ModelsListResponse {
         object: "list".into(),
         data,
-    })
+    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1011,6 +1016,17 @@ mod tests {
     }
 
     #[test]
+    fn validate_gateway_bearer_rejects_when_unpaired() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer omoa_secret".parse().expect("header"),
+        );
+        let err = validate_gateway_bearer(&headers, "").unwrap_err();
+        assert!(err.contains("appairé"));
+    }
+
+    #[test]
     fn rate_limiter_allows_up_to_max_per_minute() {
         let limiter = GatewayRateLimiter::default();
         let token = "test-token";
@@ -1081,5 +1097,37 @@ mod tests {
             lan: false,
         });
         assert_eq!(url, "http://127.0.0.1:8765/v1");
+    }
+
+    #[test]
+    fn models_response_uses_openai_list_shape() {
+        let created = 1_700_000_000_i64;
+        let data: Vec<ModelObject> = ["qwen2.5:7b", "openai:gpt-4o-mini"]
+            .into_iter()
+            .map(|id| {
+                let id = id.to_string();
+                ModelObject {
+                    owned_by: if is_cloud_model(&id) {
+                        "cloud".into()
+                    } else {
+                        "ollama".into()
+                    },
+                    id,
+                    object: "model".into(),
+                    created,
+                }
+            })
+            .collect();
+
+        let response = ModelsListResponse {
+            object: "list".into(),
+            data,
+        };
+
+        let json = serde_json::to_value(&response).expect("json");
+        assert_eq!(json["object"], "list");
+        assert_eq!(json["data"][0]["id"], "qwen2.5:7b");
+        assert_eq!(json["data"][0]["owned_by"], "ollama");
+        assert_eq!(json["data"][1]["owned_by"], "cloud");
     }
 }
