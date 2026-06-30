@@ -209,6 +209,76 @@ fn footprint_gb(param_b: f64, quantization: &str) -> (f64, f64) {
     (size, ram)
 }
 
+/// VRAM minimale recommandée pour MusicGen small/medium sur GPU.
+pub const MUSICGEN_MIN_VRAM_GB: f64 = 4.0;
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicDeviceAdvice {
+    pub device: String,
+    pub gpu_name: Option<String>,
+    pub vram_gb: Option<f64>,
+    pub message: String,
+}
+
+fn best_discrete_gpu(gpus: &[GpuInfo]) -> Option<&GpuInfo> {
+    gpus.iter()
+        .filter(|g| g.kind == "discrete")
+        .max_by(|a, b| {
+            a.vram_gb
+                .unwrap_or(0.0)
+                .partial_cmp(&b.vram_gb.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+}
+
+/// Choisit `cuda` si un GPU discret avec assez de VRAM est détecté, sinon `cpu`.
+pub fn advise_music_device(force_cpu: bool) -> MusicDeviceAdvice {
+    if force_cpu {
+        return MusicDeviceAdvice {
+            device: "cpu".into(),
+            gpu_name: None,
+            vram_gb: None,
+            message: "CPU forcé dans les paramètres Host.".into(),
+        };
+    }
+
+    let hw = get_hardware_info();
+    if let Some(gpu) = best_discrete_gpu(&hw.gpus) {
+        let vram = gpu.vram_gb.unwrap_or(0.0);
+        if vram >= MUSICGEN_MIN_VRAM_GB {
+            return MusicDeviceAdvice {
+                device: "cuda".into(),
+                gpu_name: Some(gpu.name.clone()),
+                vram_gb: gpu.vram_gb,
+                message: format!(
+                    "GPU {name} (~{vram:.1} Go VRAM) — accélération CUDA activée",
+                    name = gpu.name,
+                    vram = vram
+                ),
+            };
+        }
+        return MusicDeviceAdvice {
+            device: "cpu".into(),
+            gpu_name: Some(gpu.name.clone()),
+            vram_gb: gpu.vram_gb,
+            message: format!(
+                "VRAM insuffisante sur {name} ({vram:.1} Go < {min:.0} Go) — repli CPU",
+                name = gpu.name,
+                vram = vram,
+                min = MUSICGEN_MIN_VRAM_GB
+            ),
+        };
+    }
+
+    MusicDeviceAdvice {
+        device: "cpu".into(),
+        gpu_name: None,
+        vram_gb: None,
+        message: "Aucun GPU discret détecté — génération sur CPU (plus lente).".into(),
+    }
+}
+
 pub fn advise_quantization(model_name: &str, disk_free_gb: Option<f64>) -> QuantizationAdvice {
     let hw = get_hardware_info();
     advise_quantization_for_hardware(model_name, disk_free_gb, hw.total_ram_gb)
@@ -323,5 +393,22 @@ mod tests {
         let (q8_size, q8_ram) = footprint_gb(7.0, "q8");
         assert!(q8_size > q4_size);
         assert!(q8_ram > q4_ram);
+    }
+
+    #[test]
+    fn music_device_forces_cpu_when_requested() {
+        let advice = advise_music_device(true);
+        assert_eq!(advice.device, "cpu");
+        assert!(advice.message.contains("CPU forcé"));
+    }
+
+    #[test]
+    fn music_device_falls_back_cpu_without_discrete_gpu() {
+        let advice = advise_music_device(false);
+        if get_hardware_info().has_discrete_gpu {
+            assert!(advice.device == "cuda" || advice.device == "cpu");
+        } else {
+            assert_eq!(advice.device, "cpu");
+        }
     }
 }
