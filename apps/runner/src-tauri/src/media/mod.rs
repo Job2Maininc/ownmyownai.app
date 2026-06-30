@@ -1,3 +1,8 @@
+//! Orchestration des jobs de génération média (image, voix, musique, vidéo).
+//!
+//! File d'attente async via `tokio::spawn` : `submit_media_job` enfile, `run_media_job`
+//! dispatche vers les sous-modules, propage `media.progress` / `media.done` sur le relay WS.
+
 mod audio_decode;
 mod image;
 mod music;
