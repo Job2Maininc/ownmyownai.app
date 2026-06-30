@@ -18,6 +18,9 @@ export async function MarketingShell({ children }: { children: React.ReactNode }
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
           <BrandMark href="/" size="sm" />
           <nav className="flex items-center gap-2 text-sm sm:gap-4">
+            <Link href="/help" className="nav-link hidden sm:inline">
+              Aide
+            </Link>
             <Link href="/cursor" className="nav-link hidden sm:inline">
               Cursor
             </Link>
@@ -33,6 +36,9 @@ export async function MarketingShell({ children }: { children: React.ReactNode }
                 <Icon name="more-horizontal" size={18} />
               </summary>
               <div className="nav-mobile-menu__panel">
+                <Link href="/help" className="nav-mobile-menu__link">
+                  Aide
+                </Link>
                 <Link href="/cursor" className="nav-mobile-menu__link">
                   Cursor
                 </Link>
