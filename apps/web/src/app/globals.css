@@ -6,6 +6,7 @@
 
 html {
   color-scheme: light;
+  background: var(--background);
 }
 
 html[data-theme="dark"] {
@@ -507,6 +508,13 @@ body {
   color: var(--muted);
 }
 
+.chat-toolbar__mode--toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
 .chat-message {
   position: relative;
   margin-bottom: 1.25rem;
@@ -580,6 +588,85 @@ body {
   max-height: 12rem;
   overflow-y: auto;
   white-space: pre-wrap;
+}
+
+.chat-message__agent-steps {
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.chat-message__agent-steps-title {
+  margin-bottom: 0.375rem;
+  font-weight: 600;
+  color: var(--link);
+}
+
+.chat-message__agent-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.chat-message__agent-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.375rem;
+  color: var(--muted);
+}
+
+.chat-message__agent-step--running {
+  color: var(--foreground);
+}
+
+.chat-message__agent-step--active {
+  background: color-mix(in srgb, var(--link) 8%, transparent);
+}
+
+.chat-message__agent-step--done {
+  color: var(--success, #16a34a);
+}
+
+.chat-message__agent-step--error {
+  color: var(--destructive, #dc2626);
+}
+
+.chat-message__agent-step-index {
+  display: inline-flex;
+  height: 1.25rem;
+  min-width: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--link);
+}
+
+.chat-message__agent-step-tool {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-message__agent-step-status {
+  font-size: 0.625rem;
+  opacity: 0.85;
+  white-space: nowrap;
 }
 
 .chat-message__fork {
@@ -929,6 +1016,58 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
+}
+
+.terminal-panel {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.terminal-panel__form {
+  flex-shrink: 0;
+}
+
+.terminal-panel__output {
+  flex: 1;
+  min-height: 120px;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface-hover);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.terminal-panel__line--stdout {
+  color: var(--foreground);
+}
+
+.terminal-panel__line--stderr {
+  color: var(--error);
+}
+
+.terminal-panel__cursor {
+  animation: terminal-blink 1s step-end infinite;
+}
+
+@keyframes terminal-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 /* Form inputs */

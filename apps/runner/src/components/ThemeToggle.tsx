@@ -37,7 +37,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="btn-ghost theme-toggle"
+      className="theme-toggle-btn"
       onClick={toggle}
       aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
       title={theme === "dark" ? "Mode clair" : "Mode sombre"}
