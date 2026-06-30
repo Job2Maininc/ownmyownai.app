@@ -104,7 +104,7 @@ OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 | Historique conversations | Host SQLite + sync WS ; métadonnées locales en secours |
 | Branches de conversation | Fork depuis message N ; arbre local (Host + localStorage) |
 | RAG amélioré | Chunking ~tokens + `ragTopK` / `ragChunkTokens` dans settings |
-| DOCX | Non supporté — message d'erreur explicite |
+| DOCX | Supporté — extraction OOXML via omniparse + repli ZIP (`context/docx.rs`) |
 
 ## Pistes futures
 

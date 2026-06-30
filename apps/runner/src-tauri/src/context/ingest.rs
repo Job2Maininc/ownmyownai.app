@@ -1,4 +1,5 @@
 use super::audit::{log_audit, AuditAction};
+use super::docx::extract_docx_text;
 use super::codebase_index::{index_file_symbols, is_code_file};
 use super::store::{
     add_document_record, clear_document_index, compute_content_hash, find_canonical_by_content_hash,
@@ -9,7 +10,6 @@ use super::vision::{is_image_filename, IMAGE_DESCRIBE_PROMPT};
 use crate::ollama::{create_embedding, describe_image, resolved_vision_model, EMBEDDING_MODEL};
 use crate::settings::resolved_rag_chunk_tokens;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -474,36 +474,6 @@ fn extract_pdf_text_legacy(data: &[u8]) -> Result<String, String> {
         );
     }
     Ok(cleaned)
-}
-
-fn extract_docx_text(data: &[u8]) -> Result<String, String> {
-    use std::io::Cursor;
-    let cursor = Cursor::new(data);
-    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
-    let mut doc = archive
-        .by_name("word/document.xml")
-        .map_err(|_| "DOCX invalide (document.xml introuvable)")?;
-    let mut xml = String::new();
-    doc.read_to_string(&mut xml).map_err(|e| e.to_string())?;
-    let text = strip_xml_text(&xml);
-    if text.len() < 20 {
-        return Err("DOCX vide ou illisible.".into());
-    }
-    Ok(text)
-}
-
-fn strip_xml_text(xml: &str) -> String {
-    let mut out = String::new();
-    let mut in_tag = false;
-    for ch in xml.chars() {
-        match ch {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => out.push(ch),
-            _ => {}
-        }
-    }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Découpe approximative par tokens (~4 caractères par token).
