@@ -797,6 +797,9 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Voix TTS : Piper (offline) / edge-tts / OpenAI dans `media/voice.rs` (`voiceTts` settings)
 - [x] Commandes Tauri `get_tts_status`, `synthesize_speech`
 - [x] WS `media.generate` kind `voice` (TTS par défaut, STT Whisper via `voiceMode=stt`)
+- [x] STT Whisper.cpp local : `transcribe_audio_file`, décodage symphonia → WAV 16 kHz, whisper-cli
+- [x] Commandes Tauri `get_voice_stt_status`, `ensure_whisper_model`, `transcribe_audio`
+- [x] Indexation RAG des fichiers audio liés (wav, mp3, m4a, ogg, flac, webm) via transcription Whisper
 - [x] `cargo check` dans `apps/runner/src-tauri`
 
 ## Build local
