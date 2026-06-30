@@ -683,7 +683,24 @@ async fn stream_chat_completions(
         .map_err(|e| ApiError::new(StatusCode::BAD_GATEWAY, e))?;
 
     let stream = upstream.bytes_stream().map(|chunk| {
-        chunk.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        let chunk = chunk.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let text = String::from_utf8_lossy(&chunk);
+        for line in text.lines() {
+            match parse_sse_line(line) {
+                SseLineEvent::Skip => {}
+                SseLineEvent::Done => {
+                    crate::local_metrics::finish_request();
+                }
+                SseLineEvent::ContentDelta(_) => {
+                    if let Some(data) = line.trim().strip_prefix("data: ") {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                            crate::local_metrics::merge_stream_chunk(&json);
+                        }
+                    }
+                }
+            }
+        }
+        Ok::<axum::body::Bytes, std::io::Error>(chunk)
     });
 
     let body = Body::from_stream(stream);
@@ -984,6 +1001,13 @@ mod tests {
     }
 
     #[test]
+    fn map_gateway_auth_token_requires_authorization_header() {
+        let headers = HeaderMap::new();
+        let err = map_gateway_auth_token(&headers).unwrap_err();
+        assert!(err.contains("Authorization manquant"));
+    }
+
+    #[test]
     fn map_gateway_auth_token_requires_bearer_scheme() {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1002,6 +1026,13 @@ mod tests {
             "Bearer omoa_secret".parse().expect("header"),
         );
         assert!(validate_gateway_bearer(&headers, "omoa_secret").is_ok());
+    }
+
+    #[test]
+    fn validate_gateway_bearer_rejects_missing_auth_header() {
+        let headers = HeaderMap::new();
+        let err = validate_gateway_bearer(&headers, "omoa_secret").unwrap_err();
+        assert!(err.contains("Authorization manquant"));
     }
 
     #[test]
