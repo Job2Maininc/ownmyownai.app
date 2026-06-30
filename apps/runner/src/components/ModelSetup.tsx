@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   DEFAULT_MODEL,
+  MODEL_FAMILIES,
   RECOMMENDED_MODELS,
   compatibilityLabel,
   getCompatibility,
+  getModelFamily,
+  type ModelFamily,
 } from "../data/models";
 import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
 import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
@@ -22,6 +25,7 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [ramGb, setRamGb] = useState(8);
   const [gpuLabel, setGpuLabel] = useState<string | null>(null);
+  const [modelFamily, setModelFamily] = useState<ModelFamily | "all">("all");
   const [hideIncompatible, setHideIncompatible] = useState(false);
   const [adviceModel, setAdviceModel] = useState<string | null>(null);
   const { advice, loading: adviceLoading } = useQuantizationAdvice(adviceModel);
@@ -129,6 +133,29 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         Défini à l&apos;étape précédente dans votre dossier de données.
       </p>
 
+      <p className="muted" style={{ fontSize: 13, marginTop: 16, marginBottom: 6 }}>
+        Famille de modèles
+      </p>
+      <div className="model-filters">
+        <button
+          type="button"
+          className={`chip-filter ${modelFamily === "all" ? "chip-filter--active" : ""}`}
+          onClick={() => setModelFamily("all")}
+        >
+          Toutes
+        </button>
+        {MODEL_FAMILIES.map((family) => (
+          <button
+            key={family.id}
+            type="button"
+            className={`chip-filter ${modelFamily === family.id ? "chip-filter--active" : ""}`}
+            onClick={() => setModelFamily(family.id)}
+          >
+            {family.label}
+          </button>
+        ))}
+      </div>
+
       <label className="filter-toggle">
         <input
           type="checkbox"
@@ -140,6 +167,9 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
 
       <div className="model-list">
         {RECOMMENDED_MODELS.filter((model) => {
+          if (modelFamily !== "all" && getModelFamily(model) !== modelFamily) {
+            return false;
+          }
           if (!hideIncompatible) return true;
           return getCompatibility(model, ramGb) !== "not_recommended";
         }).map((model) => {

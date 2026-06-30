@@ -2,6 +2,14 @@ export const DEFAULT_MODEL = "qwen2.5:7b";
 
 export type ModelCategory = "chat" | "code" | "vision" | "embedding";
 
+export type ModelFamily = "llama" | "qwen" | "mistral";
+
+export const MODEL_FAMILIES: { id: ModelFamily; label: string }[] = [
+  { id: "llama", label: "Llama" },
+  { id: "qwen", label: "Qwen" },
+  { id: "mistral", label: "Mistral" },
+];
+
 export interface RecommendedModel {
   id: string;
   name: string;
@@ -345,6 +353,30 @@ export const RECOMMENDED_MODELS: RecommendedModel[] = [
     bestFor: ["RAG", "Documents", "Recherche"],
   },
 ];
+
+export function getModelFamily(model: RecommendedModel): ModelFamily | null {
+  const id = model.id.toLowerCase();
+  if (
+    id.startsWith("llama") ||
+    id.startsWith("codellama") ||
+    id.startsWith("tinyllama") ||
+    id.startsWith("llava")
+  ) {
+    return "llama";
+  }
+  if (id.startsWith("qwen")) {
+    return "qwen";
+  }
+  if (
+    id.startsWith("mistral") ||
+    id.startsWith("mixtral") ||
+    id.startsWith("dolphin-mistral") ||
+    id.startsWith("bakllava")
+  ) {
+    return "mistral";
+  }
+  return null;
+}
 
 export function findModel(id: string): RecommendedModel | undefined {
   return RECOMMENDED_MODELS.find((m) => m.id === id);
