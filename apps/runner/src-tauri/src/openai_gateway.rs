@@ -1055,4 +1055,31 @@ mod tests {
         let headers = HeaderMap::new();
         assert_eq!(rate_limit_token_key(&headers), "__no_token__");
     }
+
+    #[test]
+    fn bind_socket_addr_localhost_by_default() {
+        let addr = bind_socket_addr(&GatewayBindConfig {
+            port: 8765,
+            lan: false,
+        });
+        assert_eq!(addr, "127.0.0.1:8765");
+    }
+
+    #[test]
+    fn bind_socket_addr_lan_uses_all_interfaces() {
+        let addr = bind_socket_addr(&GatewayBindConfig {
+            port: 9000,
+            lan: true,
+        });
+        assert_eq!(addr, "0.0.0.0:9000");
+    }
+
+    #[test]
+    fn client_base_url_localhost_uses_loopback() {
+        let url = client_base_url(&GatewayBindConfig {
+            port: 8765,
+            lan: false,
+        });
+        assert_eq!(url, "http://127.0.0.1:8765/v1");
+    }
 }
