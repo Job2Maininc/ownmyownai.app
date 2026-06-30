@@ -596,6 +596,8 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Ajouter / supprimer fait (Tauri + WS `memory.add` / `memory.delete`)
 - [x] Toggle global `userMemoryEnabled` (settings + WS `memory.setEnabled`)
 - [x] Injection sélective au chat (mots-clés de la question)
+- [x] UI Host `UserMemoryPanel.tsx` (toggle, ajout/suppression faits)
+- [x] Web : `memory-panel.tsx` (lecture/écriture via WS `memory.*`)
 
 ## Projets / espaces de travail (Host v0.3)
 
@@ -619,6 +621,7 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] OpenAI / Anthropic activables dans `settings.json` (`cloudProviders`)
 - [x] Clés API via keyring Host — jamais exposées au web ni au relay
 - [x] Chat relay route vers API cloud si modèle `openai:*` ou `anthropic:*`
+- [x] UI Host : panneau fournisseurs cloud (onglet Modèles, `get_cloud_providers_status`, `save_cloud_provider_key`)
 
 ## Mode réflexion (omoa-thinking-mode)
 
@@ -645,6 +648,7 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Triggers sync insert/update/delete + backfill au démarrage
 - [x] RAG hybride : hits FTS prioritaires, complétés par similarité embeddings
 - [x] Requête « contrat 2024 » trouve le chunk sans similarité sémantique (tests unitaires)
+- [x] UI Host : seuils éditables `ragTopK`, `ragChunkTokens`, `chatTokenThreshold` (`RagThresholdSettings`)
 
 ## Index codebase Git (omoa-codebase-index)
 
@@ -676,6 +680,13 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] `fallbackModel` dans `settings.json` + chaîne auto (défaut → sélection → `qwen2.5:7b`)
 - [x] Chat relay : bascule si modèle absent ou premier token &gt; 45 s (`chat.modelFallback` WS)
 - [x] UI Host : sélecteur modèle secours dans le gestionnaire de modèles
+
+## Routage multi-modèle par tâche (omoa-multi-model-routing)
+
+- [x] `modelRouting.summaryModel` / `writingModel` dans `settings.json`
+- [x] Détection intent côté Host (`detect_task_intent`, `resolve_chat_model`)
+- [x] Fallback si modèle routé absent (défaut → sélection → `qwen2.5:7b`)
+- [x] UI Host : sélecteurs résumé / rédaction dans le gestionnaire de modèles
 
 ## Background agent (Host)
 
@@ -742,6 +753,7 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Host : builtin-fs + serveurs stdio configurables
 - [x] WS `mcp.list` / `mcp.tools` / `mcp.call` / `mcp.result`
 - [x] Protocole `McpServerSummarySchema`, `McpCallPayloadSchema`
+- [x] UI Host : CRUD `mcpServers` dans `settings.json` (`McpServersManager.tsx`)
 
 ## Résumé conversations (omoa-conversation-summary)
 
@@ -759,6 +771,7 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 
 - [x] Table audit + `list_audit_log` Tauri
 - [x] UI Host `AuditTrail.tsx`
+- [x] Journalisation accès gateway OpenAI (`openai_gateway` → `agent_access`)
 
 ## Inline edit (omoa-inline-edit)
 

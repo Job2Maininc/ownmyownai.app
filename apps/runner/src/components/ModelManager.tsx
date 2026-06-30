@@ -10,7 +10,9 @@ import {
   type ModelCategory,
 } from "../data/models";
 import { fetchOllamaRegistry, searchRegistry, type RegistryModel } from "../data/ollama-registry";
+import FallbackModelSelect from "./FallbackModelSelect";
 import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
+import ModelTaskRoutingPanel from "./ModelTaskRoutingPanel";
 import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
 import type { HostSettings, SetupProgress } from "../types";
 
@@ -55,7 +57,6 @@ export default function ModelManager({
   const [progress, setProgress] = useState<SetupProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customModel, setCustomModel] = useState("");
-  const [fallbackModel, setFallbackModel] = useState<string>("");
   const [adviceModel, setAdviceModel] = useState<string | null>(null);
   const { advice, loading: adviceLoading } = useQuantizationAdvice(adviceModel);
 
@@ -71,9 +72,6 @@ export default function ModelManager({
   useEffect(() => {
     loadHardware();
     void fetchOllamaRegistry().then(setRegistry);
-    void invoke<HostSettings>("get_host_settings")
-      .then((s) => setFallbackModel(s.fallbackModel ?? ""))
-      .catch(() => undefined);
     const unlisten = listen<SetupProgress>("ollama-progress", (e) => setProgress(e.payload));
     return () => {
       unlisten.then((fn) => fn());
@@ -139,24 +137,6 @@ export default function ModelManager({
     }
   }
 
-  async function saveFallbackModel(value: string) {
-    setFallbackModel(value);
-    setError(null);
-    try {
-      const settings = await invoke<HostSettings>("get_host_settings");
-      await invoke("save_host_settings", {
-        settings: {
-          ...settings,
-          fallbackModel: value.trim() || undefined,
-        },
-      });
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  const fallbackOptions = installedModels.filter((m) => m !== defaultModel);
-
   return (
     <section className="panel">
       <div className="panel__head">
@@ -185,30 +165,15 @@ export default function ModelManager({
           )}
         </p>
       )}
-      {fallbackOptions.length > 0 && (
-        <div className="field-row" style={{ marginBottom: 12 }}>
-          <label className="field-label" htmlFor="fallback-model">
-            Modèle secours
-          </label>
-          <select
-            id="fallback-model"
-            value={fallbackModel}
-            onChange={(e) => void saveFallbackModel(e.target.value)}
-            className="model-search"
-          >
-            <option value="">Aucun (chaîne automatique)</option>
-            {fallbackOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <p className="muted path-hint">
-            Utilisé automatiquement si le modèle demandé est absent ou met plus de 45 s à
-            répondre.
-          </p>
-        </div>
-      )}
+      <ModelTaskRoutingPanel
+        installedModels={installedModels}
+        defaultModel={defaultModel}
+      />
+      <FallbackModelSelect
+        installedModels={installedModels}
+        defaultModel={defaultModel}
+        onError={setError}
+      />
       <div className="model-filters">
         {CATEGORIES.map((c) => (
           <button
