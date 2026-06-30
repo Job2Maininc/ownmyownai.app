@@ -248,6 +248,9 @@ fn persist_markdown_artifact(
 }
 
 fn parse_one_artifact_block(rest: &str) -> Option<(ParsedArtifact, usize)> {
+    let prefix_skip = rest.len() - rest.trim_start_matches(['\n', '\r']).len();
+    let rest = &rest[prefix_skip..];
+
     let (title, header_len) = if let Some(stripped) = rest.strip_prefix(':') {
         let line_end = stripped.find('\n').unwrap_or(stripped.len());
         (stripped[..line_end].trim().to_string(), line_end + 1)
@@ -327,7 +330,7 @@ fn parse_one_artifact_block(rest: &str) -> Option<(ParsedArtifact, usize)> {
             extension,
             body,
         },
-        consumed,
+        prefix_skip + consumed,
     ))
 }
 
