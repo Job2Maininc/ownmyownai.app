@@ -19,6 +19,7 @@ pub use image::{
     LocalImageResult, LocalImageStatus,
 };
 pub use music::{probe_musicgen_status, MusicGenStatus};
+pub use video::{probe_video_status, VideoPipelineStatus};
 pub use voice::{
     detect_tts_status, ensure_whisper_model, get_stt_status, is_audio_filename, is_audio_path,
     synthesize_speech, transcribe_audio_file, TranscribeAudioResult, TtsRequest, TtsResult,
@@ -112,6 +113,23 @@ struct MediaJobRecord {
     progress: u8,
     output_path: Option<String>,
     cancel: Arc<AtomicBool>,
+    /// Corrélation WS `media.generate` → `media.progress` / `media.done` (comme `model.pull`).
+    ws_request_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PersistedMediaOutput {
+    filepath: String,
+    filename: String,
+    mime_type: String,
+    bytes: u64,
+}
+
+fn job_ws_request_id(id: &str) -> Option<String> {
+    jobs_map()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(id).and_then(|r| r.ws_request_id.clone()))
 }
 
 static MEDIA_JOBS: OnceLock<Mutex<HashMap<String, MediaJobRecord>>> = OnceLock::new();
@@ -199,8 +217,10 @@ fn set_job_state(id: &str, status: &str, message: &str, progress: u8) {
 
     if let Some(snap) = snap {
         emit_media_event("media-job-update", &snap);
+        let snap_clone = snap.clone();
+        let request_id = job_ws_request_id(id);
         tauri::async_runtime::spawn(async move {
-            broadcast_media_progress(&snap, None).await;
+            broadcast_media_progress(&snap_clone, request_id.as_deref()).await;
         });
     }
 }
@@ -219,18 +239,23 @@ fn emit_media_event(event: &str, snap: &MediaJobSnapshot) {
     }
 }
 
+fn progress_status_for_ws(status: &str) -> &str {
+    if status == "queued" {
+        "queued"
+    } else {
+        "running"
+    }
+}
+
 async fn broadcast_media_progress(snap: &MediaJobSnapshot, request_id: Option<&str>) {
     crate::relay::broadcast_ws(
         "media.progress",
         serde_json::json!({
             "jobId": snap.id,
             "kind": snap.kind,
-            "status": snap.status,
+            "status": progress_status_for_ws(&snap.status),
             "message": snap.message,
             "progress": snap.progress,
-            "prompt": snap.prompt,
-            "threadId": snap.thread_id,
-            "outputPath": snap.output_path,
         }),
         request_id.map(String::from),
     )
@@ -242,14 +267,15 @@ async fn finish_media_job(
     status: &str,
     ws_type: &str,
     message: &str,
-    output_path: Option<String>,
+    output: Option<PersistedMediaOutput>,
 ) {
     set_job_state(id, status, message, if status == "done" { 100 } else { 0 });
-    if let Some(path) = output_path {
-        set_output_path(id, path);
+    if let Some(ref out) = output {
+        set_output_path(id, out.filepath.clone());
     }
     host_status::emit_status();
 
+    let request_id = job_ws_request_id(id);
     let snap = jobs_map()
         .lock()
         .ok()
@@ -257,19 +283,24 @@ async fn finish_media_job(
 
     if let Some(snap) = snap {
         emit_media_event("media-job-update", &snap);
-        crate::relay::broadcast_ws(
-            ws_type,
+        let payload = if ws_type == "media.done" {
+            let out = output.expect("media.done requiert un fichier de sortie");
             serde_json::json!({
                 "jobId": id,
                 "kind": snap.kind,
+                "filename": out.filename,
+                "filepath": out.filepath,
+                "mimeType": out.mime_type,
+                "bytes": out.bytes,
                 "message": message,
-                "outputPath": snap.output_path,
-                "prompt": snap.prompt,
-                "threadId": snap.thread_id,
-            }),
-            None,
-        )
-        .await;
+            })
+        } else {
+            serde_json::json!({
+                "jobId": id,
+                "message": message,
+            })
+        };
+        crate::relay::broadcast_ws(ws_type, payload, request_id).await;
         if status == "done" {
             emit_media_event("media-job-done", &snap);
         }
@@ -298,7 +329,8 @@ async fn run_media_job(id: String) {
         .and_then(|jobs| jobs.get(&id).map(|record| snapshot(&id, record)));
     if let Some(snap) = initial_snap {
         emit_media_event("media-job-update", &snap);
-        broadcast_media_progress(&snap, None).await;
+        let request_id = job_ws_request_id(&id);
+        broadcast_media_progress(&snap, request_id.as_deref()).await;
     }
 
     let job_id = id.clone();
@@ -318,8 +350,15 @@ async fn run_media_job(id: String) {
         Ok(output) => {
             let persist = persist_media_output(&id, &request, &output);
             match persist {
-                Ok(path) => {
-                    finish_media_job(&id, "done", "media.done", &output.message, Some(path)).await;
+                Ok(persisted) => {
+                    finish_media_job(
+                        &id,
+                        "done",
+                        "media.done",
+                        &output.message,
+                        Some(persisted),
+                    )
+                    .await;
                 }
                 Err(e) => finish_media_job(&id, "error", "media.error", &e, None).await,
             }
@@ -328,7 +367,7 @@ async fn run_media_job(id: String) {
             finish_media_job(
                 &id,
                 "cancelled",
-                "media.cancelled",
+                "media.error",
                 "Génération annulée",
                 None,
             )
@@ -342,7 +381,7 @@ fn persist_media_output(
     job_id: &str,
     request: &MediaGenerateRequest,
     output: &MediaGenerateResult,
-) -> Result<String, String> {
+) -> Result<PersistedMediaOutput, String> {
     let persisted = persist_media_file(PersistMediaInput {
         title: None,
         prompt: Some(&request.prompt),
@@ -353,10 +392,15 @@ fn persist_media_output(
         thread_id: request.thread_id.as_deref(),
         job_id: Some(job_id),
     })?;
-    Ok(persisted.filepath)
+    Ok(PersistedMediaOutput {
+        filepath: persisted.filepath,
+        filename: persisted.filename,
+        mime_type: output.mime_type.clone(),
+        bytes: persisted.bytes as u64,
+    })
 }
 
-pub fn submit_media_job(request: MediaGenerateRequest) -> String {
+pub fn submit_media_job(request: MediaGenerateRequest, ws_request_id: Option<String>) -> String {
     let id = Uuid::new_v4().to_string();
     let cancel = Arc::new(AtomicBool::new(false));
     let initial_message = match request.kind {
@@ -376,6 +420,7 @@ pub fn submit_media_job(request: MediaGenerateRequest) -> String {
                 progress: 0,
                 output_path: None,
                 cancel,
+                ws_request_id,
             },
         );
     }
@@ -426,14 +471,29 @@ pub fn parse_media_generate_payload(
     let kind = MediaKind::from_str_id(kind_str)
         .ok_or_else(|| format!("Type média inconnu : {kind_str}"))?;
 
-    let prompt = payload
+    let voice_mode = payload
+        .get("voiceMode")
+        .and_then(|v| v.as_str())
+        .map(str::to_ascii_lowercase);
+    let source_path = payload
+        .get("sourcePath")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let mut prompt = payload
         .get("prompt")
         .and_then(|p| p.as_str())
         .unwrap_or("")
         .trim()
         .to_string();
     if prompt.is_empty() {
-        return Err("prompt requis pour media.generate".into());
+        if voice_mode.as_deref() == Some("stt") {
+            prompt = source_path
+                .clone()
+                .unwrap_or_else(|| "transcription-audio".into());
+        } else {
+            return Err("prompt requis pour media.generate".into());
+        }
     }
 
     let thread_id = payload
@@ -441,10 +501,24 @@ pub fn parse_media_generate_payload(
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let options = payload
+    let mut options = payload
         .get("options")
         .cloned()
         .unwrap_or(serde_json::Value::Object(Default::default()));
+    if let Some(obj) = options.as_object_mut() {
+        if let Some(mode) = voice_mode {
+            obj.entry("voiceMode".into())
+                .or_insert(serde_json::Value::String(mode));
+        }
+        if let Some(path) = source_path {
+            obj.entry("sourcePath".into())
+                .or_insert(serde_json::Value::String(path));
+        }
+        if let Some(paths) = payload.get("imagePaths") {
+            obj.entry("imagePaths".into())
+                .or_insert_with(|| paths.clone());
+        }
+    }
 
     Ok(MediaGenerateRequest {
         kind,
@@ -469,5 +543,20 @@ mod tests {
         let req = parse_media_generate_payload(&payload).unwrap();
         assert_eq!(req.kind, MediaKind::Image);
         assert_eq!(req.prompt, "Un chat sur un canapé");
+    }
+
+    #[test]
+    fn parses_video_payload_with_source_path() {
+        let payload = serde_json::json!({
+            "kind": "video",
+            "prompt": "Bienvenue dans cette présentation.",
+            "sourcePath": "C:\\\\slides",
+        });
+        let req = parse_media_generate_payload(&payload).unwrap();
+        assert_eq!(req.kind, MediaKind::Video);
+        assert_eq!(
+            req.options.get("sourcePath").and_then(|v| v.as_str()),
+            Some("C:\\slides")
+        );
     }
 }

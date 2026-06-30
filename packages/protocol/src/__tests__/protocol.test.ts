@@ -301,6 +301,13 @@ describe("protocol", () => {
     expect(WS_MESSAGE_TYPES.MEDIA_GENERATE).toBe("media.generate");
     expect(WS_MESSAGE_TYPES.MEDIA_PROGRESS).toBe("media.progress");
     expect(WS_MESSAGE_TYPES.MEDIA_DONE).toBe("media.done");
+    expect(WS_MESSAGE_TYPES.MEDIA_ERROR).toBe("media.error");
+
+    const err = MediaErrorPayloadSchema.parse({
+      jobId: "media-1",
+      message: "Backend image indisponible",
+    });
+    expect(err.message).toContain("indisponible");
   });
 
   it("parse media.generate pour tous les kinds et modes voix", () => {

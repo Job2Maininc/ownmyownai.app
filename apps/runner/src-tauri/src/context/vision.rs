@@ -29,6 +29,8 @@ pub fn image_mime_type(filename: &str) -> &'static str {
 pub fn document_media_type(filename: &str) -> &'static str {
     if is_image_filename(filename) {
         "image"
+    } else if crate::media::is_audio_filename(filename) {
+        "audio"
     } else {
         "text"
     }

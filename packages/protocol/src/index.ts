@@ -668,6 +668,7 @@ export const MediaDonePayloadSchema = z.object({
 export type MediaDonePayload = z.infer<typeof MediaDonePayloadSchema>;
 
 export const MediaErrorPayloadSchema = z.object({
+  jobId: z.string().optional(),
   message: z.string(),
 });
 export type MediaErrorPayload = z.infer<typeof MediaErrorPayloadSchema>;

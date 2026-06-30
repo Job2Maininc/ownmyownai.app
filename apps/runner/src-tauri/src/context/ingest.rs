@@ -96,7 +96,11 @@ pub async fn ingest_from_path(
             meta.len(),
             limits,
         )?;
-        let result = index_document_content(&doc_id, filename, &data).await?;
+        let result = if crate::media::is_audio_path(path) {
+            index_audio_content(&doc_id, filename, &data, Some(path)).await?
+        } else {
+            index_document_content(&doc_id, filename, &data).await?
+        };
         set_document_content_hash(&doc_id, &content_hash)?;
         if is_code_file(path) {
             if let Ok(text) = String::from_utf8(data) {
@@ -132,7 +136,12 @@ pub async fn reindex_document(doc_id: &str) -> Result<(), String> {
         return Ok(());
     }
     clear_document_index(doc_id)?;
-    let _ = index_document_content(doc_id, &record.filename, &data).await?;
+    let path = PathBuf::from(&record.filepath);
+    let _ = if crate::media::is_audio_path(&path) {
+        index_audio_content(doc_id, &record.filename, &data, Some(&path)).await
+    } else {
+        index_document_content(doc_id, &record.filename, &data).await
+    }?;
     set_document_content_hash(doc_id, &content_hash)?;
     if let (Some(lid), Some(rel)) = (record.link_id.as_deref(), record.relative_path.as_deref()) {
         if is_code_file(&path) {
@@ -180,6 +189,10 @@ async fn index_document_content(
 ) -> Result<String, String> {
     if is_image_filename(filename) {
         return index_image_content(doc_id, filename, data).await;
+    }
+
+    if crate::media::is_audio_filename(filename) {
+        return index_audio_content(doc_id, filename, data, None).await;
     }
 
     set_document_status(doc_id, "indexing", None)?;
@@ -310,6 +323,83 @@ async fn index_image_content(
     Ok(doc_id.to_string())
 }
 
+async fn index_audio_content(
+    doc_id: &str,
+    filename: &str,
+    data: &[u8],
+    source_path: Option<&Path>,
+) -> Result<String, String> {
+    set_document_status(doc_id, "indexing", None)?;
+    let record = get_document_record(doc_id).ok();
+
+    let transcribe_path = if let Some(path) = source_path.filter(|p| p.is_file()) {
+        path.to_path_buf()
+    } else {
+        let cache = crate::settings::resolved_cache_dir().join("ingest-audio");
+        std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
+        let temp = cache.join(format!("{doc_id}-{}", filename.replace(['/', '\\'], "_")));
+        std::fs::write(&temp, data).map_err(|e| e.to_string())?;
+        temp
+    };
+
+    let transcription = match crate::media::transcribe_audio_file(&transcribe_path).await {
+        Ok(t) => t,
+        Err(e) => {
+            set_document_status(doc_id, "error", Some(&e))?;
+            log_audit(
+                AuditAction::IndexError,
+                Some("document"),
+                Some(doc_id),
+                Some(serde_json::json!({
+                    "filename": filename,
+                    "error": e,
+                    "mediaType": "audio",
+                    "knowledgeBaseId": record.as_ref().map(|r| &r.knowledge_base_id),
+                })),
+            );
+            return Err(e);
+        }
+    };
+
+    if source_path.is_none() {
+        let _ = std::fs::remove_file(&transcribe_path);
+    }
+
+    let text = format!("[Audio: {filename}]\n{}", transcription.text.trim());
+    let chunks = chunk_text_by_tokens(&text, resolved_rag_chunk_tokens());
+    if chunks.is_empty() {
+        let msg = "Aucun texte extractible après transcription";
+        set_document_status(doc_id, "error", Some(msg))?;
+        return Err(msg.into());
+    }
+
+    for (index, chunk) in chunks.iter().enumerate() {
+        let chunk_id = insert_chunk(doc_id, index as u32, chunk)?;
+        match create_embedding(EMBEDDING_MODEL, chunk).await {
+            Ok(vector) => insert_embedding(&chunk_id, &vector)?,
+            Err(e) => {
+                set_document_status(doc_id, "error", Some(&e))?;
+                return Err(e);
+            }
+        }
+    }
+
+    set_document_status(doc_id, "ready", None)?;
+    log_audit(
+        AuditAction::Index,
+        Some("document"),
+        Some(doc_id),
+        Some(serde_json::json!({
+            "filename": filename,
+            "chunkCount": chunks.len(),
+            "mediaType": "audio",
+            "whisperModel": transcription.model,
+            "knowledgeBaseId": record.as_ref().map(|r| &r.knowledge_base_id),
+        })),
+    );
+    Ok(doc_id.to_string())
+}
+
 pub fn file_mtime(path: &Path) -> Result<i64, String> {
     let meta = fs::metadata(path).map_err(|e| e.to_string())?;
     let modified = meta.modified().map_err(|e| e.to_string())?;
@@ -339,6 +429,7 @@ pub fn is_indexable_path(path: &Path) -> bool {
         || lower.ends_with(".docx")
         || is_code_filename(&lower)
         || is_image_filename(filename)
+        || crate::media::is_audio_filename(filename)
         || is_plain_text_extension(&lower)
         || super::codebase_index::is_code_file(path)
     {
@@ -361,6 +452,9 @@ pub fn is_skippable_ingest_error(message: &str) -> bool {
         || m.contains("modèle vision")
         || m.contains("moondream")
         || m.contains("llava")
+        || m.contains("whisper")
+        || m.contains("whisper-cli")
+        || m.contains("transcription vide")
         || m.contains("fichier trop volumineux")
 }
 
@@ -401,6 +495,11 @@ fn extract_text(filename: &str, data: &[u8]) -> Result<String, String> {
             "Les images sont indexées via le modèle vision — installez moondream ou llava.".into(),
         );
     }
+    if crate::media::is_audio_filename(filename) {
+        return Err(
+            "Les fichiers audio sont indexés via Whisper.cpp — installez whisper-cli et un modèle GGML.".into(),
+        );
+    }
     if looks_like_text(data) {
         let text = String::from_utf8_lossy(data);
         let cleaned = normalize_whitespace(&text);
@@ -409,7 +508,7 @@ fn extract_text(filename: &str, data: &[u8]) -> Result<String, String> {
         }
     }
     Err(format!(
-        "Format non supporté : {filename}. Formats acceptés : texte, code, .pdf, .docx, .png, .jpg"
+        "Format non supporté : {filename}. Formats acceptés : texte, code, .pdf, .docx, .png, .jpg, audio (wav, mp3, …)"
     ))
 }
 
