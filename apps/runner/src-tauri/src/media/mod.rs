@@ -367,7 +367,7 @@ async fn run_media_job(id: String) {
             finish_media_job(
                 &id,
                 "cancelled",
-                "media.error",
+                "media.cancelled",
                 "Génération annulée",
                 None,
             )
@@ -550,13 +550,13 @@ mod tests {
         let payload = serde_json::json!({
             "kind": "video",
             "prompt": "Bienvenue dans cette présentation.",
-            "sourcePath": "C:\\\\slides",
+            "sourcePath": "C:/slides",
         });
         let req = parse_media_generate_payload(&payload).unwrap();
         assert_eq!(req.kind, MediaKind::Video);
         assert_eq!(
             req.options.get("sourcePath").and_then(|v| v.as_str()),
-            Some("C:\\slides")
+            Some("C:/slides")
         );
     }
 }
