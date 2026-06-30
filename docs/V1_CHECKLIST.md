@@ -11,28 +11,578 @@
 
 ## Tests manuels
 
-| # | Critère | OK |
-|---|---------|-----|
-| 1 | Install Windows → Ollama + modèle sans CLI manuelle | |
-| 2 | Pairing Supabase → host visible dashboard < 2 min | |
-| 3 | Host éteint → web affiche « Hors ligne » | |
-| 4 | Chat web → streaming < 60s (8 Go RAM, 3B) | |
-| 5 | 2 onglets : second onglet reçoit erreur ou partage session | UX « autre onglet actif » — Web Locks + BroadcastChannel (`tab-session.ts`) |
-| 6 | Aucun message chat en base Supabase | |
-| 7 | Relais redémarre → reconnexion auto runner/web | |
-| 8 | Lier un dossier Google Drive local depuis l'app Host | |
-| 9 | Modifier un fichier lié → ré-indexation auto < 30 s | |
-| 10 | Redémarrer Host → resync complet au lancement | |
-| 11 | Chat avec base active utilise le contenu à jour | |
-| 12 | Web affiche statut des sources liées (lecture seule) | |
-| 13 | Chat RAG affiche badges sources cliquables (fichier + extrait + score) | `chat.citations` WS + `RagCitationBadges` web |
-| 13b | Instruction système par base : éditable Host, visible web, appliquée au prochain message | |
-| 14 | Export conversation : télécharger le fil actuel en .md depuis le chat | |
-| 15 | Patch unified : prévisualisation diff, Appliquer/Rejeter, jamais d'écriture silencieuse | |
-| 15b | Artefacts : prompt Host injecté ; bloc ```artifact → panneau latéral copie/téléchargement .md | `assistant_output.rs` + `artifacts.ts` |
-| 16 | Partage conversation : lien temporaire, contenu seul (pas RAG) | |
-| 17 | Palette commandes (`Ctrl+K`) + envoi chat (`Ctrl+Entrée`) | |
-| 18 | Artefacts : ouvrir, copier ou télécharger en local (.md) depuis le panneau latéral | |
+Procédure d'acceptation V1 exécutée sur une machine Windows réelle (pas uniquement dev). Chaque cas possède des **instructions reproductibles** et un bloc **Résultat** à remplir après exécution.
+
+### Environnement de référence
+
+| Élément | Valeur attendue |
+|---------|-----------------|
+| OS | Windows 10/11 x64 |
+| RAM | 8 Go (obligatoire pour TM-04) |
+| Web | URL Vercel production (`NEXT_PUBLIC_*` configurés, voir `docs/DEPLOYMENT.md`) |
+| Host | Installateur ou build Tauri local, pairé au même compte Supabase |
+| Modèle local | `llama3.2:3b` ou équivalent 3B (TM-04) |
+| Ollama | Installé par le Host ou déjà présent ; pas de commandes CLI manuelles pour TM-01 |
+| Supabase | Projet cloud avec migrations + Edge Functions (section Prérequis cloud) |
+| Relay | Worker Cloudflare déployé, `GET /health` → `{"ok":true}` |
+
+**Ordre recommandé :** TM-01 → TM-02 → TM-03 → TM-04 → TM-07 → contexte (TM-08–12) → RAG/UX (TM-13–18).
+
+### Légende des résultats
+
+| Statut | Signification |
+|--------|---------------|
+| `OK` | Critère satisfait |
+| `KO` | Échec reproductible — détailler dans **Notes** (+ lien issue si ouverte) |
+| `N/A` | Non applicable (ex. pas de Google Drive local) |
+| `—` | Pas encore exécuté |
+
+### Tableau de synthèse
+
+| # | Critère | Résultat | Date | Testeur | Build / commit | Notes |
+|---|---------|:------:|------|---------|----------------|-------|
+| TM-01 | Install Windows → Ollama + modèle sans CLI manuelle | — | | | | |
+| TM-02 | Pairing Supabase → host visible dashboard &lt; 2 min | — | | | | |
+| TM-03 | Host éteint → web affiche « Hors ligne » | — | | | | |
+| TM-04 | Chat web → streaming &lt; 60 s (8 Go RAM, 3B) | — | | | | |
+| TM-05 | 2 onglets : message « autre onglet actif » ou file d'attente | — | | | | Web Locks + `tab-session.ts` |
+| TM-06 | Aucun message chat en base Supabase | — | | | | |
+| TM-07 | Relais redémarre → reconnexion auto runner/web | — | | | | |
+| TM-08 | Lier un dossier Google Drive local depuis l'app Host | — | | | | |
+| TM-09 | Modifier un fichier lié → ré-indexation auto &lt; 30 s | — | | | | |
+| TM-10 | Redémarrer Host → resync complet au lancement | — | | | | |
+| TM-11 | Chat avec base active utilise le contenu à jour | — | | | | |
+| TM-12 | Web affiche statut des sources liées (lecture seule) | — | | | | |
+| TM-13 | Chat RAG : badges sources cliquables (fichier + extrait + score) | — | | | | `chat.citations` + `RagCitationBadges` |
+| TM-13b | Instruction système par base : Host éditable, web visible, appliquée au prochain message | — | | | | |
+| TM-14 | Export conversation : télécharger le fil en .md depuis le chat | — | | | | |
+| TM-15 | Patch unified : preview diff, Appliquer/Rejeter, pas d'écriture silencieuse | — | | | | |
+| TM-15b | Artefacts : prompt Host ; bloc `artifact` → panneau latéral copie/téléchargement .md | — | | | | `assistant_output.rs` + `artifacts.ts` |
+| TM-16 | Partage conversation : lien temporaire, contenu seul (pas RAG) | — | | | | |
+| TM-17 | Palette commandes (`Ctrl+K`) + envoi chat (`Ctrl+Entrée`) | — | | | | |
+| TM-18 | Artefacts : ouvrir, copier ou télécharger .md depuis le panneau latéral | — | | | | |
+
+---
+
+### Cas détaillés
+
+Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis remplir le bloc **Résultat** (et la ligne correspondante dans le tableau de synthèse).
+
+---
+
+#### TM-01 — Installation Windows sans CLI manuelle
+
+**Objectif :** Un utilisateur final installe le Host et obtient Ollama + un modèle utilisable sans ouvrir un terminal.
+
+**Prérequis :** Machine Windows vierge ou sans Ollama ; installateur Host (`.msi` ou portable).
+
+**Instructions :**
+
+1. Lancer l'installateur Host (ou extraire le ZIP portable).
+2. Suivre l'assistant de première configuration (modèle suggéré, ex. `llama3.2:3b`).
+3. Attendre la fin du téléchargement / pull du modèle.
+4. Vérifier dans le gestionnaire de modèles Host que le modèle est listé comme disponible.
+5. Ne pas exécuter de commande `ollama` manuellement.
+
+**Résultat attendu :** Ollama opérationnel et au moins un modèle prêt ; chat local ou statut Host « prêt » sans intervention CLI.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-02 — Pairing Supabase
+
+**Objectif :** Associer le Host au compte web ; le dashboard affiche le host en ligne rapidement.
+
+**Prérequis :** Compte Supabase créé sur le web ; Host lancé ; section Prérequis cloud validée.
+
+**Instructions :**
+
+1. Se connecter sur l'app web (Vercel).
+2. Ouvrir le flux de pairing (code à 6 chiffres ou QR selon l'UI).
+3. Dans le Host, saisir le code / confirmer le pairing.
+4. Chronométrer jusqu'à l'apparition du host sur le dashboard web (statut en ligne).
+5. Vérifier que le nom / ID du host correspond.
+
+**Résultat attendu :** Host visible et en ligne sur le dashboard en **moins de 2 minutes** après validation du code.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-03 — Host hors ligne
+
+**Objectif :** Le web reflète correctement l'absence du runner.
+
+**Prérequis :** Host pairé et précédemment en ligne (TM-02).
+
+**Instructions :**
+
+1. Depuis le web, confirmer que le host est « En ligne ».
+2. Quitter complètement l'application Host (pas seulement réduire dans le tray).
+3. Attendre ≤ 30 s (heartbeat / timeout UI).
+4. Rafraîchir la page dashboard ou chat si nécessaire.
+
+**Résultat attendu :** Statut **« Hors ligne »** (ou équivalent) affiché ; pas de streaming chat possible.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-04 — Streaming chat web (perf)
+
+**Objectif :** Première réponse streamed dans un délai acceptable sur matériel minimal.
+
+**Prérequis :** Machine **8 Go RAM** ; modèle **~3B** actif ; Host en ligne ; TM-02 OK.
+
+**Instructions :**
+
+1. Ouvrir le chat web, sélectionner le host et le modèle 3B.
+2. Envoyer un message court (ex. « Explique en 3 phrases ce qu'est OwnMyOwnAI »).
+3. Chronométrer jusqu'au **premier token** affiché dans l'UI.
+4. Laisser le stream se terminer.
+
+**Résultat attendu :** Premier token en **&lt; 60 secondes** ; stream continu sans erreur relay.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Durée 1er token (s) | |
+| Notes / captures | |
+
+---
+
+#### TM-05 — Session multi-onglets
+
+**Objectif :** Comportement défini quand deux onglets web utilisent le même host.
+
+**Prérequis :** Host en ligne ; navigateur permettant plusieurs onglets (Chrome/Edge).
+
+**Instructions :**
+
+1. Ouvrir l'app web dans l'onglet A ; démarrer ou préparer un chat.
+2. Ouvrir la même session (même URL / compte) dans l'onglet B.
+3. Tenter d'envoyer un message depuis B pendant qu'A est actif (ou inversement).
+4. Observer bannière, toast ou message d'erreur.
+
+**Résultat attendu :** Le second onglet affiche une UX explicite (« autre onglet actif », file d'attente, ou erreur claire) — pas de corruption silencieuse du fil. Réf. `apps/web/src/lib/tab-session.ts`.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-06 — Confidentialité messages (Supabase)
+
+**Objectif :** Aucun contenu de conversation n'est stocké côté cloud.
+
+**Prérequis :** Au moins un échange chat complet via le web (TM-04).
+
+**Instructions :**
+
+1. Envoyer 2–3 messages dont un avec contenu identifiable (ex. chaîne unique `TEST-V1-XXXX`).
+2. Ouvrir Supabase Dashboard → **Table Editor**.
+3. Parcourir toutes les tables du projet (`profiles`, `hosts`, `pairing_requests`, etc.).
+4. Rechercher la chaîne unique dans les colonnes texte / JSON.
+
+**Résultat attendu :** **Aucune** table ne contient le corps des messages chat ; seules métadonnées host/pairing éventuelles.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Tables vérifiées | |
+| Notes / captures | |
+
+---
+
+#### TM-07 — Résilience relay
+
+**Objectif :** Reconnexion automatique après interruption du relais.
+
+**Prérequis :** Host + web connectés ; accès pour redémarrer le Worker relay (ou couper réseau ciblé).
+
+**Instructions :**
+
+1. Confirmer chat ou dashboard « connecté ».
+2. Redémarrer le Worker Cloudflare relay (ou simuler coupure &lt; 1 min).
+3. Attendre sans relancer manuellement le Host.
+4. Renvoyer un message chat depuis le web.
+
+**Résultat attendu :** Runner et web se reconnectent **automatiquement** ; chat fonctionnel sans re-pairing.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-08 — Lier Google Drive local
+
+**Objectif :** Indexer un dossier synchronisé Google Drive depuis le Host.
+
+**Prérequis :** Google Drive for Desktop installé ; dossier local synchronisé avec quelques fichiers `.md` ou `.txt`.
+
+**Instructions :**
+
+1. Host → Contexte / liens → « Lier dossier » (ou équivalent).
+2. Choisir un dossier sous le chemin Google Drive local (ex. `G:\Mon Drive\docs-test`).
+3. Attendre la fin de l'indexation initiale (notification ou compteur documents).
+4. Vérifier que les fichiers apparaissent dans la liste des documents indexés.
+
+**Résultat attendu :** Lien créé ; documents comptabilisés ; pas d'erreur de chemin hors sandbox.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Chemin testé | |
+| Notes / captures | |
+
+---
+
+#### TM-09 — Ré-indexation après modification
+
+**Objectif :** Le watcher détecte les changements fichiers rapidement.
+
+**Prérequis :** TM-08 OK ; fichier texte déjà indexé.
+
+**Instructions :**
+
+1. Noter l'horodatage / compteur chunks du document dans l'UI Host.
+2. Modifier le fichier sur disque (ajouter une phrase unique, ex. `PHRASE-REINDEX-TEST`).
+3. Sauvegarder le fichier ; ne pas lancer de sync manuelle.
+4. Chronométrer jusqu'à mise à jour du statut ou du contenu indexé.
+
+**Résultat attendu :** Ré-indexation automatique en **&lt; 30 secondes** ; nouvelle phrase retrouvable en recherche / RAG.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Délai observé (s) | |
+| Notes / captures | |
+
+---
+
+#### TM-10 — Resync au démarrage
+
+**Objectif :** Cohérence index après redémarrage Host.
+
+**Prérequis :** Au moins un lien de contexte configuré (TM-08).
+
+**Instructions :**
+
+1. Modifier un fichier lié pendant que le Host est **fermé**.
+2. Relancer le Host.
+3. Observer les logs / notifications de sync au lancement.
+4. Vérifier que le document reflète la modification sans action manuelle.
+
+**Résultat attendu :** **Resync complet** (ou sync incrémentale équivalente) au lancement ; index à jour.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-11 — Chat avec contexte à jour
+
+**Objectif :** Le RAG injecte le contenu récent de la base active.
+
+**Prérequis :** TM-09 ou TM-10 OK ; base de connaissances activée sur le chat web.
+
+**Instructions :**
+
+1. Activer la base liée au dossier de test.
+2. Poser une question ciblée sur la **phrase unique** ajoutée en TM-09.
+3. Vérifier que la réponse mentionne ou s'appuie sur ce contenu.
+
+**Résultat attendu :** Réponse cohérente avec le fichier modifié ; pas de contenu obsolète manifeste.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-12 — Statut sources (web lecture seule)
+
+**Objectif :** Le web affiche l'état des liens sans permettre de les modifier.
+
+**Prérequis :** Liens de contexte existants (TM-08).
+
+**Instructions :**
+
+1. Sur le web, ouvrir la vue contexte / sources du host.
+2. Vérifier noms, statuts (sync, nombre de docs, erreurs éventuelles).
+3. Confirmer l'absence de boutons « lier » / « supprimer lien » côté web (lecture seule).
+
+**Résultat attendu :** Statuts visibles et à jour ; **aucune** action de modification de liens depuis le web.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-13 — Citations RAG cliquables
+
+**Objectif :** Badges sources avec fichier, extrait et score.
+
+**Prérequis :** Base indexée ; question RAG déclenchant des citations.
+
+**Instructions :**
+
+1. Envoyer une question dont la réponse s'appuie sur les documents liés.
+2. Attendre l'événement `chat.citations` (badges sous le message).
+3. Cliquer un badge : vérifier nom fichier, extrait, score (si affiché).
+
+**Résultat attendu :** Badges **cliquables** ; détail source lisible. Composant `RagCitationBadges`.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-13b — Instructions système par base
+
+**Objectif :** Instructions éditables Host, visibles web, prises en compte au prochain tour.
+
+**Prérequis :** Base de connaissances active.
+
+**Instructions :**
+
+1. Host : éditer l'instruction système de la base (ex. « Réponds toujours en vers »).
+2. Web : ouvrir la fiche de la base et vérifier que l'instruction est **visible** (lecture seule).
+3. Envoyer un **nouveau** message chat avec cette base active.
+4. Vérifier que le style / consigne est respecté.
+
+**Résultat attendu :** Instruction persistée ; visible web ; appliquée au **prochain** message (pas rétroactivement).
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-14 — Export conversation .md
+
+**Objectif :** Télécharger le fil courant en Markdown.
+
+**Prérequis :** Conversation avec au moins 2 tours user/assistant.
+
+**Instructions :**
+
+1. Ouvrir le menu export (chat ou palette `Ctrl+K` → export).
+2. Télécharger le fichier `.md`.
+3. Ouvrir le fichier localement : vérifier rôles, contenu, ordre chronologique.
+
+**Résultat attendu :** Fichier `.md` complet et lisible ; correspond au fil affiché.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-15 — Patch unified (preview / apply)
+
+**Objectif :** Aucune écriture fichier sans confirmation explicite.
+
+**Prérequis :** Fichier `.md` lié ; agent ou chat produisant un unified diff.
+
+**Instructions :**
+
+1. Demander une modification ciblée d'un fichier lié (ex. ajouter une section).
+2. Vérifier l'affichage **prévisualisation diff** (`DiffPatchPanel`).
+3. Tester **Rejeter** : le fichier sur disque ne change pas.
+4. Redemander / **Appliquer** : le fichier reflète le patch.
+
+**Résultat attendu :** Preview obligatoire ; **jamais** d'écriture silencieuse.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-15b — Artefacts (génération Host)
+
+**Objectif :** Bloc `artifact` ouvrant le panneau latéral avec export.
+
+**Prérequis :** Host avec prompt artefacts ; modèle capable de suivre le format.
+
+**Instructions :**
+
+1. Demander un livrable structuré (ex. « Rédige un plan en artefact markdown »).
+2. Vérifier la détection du bloc ```artifact dans la réponse.
+3. Panneau latéral : ouvrir, **copier**, **télécharger** en `.md`.
+
+**Résultat attendu :** Artefact isolé du chat ; actions copie / téléchargement fonctionnelles.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-16 — Partage conversation (lecture seule)
+
+**Objectif :** Lien temporaire sans fuite RAG / contexte index.
+
+**Prérequis :** Conversation avec messages et éventuellement citations RAG.
+
+**Instructions :**
+
+1. Créer un lien de partage depuis le chat web.
+2. Ouvrir le lien en navigation privée (non authentifié).
+3. Vérifier que seuls les messages du fil sont visibles.
+4. Confirmer l'absence de chunks / sources RAG / fichiers liés dans la page partagée.
+
+**Résultat attendu :** Lien **temporaire** ; **contenu conversation seul** ; pas d'index RAG exposé.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-17 — Raccourcis clavier web
+
+**Objectif :** Palette globale et envoi message au clavier.
+
+**Prérequis :** Session authentifiée sur le web.
+
+**Instructions :**
+
+1. `Ctrl+K` (ou `⌘K`) : la palette s'ouvre ; rechercher une commande (ex. nouvelle conversation).
+2. Exécuter une commande depuis la palette.
+3. Dans le chat, saisir un message ; `Ctrl+Entrée` envoie sans cliquer Envoyer.
+
+**Résultat attendu :** Palette et envoi **Ctrl+Entrée** opérationnels sur pages authentifiées.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+#### TM-18 — Panneau artefacts (actions locales)
+
+**Objectif :** Parcours complet ouvrir / copier / télécharger depuis le panneau latéral.
+
+**Prérequis :** Artefact généré (TM-15b) ou conversation avec artefact existant.
+
+**Instructions :**
+
+1. Ouvrir le panneau latéral artefacts.
+2. Sélectionner un artefact ; vérifier le rendu markdown.
+3. **Copier** dans le presse-papiers et coller dans un éditeur externe.
+4. **Télécharger** `.md` et comparer le contenu.
+
+**Résultat attendu :** Les trois actions fonctionnent ; fichier local identique au contenu affiché.
+
+| Champ | Valeur |
+|-------|--------|
+| Résultat | — |
+| Date | |
+| Testeur | |
+| Build / commit | |
+| Notes / captures | |
+
+---
+
+### Clôture campagne de tests
+
+| Métrique | Valeur |
+|----------|--------|
+| Cas exécutés | / 20 |
+| OK | |
+| KO | |
+| N/A | |
+| Dernière campagne | |
+| Responsable | |
+| Verdict V1 tests manuels | `En attente` / `Accepté` / `Bloqué` |
+
+**Critère de passage :** tous les cas applicables en `OK`, aucun `KO` bloquant sans issue de suivi.
 
 ## UX Web — raccourcis clavier
 
