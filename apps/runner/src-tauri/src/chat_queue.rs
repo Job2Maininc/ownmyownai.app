@@ -50,6 +50,7 @@ pub fn enqueue(job: ChatJob) -> usize {
         state.pending.push_back(job);
         state.pending.len()
     };
+    notify_queue_changed();
     spawn_worker_if_needed();
     position
 }
@@ -61,7 +62,11 @@ pub fn cancel_pending(request_id: &str) -> bool {
     state
         .pending
         .retain(|job| job.request_id.as_deref() != Some(request_id));
-    before != state.pending.len()
+    let changed = before != state.pending.len();
+    if changed {
+        notify_queue_changed();
+    }
+    changed
 }
 
 pub fn queue_depth() -> usize {
@@ -69,6 +74,14 @@ pub fn queue_depth() -> usize {
         .lock()
         .map(|s| s.pending.len())
         .unwrap_or(0)
+}
+
+pub fn worker_busy() -> bool {
+    WORKER_BUSY.load(Ordering::SeqCst)
+}
+
+fn notify_queue_changed() {
+    crate::host_status::emit_status();
 }
 
 async fn run_worker() {
@@ -87,6 +100,7 @@ async fn run_worker() {
                 WORKER_BUSY.store(false, Ordering::SeqCst);
                 !state.pending.is_empty()
             };
+            notify_queue_changed();
             if restart {
                 let mut state = queue_state().lock().expect("chat queue lock");
                 state.worker_running = true;
@@ -95,6 +109,8 @@ async fn run_worker() {
             break;
         };
 
+        notify_queue_changed();
         job.run.await;
+        notify_queue_changed();
     }
 }

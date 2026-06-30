@@ -1,23 +1,32 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { DEFAULT_MODEL } from "../data/models";
+import {
+  CommandPaletteProvider,
+  PALETTE_SHORTCUT_LABEL,
+  useRegisterPaletteCommands,
+  type PaletteCommand,
+} from "./command-palette/command-palette-provider";
 import AuditTrail from "./AuditTrail";
 import ContextManager from "./ContextManager";
+import HostBreadcrumbs from "./dashboard/HostBreadcrumbs";
+import HostSidebar from "./dashboard/HostSidebar";
+import { DASHBOARD_NAV, type DashboardTab } from "./dashboard/dashboard-nav";
+import HostSettingsPanel from "./HostSettingsPanel";
 import PrReviewPanel from "./PrReviewPanel";
 import ProjectManager from "./ProjectManager";
+import UpdatesPanel from "./UpdatesPanel";
 import LocalChat from "./LocalChat";
+import McpServersManager from "./McpServersManager";
 import ModelManager from "./ModelManager";
 import type {
   HostSettings,
   HostStatusSnapshot,
   LastRequestMetrics,
-  UpdateCheckResult,
 } from "../types";
 import { ThemeToggle } from "./ThemeToggle";
-
-type DashboardTab = "status" | "chat" | "models" | "context" | "review" | "projects" | "audit";
 
 interface DashboardProps {
   appUrl: string;
@@ -95,7 +104,7 @@ function StatusPill({
   );
 }
 
-export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
+function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
   const [status, setStatus] = useState<HostStatusSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -103,11 +112,9 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
   const [tab, setTab] = useState<DashboardTab>("status");
   const [openError, setOpenError] = useState<string | null>(null);
   const [airGapped, setAirGapped] = useState(false);
+  const [fallbackModel, setFallbackModel] = useState<string | null>(null);
   const [togglingAirGapped, setTogglingAirGapped] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [installingUpdate, setInstallingUpdate] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -122,25 +129,12 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
     void getVersion().then(setAppVersion).catch(() => undefined);
   }, []);
 
-  const refreshUpdateStatus = useCallback(async () => {
-    setCheckingUpdate(true);
-    try {
-      const info = await invoke<UpdateCheckResult>("check_for_updates");
-      setUpdateInfo(info);
-    } catch {
-      setUpdateInfo(null);
-    } finally {
-      setCheckingUpdate(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshUpdateStatus();
-  }, [refreshUpdateStatus]);
-
   useEffect(() => {
     invoke<HostSettings>("get_host_settings")
-      .then((s) => setAirGapped(!!s.airGapped))
+      .then((s) => {
+        setAirGapped(!!s.airGapped);
+        setFallbackModel(s.fallbackModel ?? null);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -208,6 +202,44 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
     ? !!status?.ollamaRunning
     : status?.ollamaRunning && status?.relayConnected && status?.cloudSynced;
 
+  const paletteCommands = useMemo<PaletteCommand[]>(
+    () => [
+      ...DASHBOARD_NAV.map((item) => ({
+        id: `tab-${item.id}`,
+        label: item.label,
+        keywords: item.id,
+        group: "Navigation",
+        onSelect: () => setTab(item.id),
+      })),
+      {
+        id: "open-dashboard",
+        label: "Ouvrir le tableau de bord web",
+        keywords: "navigateur browser",
+        group: "Web",
+        onSelect: () => void openInBrowser(`${appUrl}/dashboard`),
+      },
+      {
+        id: "open-chat",
+        label: "Nouveau chat web",
+        keywords: "conversation relay",
+        group: "Web",
+        disabled: !status?.hostId,
+        onSelect: () => void openInBrowser(`${appUrl}/chat/${status?.hostId ?? ""}`),
+      },
+      {
+        id: "refresh-status",
+        label: "Actualiser l'état",
+        keywords: "reload sync",
+        group: "Host",
+        disabled: refreshing,
+        onSelect: () => void handleRefresh(),
+      },
+    ],
+    [appUrl, refreshing, status?.hostId],
+  );
+
+  useRegisterPaletteCommands(paletteCommands);
+
   async function handleAirGappedToggle(enabled: boolean) {
     setTogglingAirGapped(true);
     setOpenError(null);
@@ -251,6 +283,10 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         <p className="dashboard__subtitle">
           {appVersion ? `Host v${appVersion}` : "Host"}
           {" · "}
+          <span className="dashboard__shortcut-hint" title="Palette de commandes">
+            {PALETTE_SHORTCUT_LABEL}
+          </span>
+          {" · "}
           {airGappedMode
             ? "Chat local uniquement — relay et cloud désactivés"
             : status?.activeSessions
@@ -261,47 +297,54 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         </p>
       </header>
 
-      <nav className="dashboard-tabs" aria-label="Sections">
-        {(
-          [
-            ["status", "État"],
-            ["chat", "Chat local"],
-            ["models", "Modèles"],
-            ["context", "Contexte"],
-            ["review", "Revue code"],
-            ["projects", "Projets"],
-            ["audit", "Journal"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`dashboard-tab ${tab === id ? "dashboard-tab--active" : ""}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <div className="dashboard-layout">
+        <HostSidebar activeTab={tab} onTabChange={setTab} />
 
-      {tab === "models" && (
-        <ModelManager
-          installedModels={status?.models ?? []}
-          defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
-          onDefaultChanged={refresh}
-        />
-      )}
+        <div className="dashboard-main">
+          <HostBreadcrumbs tab={tab} />
 
-      {tab === "context" && <ContextManager />}
+          <div className="dashboard-content">
+            {tab === "chat" && (
+              <LocalChat
+                defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
+                ollamaRunning={!!status?.ollamaRunning}
+              />
+            )}
 
-      {tab === "review" && <PrReviewPanel />}
+            {tab === "models" && (
+              <>
+                <CloudProvidersPanel onChanged={refresh} />
+                <ModelManager
+                  installedModels={status?.models ?? []}
+                  defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
+                  onDefaultChanged={refresh}
+                />
+              </>
+            )}
 
-      {tab === "projects" && <ProjectManager />}
+            {tab === "context" && <ContextManager />}
 
-      {tab === "audit" && <AuditTrail />}
+            {tab === "review" && <PrReviewPanel />}
 
-      {tab === "status" && (
-      <>
+            {tab === "projects" && <ProjectManager />}
+
+            {tab === "mcp" && <McpServersManager />}
+
+            {tab === "settings" && (
+              <HostSettingsPanel
+                installedModels={status?.models ?? []}
+                defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
+                airGapped={airGappedMode}
+                togglingAirGapped={togglingAirGapped}
+                onAirGappedChange={handleAirGappedToggle}
+                onSettingsSaved={refresh}
+              />
+            )}
+
+            {tab === "audit" && <AuditTrail />}
+
+            {tab === "status" && (
+            <>
       <section className="status-grid" aria-label="État des services">
         <StatusPill
           label="Ollama"
@@ -335,6 +378,68 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
               : formatRelativeTime(status?.lastHeartbeatAt ?? null)
           }
         />
+      </section>
+
+      <section className="panel" aria-label="File d'attente chat">
+        <h2>File d&apos;attente chat</h2>
+        {status && (status.queueDepth ?? 0) === 0 && (status.queuePosition ?? 0) === 0 ? (
+          <p className="panel__empty">Aucune requête en file — le host est disponible.</p>
+        ) : (
+          <ul className="session-list">
+            {(status?.queuePosition ?? 0) > 0 ? (
+              <li className="session-item">
+                <span className="session-item__dot" />
+                Génération en cours (position {status?.queuePosition})
+              </li>
+            ) : null}
+            {(status?.queueDepth ?? 0) > 0 ? (
+              <li className="session-item">
+                <span className="session-item__dot" />
+                {(status?.queueDepth ?? 0) === 1
+                  ? "1 requête en attente"
+                  : `${status?.queueDepth} requêtes en attente`}
+                {" "}
+                (positions {(status?.queuePosition ?? 0) + 1}–
+                {(status?.queuePosition ?? 0) + (status?.queueDepth ?? 0)})
+              </li>
+            ) : null}
+          </ul>
+        )}
+        <p className="panel__meta muted">
+          Profondeur file : {status?.queueDepth ?? 0}
+          {" · "}
+          Position active : {(status?.queuePosition ?? 0) > 0 ? status?.queuePosition : "—"}
+        </p>
+      </section>
+
+      <section className="panel" aria-label="Génération média">
+        <h2>Génération média</h2>
+        {(status?.activeMediaGenerations ?? 0) === 0 ? (
+          <p className="panel__empty">Aucune génération image, voix, musique ou vidéo en cours.</p>
+        ) : (
+          <ul className="session-list">
+            {(status?.mediaJobs ?? []).map((job) => (
+              <li key={job.id} className="session-item">
+                <span className="session-item__dot" />
+                {job.kind === "image"
+                  ? "Image"
+                  : job.kind === "voice"
+                    ? "Voix"
+                    : job.kind === "music"
+                      ? "Musique"
+                      : job.kind === "video"
+                        ? "Vidéo"
+                        : job.kind}
+                {" · "}
+                {job.status === "queued" ? "En file" : `${job.progress} %`}
+                {job.message ? ` — ${job.message}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="panel__meta muted">
+          Actives : {status?.activeMediaGenerations ?? 0}
+        </p>
       </section>
 
       {status?.diskFreeGb != null && (
@@ -377,6 +482,9 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
                 {m.startsWith(status.defaultModel) ? (
                   <span className="model-chip__tag">défaut</span>
                 ) : null}
+                {fallbackModel && m.startsWith(fallbackModel) ? (
+                  <span className="model-chip__tag">secours</span>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -415,61 +523,7 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         )}
       </section>
 
-      <section className="panel" aria-label="Mises à jour">
-        <div className="panel__head">
-          <h2>Mises à jour</h2>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => void refreshUpdateStatus()}
-            disabled={checkingUpdate || installingUpdate}
-          >
-            {checkingUpdate ? "…" : "Vérifier"}
-          </button>
-        </div>
-        <p className="panel__meta">
-          Installée : <strong>{appVersion ?? updateInfo?.currentVersion ?? "—"}</strong>
-          {updateInfo?.remoteVersion ? (
-            <>
-              {" "}
-              · Publiée : <strong>{updateInfo.remoteVersion}</strong>
-            </>
-          ) : null}
-        </p>
-        <p className="panel__meta muted">
-          {updateInfo?.message ??
-            "Vérification automatique au démarrage puis toutes les heures."}
-        </p>
-        {updateInfo?.updateAvailable ? (
-          <div className="dashboard__actions" style={{ marginTop: 12 }}>
-            {updateInfo.autoUpdateReady ? (
-              <button
-                type="button"
-                className="btn-primary"
-                style={{ width: "100%" }}
-                disabled={installingUpdate}
-                onClick={() => {
-                  setInstallingUpdate(true);
-                  void invoke("install_host_update")
-                    .catch((e) => setOpenError(String(e)))
-                    .finally(() => setInstallingUpdate(false));
-                }}
-              >
-                {installingUpdate ? "Installation…" : "Installer maintenant"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-primary"
-                style={{ width: "100%" }}
-                onClick={() => void openInBrowser(`${appUrl}/download`)}
-              >
-                Télécharger l&apos;installateur
-              </button>
-            )}
-          </div>
-        ) : null}
-      </section>
+      <UpdatesPanel appUrl={appUrl} onError={setOpenError} />
 
       {status?.hostId ? (
         <section className="panel panel--compact">
@@ -497,7 +551,9 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
       </>
       )}
 
-      <div className="dashboard__actions">
+          </div>
+
+          <div className="dashboard__actions">
         {openError ? (
           <p className="error-banner" role="alert">
             {openError}
@@ -529,6 +585,8 @@ export default function Dashboard({ appUrl, onUnpaired }: DashboardProps) {
         >
           {unpairing ? "Déliaison…" : "Délier ce PC"}
         </button>
+          </div>
+        </div>
       </div>
     </div>
   );

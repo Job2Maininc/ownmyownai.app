@@ -1,5 +1,6 @@
 use crate::credentials::get_credentials;
 use crate::local_metrics::{self, LastRequestMetrics};
+use crate::media::MediaJobSnapshot;
 use crate::ollama::{check_ollama, default_model};
 use crate::providers::{get_cloud_providers_status, list_available_models, CloudProviderStatus};
 use serde::Serialize;
@@ -111,6 +112,14 @@ pub struct HostStatusSnapshot {
     pub cloud_providers: Vec<CloudProviderStatus>,
     pub background_jobs: u32,
     pub air_gapped: bool,
+    /// Requêtes en attente (hors génération en cours).
+    pub queue_depth: u32,
+    /// Position 1-based de la génération en cours (1 si occupé, 0 sinon).
+    pub queue_position: u32,
+    /// Générations média actives (image, voix, musique, vidéo).
+    pub active_media_generations: u32,
+    /// Détail des jobs média en cours ou en file.
+    pub media_jobs: Vec<MediaJobSnapshot>,
 }
 
 pub fn build_snapshot() -> HostStatusSnapshot {
@@ -157,12 +166,34 @@ pub fn build_snapshot() -> HostStatusSnapshot {
             .filter(|j| j.status == "running" || j.status == "queued")
             .count() as u32,
         air_gapped: crate::settings::air_gapped_enabled(),
+        queue_depth: crate::chat_queue::queue_depth() as u32,
+        queue_position: if crate::chat_queue::worker_busy() { 1 } else { 0 },
+        active_media_generations: crate::media::active_count(),
+        media_jobs: crate::media::list_active_jobs(),
     }
 }
 
 pub fn tray_tooltip(snapshot: &HostStatusSnapshot) -> String {
     let status = if snapshot.active_sessions > 0 {
-        format!("En ligne · {} chat(s)", snapshot.active_sessions)
+        if snapshot.queue_depth > 0 {
+            format!(
+                "En ligne · {} chat(s) · {} en file",
+                snapshot.active_sessions, snapshot.queue_depth
+            )
+        } else {
+            format!("En ligne · {} chat(s)", snapshot.active_sessions)
+        }
+    } else if snapshot.queue_depth > 0 || snapshot.queue_position > 0 {
+        format!("File d'attente · {} en attente", snapshot.queue_depth)
+    } else if snapshot.active_media_generations > 0 {
+        if let Some(label) = crate::media::active_label() {
+            format!("Média · {label}")
+        } else {
+            format!(
+                "Média · {} génération(s)",
+                snapshot.active_media_generations
+            )
+        }
     } else if let Some(label) = crate::jobs::active_job_label() {
         format!("Tâche · {label}")
     } else if snapshot.background_jobs > 0 {

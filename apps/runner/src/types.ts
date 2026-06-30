@@ -47,6 +47,15 @@ export interface McpServerSummary {
   toolCount: number;
 }
 
+export interface McpToolDescriptor {
+  serverId: string;
+  serverName: string;
+  name: string;
+  qualifiedName: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+}
+
 export interface CloudProviderToggle {
   enabled: boolean;
 }
@@ -59,6 +68,24 @@ export interface CloudProvidersSettings {
 export interface ScheduledSyncSettings {
   enabled: boolean;
   cron: string;
+}
+
+export interface LinkSyncReport {
+  linkId: string;
+  path: string;
+  status: string;
+  lastSyncAt?: string | null;
+  error?: string | null;
+}
+
+export interface ScheduledSyncReport {
+  startedAt: string;
+  finishedAt: string;
+  cron: string;
+  linksTotal: number;
+  linksOk: number;
+  linksError: number;
+  links: LinkSyncReport[];
 }
 
 /** Statut d'un fournisseur cloud (clé en keyring Host, jamais exposée au web). */

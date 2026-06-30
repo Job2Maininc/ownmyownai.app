@@ -58,7 +58,7 @@ import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
 
-type SidebarTab = "context" | "artifacts" | "memory" | "terminal";
+type SidebarTab = "context" | "artifacts" | "memory" | "mcp" | "terminal";
 
 interface UiMessage {
   role: "user" | "assistant";
@@ -1141,6 +1141,14 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               <button
                 type="button"
                 role="tab"
+                aria-selected={sidebarTab === "mcp"}
+                onClick={() => setSidebarTab("mcp")}
+              >
+                MCP
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={sidebarTab === "terminal"}
                 onClick={() => setSidebarTab("terminal")}
               >
@@ -1161,6 +1169,8 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               />
             ) : sidebarTab === "memory" ? (
               <MemoryPanel relay={relayRef.current} connected={connected} />
+            ) : sidebarTab === "mcp" ? (
+              <McpToolsPanel relay={relayRef.current} connected={connected} />
             ) : sidebarTab === "terminal" ? (
               <TerminalPanel relay={relayRef.current} connected={connected} />
             ) : (

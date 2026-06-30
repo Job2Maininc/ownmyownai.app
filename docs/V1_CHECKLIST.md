@@ -591,6 +591,13 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Envoi message chat via `Ctrl+Entrée` / `⌘Entrée`
 - [x] Commandes contextuelles chat (nouvelle conversation, contexte, export, partage, arrêt)
 
+## UX Host — raccourcis clavier
+
+- [x] `keyboard-shortcuts.ts` + hook `use-keyboard-shortcut.ts` (équivalent web)
+- [x] Palette de commandes globale (`Ctrl+K` / `⌘K`) sur le dashboard Host
+- [x] Navigation onglets, ouverture web et actualisation via la palette
+- [x] Envoi chat local via `Ctrl+Entrée` / `⌘Entrée` (`LocalChat.tsx`)
+
 ## Mémoire utilisateur (Host)
 
 - [x] Table `user_memory` dans `context.db`
@@ -755,6 +762,7 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] WS `mcp.list` / `mcp.tools` / `mcp.call` / `mcp.result`
 - [x] Protocole `McpServerSummarySchema`, `McpCallPayloadSchema`
 - [x] UI Host : CRUD `mcpServers` dans `settings.json` (`McpServersManager.tsx`)
+- [x] Web : panneau lecture seule outils MCP (`mcp-tools-panel.tsx` via `mcp.list` / `mcp.tools`)
 
 ## Résumé conversations (omoa-conversation-summary)
 
