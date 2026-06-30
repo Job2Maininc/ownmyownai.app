@@ -39,3 +39,7 @@ jobs:
       - name: Check runner (Rust)
         working-directory: apps/runner/src-tauri
         run: cargo check
+
+      - name: Test runner (Rust)
+        working-directory: apps/runner/src-tauri
+        run: cargo test
