@@ -4,15 +4,17 @@ import { formatInvokeError } from "../lib/tauri-errors";
 import { ensureOllamaRunning } from "../lib/ollama-setup";
 import { listen } from "@tauri-apps/api/event";
 import {
+  DEFAULT_FLUX_MODEL,
   RECOMMENDED_MODELS,
   compatibilityLabel,
   getCompatibility,
+  isImageGenerationModel,
   type ModelCategory,
 } from "../data/models";
 import { fetchOllamaRegistry, searchRegistry, type RegistryModel } from "../data/ollama-registry";
 import FallbackModelSelect from "./FallbackModelSelect";
 import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
-import ModelTaskRoutingPanel from "./ModelTaskRoutingPanel";
+import { EmptyStatePanel } from "./EmptyState";
 import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
 import type { HostSettings, SetupProgress } from "../types";
 
@@ -41,6 +43,7 @@ const CATEGORIES: { id: ModelCategory | "all"; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "code", label: "Code" },
   { id: "vision", label: "Vision" },
+  { id: "image", label: "Image" },
   { id: "embedding", label: "Embedding" },
 ];
 
@@ -94,6 +97,17 @@ export default function ModelManager({
     setAdviceModel(modelId);
   }
 
+  async function ensureInSelectedModels(modelId: string) {
+    const settings = await invoke<HostSettings>("get_host_settings");
+    if (settings.selectedModels.includes(modelId)) return;
+    await invoke("save_host_settings", {
+      settings: {
+        ...settings,
+        selectedModels: [...settings.selectedModels, modelId],
+      },
+    });
+  }
+
   async function pullOne(modelId: string) {
     setError(null);
     setAdviceModel(modelId);
@@ -101,6 +115,9 @@ export default function ModelManager({
     try {
       await ensureOllamaRunning([modelId]);
       await invoke("pull_model", { model: modelId });
+      if (isImageGenerationModel(modelId)) {
+        await ensureInSelectedModels(modelId);
+      }
       onDefaultChanged();
     } catch (e) {
       setError(formatInvokeError(e));
@@ -165,6 +182,54 @@ export default function ModelManager({
           )}
         </p>
       )}
+      <div className="flux-image-panel">
+        <div className="flux-image-panel__head">
+          <h3 className="flux-image-panel__title">Génération d&apos;images (Flux)</h3>
+          {installedModels.some(isImageGenerationModel) && (
+            <span className="model-chip__tag">installé</span>
+          )}
+        </div>
+        <p className="muted path-hint">
+          Téléchargez un modèle Flux via Ollama pour générer des images localement depuis le Host
+          (fonctionnalité expérimentale Ollama). GPU dédié recommandé.
+        </p>
+        {installedModels.some(isImageGenerationModel) ? (
+          <p className="flux-image-panel__status">
+            Modèle(s) actif(s) :{" "}
+            {installedModels.filter(isImageGenerationModel).join(", ")}
+          </p>
+        ) : (
+          <p className="muted">
+            Recommandé : <strong>FLUX.2 Klein · 4B</strong> — génération rapide avec texte lisible
+            dans les visuels (Apache 2.0).
+          </p>
+        )}
+        <div className="flux-image-panel__actions">
+          {!installedModels.some(isImageGenerationModel) && (
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={!!pulling}
+              onClick={() => void pullOne(DEFAULT_FLUX_MODEL)}
+              onFocus={() => showAdviceFor(DEFAULT_FLUX_MODEL)}
+            >
+              {pulling === DEFAULT_FLUX_MODEL
+                ? "Téléchargement Flux…"
+                : "Télécharger FLUX.2 Klein (4B)"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setCategory("image")}
+          >
+            Voir tous les modèles image
+          </button>
+        </div>
+        {!installedModels.some(isImageGenerationModel) && adviceModel === DEFAULT_FLUX_MODEL && (
+          <QuantizationAdviceBanner advice={advice} loading={adviceLoading} />
+        )}
+      </div>
       <ModelTaskRoutingPanel
         installedModels={installedModels}
         defaultModel={defaultModel}

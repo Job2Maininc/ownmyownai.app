@@ -30,6 +30,7 @@ import type {
   LastRequestMetrics,
 } from "../types";
 import { ThemeToggle } from "./ThemeToggle";
+import EmptyState from "./EmptyState";
 
 interface DashboardProps {
   appUrl: string;
@@ -325,6 +326,8 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
               </>
             )}
 
+            {tab === "cursor" && <CursorIntegration />}
+
             {tab === "context" && <ContextManager />}
 
             {tab === "review" && <PrReviewPanel />}
@@ -388,7 +391,12 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
       <section className="panel" aria-label="File d'attente chat">
         <h2>File d&apos;attente chat</h2>
         {status && (status.queueDepth ?? 0) === 0 && (status.queuePosition ?? 0) === 0 ? (
-          <p className="panel__empty">Aucune requête en file — le host est disponible.</p>
+          <EmptyState
+            icon="activity"
+            variant="compact"
+            title="File vide"
+            description="Aucune requête en file — le host est disponible."
+          />
         ) : (
           <ul className="session-list">
             {(status?.queuePosition ?? 0) > 0 ? (
@@ -420,7 +428,12 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
       <section className="panel" aria-label="Génération média">
         <h2>Génération média</h2>
         {(status?.activeMediaGenerations ?? 0) === 0 ? (
-          <p className="panel__empty">Aucune génération image, voix, musique ou vidéo en cours.</p>
+          <EmptyState
+            icon="sparkles"
+            variant="compact"
+            title="Aucune génération média"
+            description="Image, voix, musique ou vidéo — rien en cours pour le moment."
+          />
         ) : (
           <ul className="session-list">
             {(status?.mediaJobs ?? []).map((job) => (
@@ -458,9 +471,12 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
       ) : (
         <section className="panel">
           <h2>Dernière requête</h2>
-          <p className="panel__empty">
-            Aucune génération encore. Lancez un chat pour voir tokens/s, latence et RAM.
-          </p>
+          <EmptyState
+            icon="activity"
+            variant="compact"
+            title="Pas encore de génération"
+            description="Lancez un chat pour voir tokens/s, latence et RAM."
+          />
         </section>
       )}
 
@@ -494,11 +510,16 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             ))}
           </ul>
         ) : (
-          <p className="panel__empty">
-            {status?.ollamaRunning
-              ? "Aucun modèle listé — tirez un modèle depuis le setup."
-              : "Démarrez Ollama pour voir les modèles."}
-          </p>
+          <EmptyState
+            icon="sparkles"
+            variant="compact"
+            title="Aucun modèle chargé"
+            description={
+              status?.ollamaRunning
+                ? "Téléchargez un modèle depuis l'onglet Modèles."
+                : "Démarrez Ollama pour voir les modèles."
+            }
+          />
         )}
       </section>
 
@@ -522,9 +543,12 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             ))}
           </ul>
         ) : (
-          <p className="panel__empty">
-            Aucun client. Ouvrez le chat web depuis votre navigateur.
-          </p>
+          <EmptyState
+            icon="users"
+            variant="compact"
+            title="Aucun client connecté"
+            description="Ouvrez le chat web depuis votre navigateur pour commencer."
+          />
         )}
       </section>
 

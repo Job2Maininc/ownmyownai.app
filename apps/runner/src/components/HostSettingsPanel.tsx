@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import CloudProvidersPanel from "./CloudProvidersPanel";
+import CursorIntegration from "./CursorIntegration";
 import FallbackModelSelect from "./FallbackModelSelect";
 import ModelTaskRoutingPanel from "./ModelTaskRoutingPanel";
 import UserMemoryPanel from "./UserMemoryPanel";
@@ -292,6 +293,8 @@ export default function HostSettingsPanel({
       </SettingsSection>
 
       <CloudProvidersPanel onChanged={onSettingsSaved} />
+
+      <CursorIntegration />
 
       <SettingsSection
         title="Synchronisation planifiée"

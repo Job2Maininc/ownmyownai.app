@@ -13,9 +13,16 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: "npm run dev",
+        command:
+          process.platform === "win32"
+            ? "set E2E_AUTH_BYPASS=1&& npm run dev"
+            : "E2E_AUTH_BYPASS=1 npm run dev",
         url: "http://127.0.0.1:3000",
         reuseExistingServer: true,
         timeout: 120_000,
+        env: {
+          ...process.env,
+          E2E_AUTH_BYPASS: "1",
+        },
       },
 });

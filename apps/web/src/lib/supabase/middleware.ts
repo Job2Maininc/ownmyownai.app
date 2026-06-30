@@ -28,11 +28,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const e2eBypass =
+    process.env.E2E_AUTH_BYPASS === "1" &&
+    request.cookies.get("e2e-test-auth")?.value === "1";
+
   const pathname = request.nextUrl.pathname;
   const protectedPaths = ["/dashboard", "/host/link", "/chat"];
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
-  if (isProtected && !user) {
+  if (isProtected && !user && !e2eBypass) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
