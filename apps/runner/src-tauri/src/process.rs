@@ -17,7 +17,7 @@ pub fn command_hidden(program: impl AsRef<std::ffi::OsStr>) -> std::process::Com
     cmd
 }
 
-fn command_hidden_async(program: impl AsRef<std::ffi::OsStr>) -> Command {
+pub fn command_hidden_async(program: impl AsRef<std::ffi::OsStr>) -> Command {
     let mut cmd = Command::from(command_hidden(program));
     cmd.kill_on_drop(true);
     cmd

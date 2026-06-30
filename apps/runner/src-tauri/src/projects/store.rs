@@ -212,19 +212,11 @@ pub fn resolve_project_context_ids(project_id: &str) -> Result<Vec<String>, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::store::{create_knowledge_base, init_db, ContextLimits};
-    use std::sync::{Mutex, OnceLock};
-
-    fn test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-    }
+    use crate::context::store::{create_knowledge_base, init_db, test_db_lock, ContextLimits};
 
     #[test]
     fn create_open_project_persists_kbase_ids() {
-        let _guard = test_lock();
+        let _guard = test_db_lock();
         init_db().expect("init db");
         let kb = create_knowledge_base("KB test", "", &ContextLimits::default()).unwrap();
         let project = create_project("Projet A", "desc", &[kb.id.clone()]).unwrap();

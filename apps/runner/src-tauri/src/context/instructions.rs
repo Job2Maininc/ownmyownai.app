@@ -23,20 +23,13 @@ pub fn prepend_kb_system_instructions(
 mod tests {
     use super::*;
     use crate::context::store::{
-        create_knowledge_base, init_db, set_knowledge_base_system_instruction, ContextLimits,
+        create_knowledge_base, init_db, set_knowledge_base_system_instruction, test_db_lock,
+        ContextLimits,
     };
-    use std::sync::{Mutex, OnceLock};
-
-    fn test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-    }
 
     #[test]
     fn kb_instruction_collected_for_active_context() {
-        let _guard = test_lock();
+        let _guard = test_db_lock();
         init_db().expect("init db");
         let kb = create_knowledge_base("KB", "", &ContextLimits::default()).unwrap();
         set_knowledge_base_system_instruction(&kb.id, "Réponds en français.").unwrap();

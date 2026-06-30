@@ -818,6 +818,14 @@ pub fn init_db() -> Result<(), String> {
     with_db(|_| Ok(()))
 }
 
+#[cfg(test)]
+pub fn test_db_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 pub fn create_knowledge_base(name: &str, description: &str, limits: &ContextLimits) -> Result<KnowledgeBase, String> {
     with_db(|conn| {
         let count: u32 = conn
