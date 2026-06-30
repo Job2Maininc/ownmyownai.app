@@ -408,6 +408,16 @@ export const WS_MESSAGE_TYPES = {
   MEDIA_GENERATE: "media.generate",
   MEDIA_PROGRESS: "media.progress",
   MEDIA_DONE: "media.done",
+  MEDIA_CANCEL: "media.cancel",
+  MEDIA_LIST: "media.list",
+  MEDIA_STATUS: "media.status",
+  MEDIA_ERROR: "media.error",
+  /** Galerie `creatives/` — artefacts persistés et médias générés (Host). */
+  CREATIVES_LIST: "creatives.list",
+  CREATIVES_READ: "creatives.read",
+  CREATIVES_DELETE: "creatives.delete",
+  CREATIVES_DELETED: "creatives.deleted",
+  CREATIVES_ERROR: "creatives.error",
   PLAYBOOK_LIST: "playbook.list",
   PLAYBOOK_RUN: "playbook.run",
   PLAYBOOK_ERROR: "playbook.error",
@@ -656,6 +666,71 @@ export const MediaDonePayloadSchema = z.object({
   message: z.string().optional(),
 });
 export type MediaDonePayload = z.infer<typeof MediaDonePayloadSchema>;
+
+export const MediaErrorPayloadSchema = z.object({
+  message: z.string(),
+});
+export type MediaErrorPayload = z.infer<typeof MediaErrorPayloadSchema>;
+
+export const MediaCancelPayloadSchema = z.object({
+  jobId: z.string(),
+});
+export type MediaCancelPayload = z.infer<typeof MediaCancelPayloadSchema>;
+
+/** Snapshot job média (réponse `media.status` après `media.list`). */
+export const MediaJobSnapshotSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  status: z.string(),
+  progress: z.number().int().min(0).max(100),
+  message: z.string().optional(),
+});
+export type MediaJobSnapshot = z.infer<typeof MediaJobSnapshotSchema>;
+
+export const MediaStatusPayloadSchema = z.object({
+  jobs: z.array(MediaJobSnapshotSchema),
+});
+export type MediaStatusPayload = z.infer<typeof MediaStatusPayloadSchema>;
+
+/** Type de fichier dans la galerie `creatives/` (Host). */
+export const CreativeKindSchema = z.enum(["markdown", "image", "audio", "video", "other"]);
+export type CreativeKind = z.infer<typeof CreativeKindSchema>;
+
+export const CreativeSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  kind: CreativeKindSchema,
+  filename: z.string(),
+  mimeType: z.string().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  threadId: z.string().nullable().optional(),
+  savedAt: z.string(),
+});
+export type CreativeSummary = z.infer<typeof CreativeSummarySchema>;
+
+export const CreativeListPayloadSchema = z.object({
+  creatives: z.array(CreativeSummarySchema),
+});
+export type CreativeListPayload = z.infer<typeof CreativeListPayloadSchema>;
+
+export const CreativeReadPayloadSchema = z.object({
+  id: z.string().min(1),
+});
+export type CreativeReadPayload = z.infer<typeof CreativeReadPayloadSchema>;
+
+export const CreativeReadResultSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  dataBase64: z.string(),
+  textContent: z.string().optional(),
+});
+export type CreativeReadResult = z.infer<typeof CreativeReadResultSchema>;
+
+export const CreativeDeletePayloadSchema = z.object({
+  id: z.string().min(1),
+});
+export type CreativeDeletePayload = z.infer<typeof CreativeDeletePayloadSchema>;
 
 export const JobCancelPayloadSchema = z.object({
   jobId: z.string(),

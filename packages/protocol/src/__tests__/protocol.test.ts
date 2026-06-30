@@ -14,9 +14,13 @@ import {
   McpCallPayloadSchema,
   McpServerSummarySchema,
   McpToolDescriptorSchema,
+  MediaCancelPayloadSchema,
   MediaDonePayloadSchema,
+  MediaErrorPayloadSchema,
   MediaGeneratePayloadSchema,
+  MediaJobSnapshotSchema,
   MediaProgressPayloadSchema,
+  MediaStatusPayloadSchema,
   PatchPreviewRequestSchema,
   PatchPreviewResponseSchema,
   PlaybookRunPayloadSchema,
@@ -297,5 +301,82 @@ describe("protocol", () => {
     expect(WS_MESSAGE_TYPES.MEDIA_GENERATE).toBe("media.generate");
     expect(WS_MESSAGE_TYPES.MEDIA_PROGRESS).toBe("media.progress");
     expect(WS_MESSAGE_TYPES.MEDIA_DONE).toBe("media.done");
+  });
+
+  it("parse media.generate pour tous les kinds et modes voix", () => {
+    for (const kind of ["image", "voice", "music", "video"] as const) {
+      const payload = MediaGeneratePayloadSchema.parse({
+        kind,
+        prompt: `Test ${kind}`,
+      });
+      expect(payload.kind).toBe(kind);
+    }
+
+    const tts = MediaGeneratePayloadSchema.parse({
+      kind: "voice",
+      prompt: "Bonjour le monde",
+      voiceMode: "tts",
+      model: "piper",
+    });
+    expect(tts.voiceMode).toBe("tts");
+
+    const stt = MediaGeneratePayloadSchema.parse({
+      kind: "voice",
+      prompt: "Transcrire",
+      voiceMode: "stt",
+      sourcePath: "C:\\audio\\note.wav",
+    });
+    expect(stt.sourcePath).toContain("note.wav");
+  });
+
+  it("parse media.cancel / media.error / media.status", () => {
+    const cancel = MediaCancelPayloadSchema.parse({ jobId: "media-42" });
+    expect(cancel.jobId).toBe("media-42");
+
+    const error = MediaErrorPayloadSchema.parse({
+      message: "Modèle image indisponible",
+    });
+    expect(error.message).toContain("indisponible");
+
+    const status = MediaStatusPayloadSchema.parse({
+      jobs: [
+        {
+          id: "media-1",
+          kind: "image",
+          status: "running",
+          progress: 65,
+          message: "Rendu…",
+        },
+      ],
+    });
+    expect(status.jobs[0].progress).toBe(65);
+    expect(WS_MESSAGE_TYPES.MEDIA_CANCEL).toBe("media.cancel");
+    expect(WS_MESSAGE_TYPES.MEDIA_LIST).toBe("media.list");
+    expect(WS_MESSAGE_TYPES.MEDIA_STATUS).toBe("media.status");
+    expect(WS_MESSAGE_TYPES.MEDIA_ERROR).toBe("media.error");
+  });
+
+  it("parse envelope WS media.generate", () => {
+    const env = parseEnvelope(
+      JSON.stringify({
+        type: WS_MESSAGE_TYPES.MEDIA_GENERATE,
+        payload: {
+          kind: "music",
+          prompt: "Ambiance lo-fi",
+          contextIds: ["kb-1"],
+        },
+        requestId: "req-media-1",
+      }),
+    );
+    expect(env?.type).toBe("media.generate");
+    expect(MediaGeneratePayloadSchema.safeParse(env?.payload).success).toBe(true);
+  });
+
+  it("rejette media.generate sans prompt", () => {
+    const result = MediaGeneratePayloadSchema.safeParse({
+      kind: "image",
+      prompt: "",
+    });
+    expect(result.success).toBe(false);
   });
 });
