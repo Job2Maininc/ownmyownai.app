@@ -10,6 +10,7 @@ import {
   type PaletteCommand,
 } from "./command-palette/command-palette-provider";
 import AuditTrail from "./AuditTrail";
+import CursorIntegration from "./CursorIntegration";
 import ContextManager from "./ContextManager";
 import HostBreadcrumbs from "./dashboard/HostBreadcrumbs";
 import HostSidebar from "./dashboard/HostSidebar";
@@ -17,6 +18,7 @@ import { DASHBOARD_NAV, type DashboardTab } from "./dashboard/dashboard-nav";
 import HostSettingsPanel from "./HostSettingsPanel";
 import PrReviewPanel from "./PrReviewPanel";
 import ProjectManager from "./ProjectManager";
+import UserMemoryPanel from "./UserMemoryPanel";
 import UpdatesPanel from "./UpdatesPanel";
 import LocalChat from "./LocalChat";
 import McpServersManager from "./McpServersManager";
@@ -320,6 +322,8 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
               />
             )}
 
+            {tab === "cursor" && <CursorIntegration />}
+
             {tab === "context" && <ContextManager />}
 
             {tab === "review" && <PrReviewPanel />}
@@ -327,6 +331,8 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             {tab === "projects" && <ProjectManager />}
 
             {tab === "mcp" && <McpServersManager />}
+
+            {tab === "memory" && <UserMemoryPanel />}
 
             {tab === "settings" && (
               <HostSettingsPanel

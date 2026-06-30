@@ -125,4 +125,16 @@ Une release avec auto-update contient une section `platforms.windows-x86_64` ave
 | Version installée > version publiée | Build local / dev plus récent que Supabase | Créer un tag `v*` et laisser CI publier |
 | Mode dev (`tauri dev`) | L'updater est désactivé en debug | Tester avec l'installateur NSIS release |
 
-Dans l'app Host → onglet **État** → section **Mises à jour** : bouton **Vérifier** et lien vers la page Télécharger si l'auto-update n'est pas configuré.
+## Interface Host (onglet État)
+
+Le panneau **Mises à jour** (`UpdatesPanel.tsx`) affiche un badge de statut et compare les versions installée / publiée :
+
+| Statut UI | Valeur `status` | Signification | Action utilisateur |
+|-----------|-----------------|---------------|-------------------|
+| **À jour** | `upToDate` | Version installée = dernière publiée | Aucune |
+| **Mise à jour disponible** | `updateAuto` | Release signée, canal auto actif | *Installer maintenant* |
+| **Mise à jour manuelle** | `updateManual` | Version distante plus récente mais `TAURI_SIGNING_PRIVATE_KEY` absent en CI | *Télécharger l'installateur* |
+| **Build avancé** | `ahead` | Version locale > version publiée (dev / build local) | Attendre un tag `v*` |
+| **Vérification impossible** | `checkFailed` | Manifeste distant illisible | Vérifier la connexion ou page Télécharger |
+
+Dans l'app Host → onglet **État** → section **Mises à jour** : bouton **Vérifier**, horodatage de la dernière vérification, et lien vers la page Télécharger si l'auto-update n'est pas configuré.

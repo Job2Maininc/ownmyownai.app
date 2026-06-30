@@ -9,6 +9,16 @@ const MANIFEST_URL: &str =
 const INITIAL_DELAY: Duration = Duration::from_secs(15);
 const CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateStatus {
+    UpToDate,
+    Ahead,
+    UpdateAuto,
+    UpdateManual,
+    CheckFailed,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCheckResult {
@@ -16,6 +26,7 @@ pub struct UpdateCheckResult {
     pub remote_version: Option<String>,
     pub update_available: bool,
     pub auto_update_ready: bool,
+    pub status: UpdateStatus,
     pub message: String,
 }
 
@@ -57,8 +68,9 @@ pub async fn check_for_updates(app: &AppHandle) -> UpdateCheckResult {
                 remote_version: Some(update.version.clone()),
                 update_available: true,
                 auto_update_ready: true,
+                status: UpdateStatus::UpdateAuto,
                 message: format!(
-                    "Mise à jour {} disponible — installation automatique possible.",
+                    "Version {} disponible — vous pouvez l'installer en un clic.",
                     update.version
                 ),
             },
@@ -89,31 +101,53 @@ pub async fn check_and_install(app: &AppHandle) -> Result<(), String> {
 }
 
 fn up_to_date_message(current: &str, remote: Option<&str>) -> UpdateCheckResult {
-    let message = match remote {
-        Some(remote) if remote == current => "Vous avez la dernière version publiée.".to_string(),
-        Some(remote) => format!("Version installée {current} (manifeste distant : {remote})."),
-        None => "Aucune version distante détectée.".to_string(),
+    let (status, message) = match remote {
+        Some(remote) if remote == current => (
+            UpdateStatus::UpToDate,
+            "Vous avez la dernière version publiée.".to_string(),
+        ),
+        Some(remote) if is_version_newer(current, remote) => (
+            UpdateStatus::Ahead,
+            format!(
+                "Version installée {current} — plus récente que la version publiée ({remote}). Build local ou pré-release."
+            ),
+        ),
+        Some(remote) => (
+            UpdateStatus::UpToDate,
+            format!("Version installée {current} (manifeste distant : {remote})."),
+        ),
+        None => (
+            UpdateStatus::CheckFailed,
+            "Impossible de lire la version publiée sur le serveur.".to_string(),
+        ),
     };
     UpdateCheckResult {
         current_version: current.to_string(),
         remote_version: remote.map(str::to_string),
         update_available: false,
         auto_update_ready: false,
+        status,
         message,
     }
 }
 
 fn manifest_fallback(current: &str, remote: Option<&str>, updater_error: &str) -> UpdateCheckResult {
     let Some(remote) = remote.filter(|v| is_version_newer(v, current)) else {
+        let status = if updater_error.is_empty() {
+            UpdateStatus::UpToDate
+        } else {
+            UpdateStatus::CheckFailed
+        };
         return UpdateCheckResult {
             current_version: current.to_string(),
             remote_version: remote.map(str::to_string),
             update_available: false,
             auto_update_ready: false,
+            status,
             message: if updater_error.is_empty() {
                 "Vous avez la dernière version publiée.".to_string()
             } else {
-                format!("Vérification auto indisponible : {updater_error}")
+                format!("Vérification automatique indisponible : {updater_error}")
             },
         };
     };
@@ -123,8 +157,9 @@ fn manifest_fallback(current: &str, remote: Option<&str>, updater_error: &str) -
         remote_version: Some(remote.to_string()),
         update_available: true,
         auto_update_ready: false,
+        status: UpdateStatus::UpdateManual,
         message: format!(
-            "Version {remote} disponible sur le site, mais la mise à jour automatique n'est pas configurée (artefacts non signés). Téléchargez l'installateur manuellement."
+            "Version {remote} disponible — téléchargez l'installateur NSIS depuis le site. L'installation automatique sera activée dès que la release sera signée côté serveur."
         ),
     }
 }
