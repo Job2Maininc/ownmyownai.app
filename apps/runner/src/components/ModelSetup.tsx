@@ -9,6 +9,7 @@ import {
   getModelFamily,
   type ModelFamily,
 } from "../data/models";
+import FallbackModelSelect from "./FallbackModelSelect";
 import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
 import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
 import type { HostSettings } from "../types";
@@ -22,6 +23,7 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   const [modelsDir, setModelsDir] = useState("");
   const [selectedModels, setSelectedModels] = useState<string[]>([DEFAULT_MODEL]);
   const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL);
+  const [fallbackModel, setFallbackModel] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [ramGb, setRamGb] = useState(8);
   const [gpuLabel, setGpuLabel] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
       setModelsDir(layout.modelsDir || settings.modelsDir);
       setSelectedModels(settings.selectedModels);
       setDefaultModel(settings.defaultModel);
+      setFallbackModel(settings.fallbackModel ?? "");
     } catch {
       const layout = await invoke<{ modelsDir: string }>("get_host_data_layout");
       setModelsDir(layout.modelsDir);
@@ -94,6 +97,7 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
       modelsDir: modelsDir.trim(),
       selectedModels,
       defaultModel,
+      fallbackModel: fallbackModel.trim() || undefined,
     };
 
     try {
@@ -117,12 +121,12 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
   return (
     <>
       <h1>Choisir vos modèles</h1>
-      <p className="muted" style={{ fontSize: 14 }}>
+      <p className="muted type-small">
         Sélectionnez les modèles à télécharger et l&apos;emplacement de stockage sur
         votre disque.
       </p>
       {gpuLabel && (
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="muted type-caption">
           GPU détecté : <span className="gpu-badge gpu-badge--discrete">{gpuLabel}</span>
         </p>
       )}
@@ -133,7 +137,7 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         Défini à l&apos;étape précédente dans votre dossier de données.
       </p>
 
-      <p className="muted" style={{ fontSize: 13, marginTop: 16, marginBottom: 6 }}>
+      <p className="muted type-caption" style={{ marginTop: 16, marginBottom: 6 }}>
         Famille de modèles
       </p>
       <div className="model-filters">
@@ -233,6 +237,16 @@ export default function ModelSetup({ onContinue, error }: ModelSetupProps) {
         {selectedModels.length} modèle(s) sélectionné(s) · ~{totalSize.toFixed(1)} Go
         à télécharger · {maxRam} Go RAM recommandés
       </p>
+
+      {selectedModels.length > 1 && (
+        <FallbackModelSelect
+          installedModels={selectedModels}
+          defaultModel={defaultModel}
+          value={fallbackModel}
+          onChange={setFallbackModel}
+          persist={false}
+        />
+      )}
 
       <button
         type="button"
