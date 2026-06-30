@@ -15,6 +15,7 @@ import HostBreadcrumbs from "./dashboard/HostBreadcrumbs";
 import HostSidebar from "./dashboard/HostSidebar";
 import { DASHBOARD_NAV, type DashboardTab } from "./dashboard/dashboard-nav";
 import HostSettingsPanel from "./HostSettingsPanel";
+import LocalImagePanel from "./LocalImagePanel";
 import PrReviewPanel from "./PrReviewPanel";
 import ProjectManager from "./ProjectManager";
 import UpdatesPanel from "./UpdatesPanel";
@@ -319,6 +320,8 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
                 onDefaultChanged={refresh}
               />
             )}
+
+            {tab === "image" && <LocalImagePanel />}
 
             {tab === "context" && <ContextManager />}
 
