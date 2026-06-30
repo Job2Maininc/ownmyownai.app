@@ -7,6 +7,7 @@ const legalLinks = [
 ] as const;
 
 const navLinks = [
+  { href: "/cursor", label: "Cursor" },
   { href: "/pricing", label: "Tarifs" },
   { href: "/download", label: "Télécharger" },
   { href: "/login", label: "Connexion" },

@@ -12,4 +12,11 @@ test.describe("Smoke web", () => {
     expect(response?.status()).toBeLessThan(500);
     await expect(page.locator("body")).toContainText(/télécharg|download/i);
   });
+
+  test("page cursor accessible", async ({ page }) => {
+    const response = await page.goto("/cursor");
+    expect(response?.status()).toBeLessThan(500);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/Cursor/i);
+    await expect(page.locator("body")).toContainText(/Ollama direct/i);
+  });
 });
