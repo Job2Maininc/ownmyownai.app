@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 pub use crate::cloud_keys::CloudProviderId as ProviderId;
+pub use openai::{GeneratedImage, ImageGenerationOptions, DEFAULT_IMAGE_MODEL};
 
 const OPENAI_MODELS: &[&str] = &[
     "openai:gpt-4o-mini",
@@ -89,6 +90,23 @@ pub fn is_available_model(model: &str) -> bool {
     } else {
         crate::ollama::model_exists(model)
     }
+}
+
+/// Generates an image via OpenAI DALL-E (`images/generations`) when the provider is enabled.
+pub async fn generate_openai_image(
+    prompt: &str,
+    options: &ImageGenerationOptions,
+) -> Result<GeneratedImage, String> {
+    if !provider_enabled(CloudProviderId::OpenAi) {
+        return Err(
+            "Le fournisseur OpenAI est désactivé dans les paramètres Host.".to_string(),
+        );
+    }
+    let api_key = crate::cloud_keys::get_provider_api_key(CloudProviderId::OpenAi)?
+        .ok_or_else(|| {
+            "Aucune clé API configurée pour OpenAI. Ajoutez-la dans l'app Host.".to_string()
+        })?;
+    openai::generate_image(&api_key, prompt, options).await
 }
 
 pub fn get_cloud_providers_status() -> Vec<CloudProviderStatus> {
