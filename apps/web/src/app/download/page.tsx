@@ -90,6 +90,12 @@ export default async function DownloadPage({
                 </Link>{" "}
                 et entrez-le dans l&apos;app
               </li>
+              <li>
+                <Link href="/onboarding/cursor" className="link">
+                  Connectez Cursor
+                </Link>{" "}
+                à la passerelle locale (optionnel)
+              </li>
               <li>Discutez depuis le dashboard — prêt en moins de 5 minutes</li>
             </ol>
           </div>

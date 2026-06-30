@@ -86,7 +86,10 @@ export default function HostLinkPage() {
               est installé et ouvert sur votre PC
             </li>
             <li>Entrez le code ci-dessous dans l&apos;application (ou scannez le QR)</li>
-            <li>Votre PC apparaîtra sur le dashboard — vous pourrez chatter immédiatement</li>
+            <li>
+              Après le pairing, connectez Cursor (étape suivante) ou ouvrez le chat depuis le
+              dashboard
+            </li>
           </ol>
 
           {loading && <PairingCodeSkeleton />}

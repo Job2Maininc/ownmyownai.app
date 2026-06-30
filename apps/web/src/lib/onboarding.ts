@@ -26,6 +26,15 @@ export const ONBOARDING_STEPS = [
     icon: "link" as IconName,
   },
   {
+    id: "cursor",
+    label: "Connecter Cursor",
+    shortLabel: "Cursor",
+    href: "/onboarding/cursor",
+    description:
+      "Branchez Cursor sur la passerelle locale du Host — inférence 0 crédit avec RAG et règles projet.",
+    icon: "monitor" as IconName,
+  },
+  {
     id: "chat",
     label: "Premier chat",
     shortLabel: "Discuter",

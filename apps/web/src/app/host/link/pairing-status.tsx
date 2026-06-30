@@ -34,13 +34,16 @@ export function PairingStatus({ code }: PairingStatusProps) {
 
   return (
     <div className="pairing-success">
-      <p className="pairing-success__message">PC lié avec succès ! Vous pouvez commencer à discuter.</p>
+      <p className="pairing-success__message">PC lié avec succès ! Prochaine étape : connecter Cursor (optionnel).</p>
       <div className="flex flex-wrap justify-center gap-2">
+        <Link href={`/onboarding/cursor?host=${hostId}`}>
+          <Button>Connecter Cursor</Button>
+        </Link>
         <Link href={`/chat/${hostId}`}>
-          <Button>Démarrer le premier chat</Button>
+          <Button variant="secondary">Passer au chat</Button>
         </Link>
         <Link href="/dashboard">
-          <Button variant="secondary">Voir le dashboard</Button>
+          <Button variant="ghost">Dashboard</Button>
         </Link>
       </div>
     </div>

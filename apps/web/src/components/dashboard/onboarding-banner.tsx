@@ -33,9 +33,9 @@ export function OnboardingBanner({ hasHosts }: OnboardingBannerProps) {
     <Card className="mb-8 shadow-glow">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold tracking-tight">Bienvenue — prêt en 5 minutes</h2>
+          <h2 className="font-semibold tracking-tight">Bienvenue — prêt en quelques minutes</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Suivez ces étapes pour installer, lier et discuter avec votre IA locale.
+            Suivez ces étapes pour installer, lier, connecter Cursor et discuter avec votre IA locale.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={dismiss}>

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -54,9 +55,14 @@ export function OnboardingSteps({
 interface OnboardingStepDetailProps {
   stepId: OnboardingStepId;
   className?: string;
+  children?: ReactNode;
 }
 
-export function OnboardingStepDetail({ stepId, className = "" }: OnboardingStepDetailProps) {
+export function OnboardingStepDetail({
+  stepId,
+  className = "",
+  children,
+}: OnboardingStepDetailProps) {
   const step = ONBOARDING_STEPS.find((s) => s.id === stepId);
   if (!step) return null;
 
@@ -74,6 +80,7 @@ export function OnboardingStepDetail({ stepId, className = "" }: OnboardingStepD
         {step.label}
       </h2>
       <p className="onboarding-step-detail__description">{step.description}</p>
+      {children ? <div className="onboarding-step-detail__body">{children}</div> : null}
     </div>
   );
 }

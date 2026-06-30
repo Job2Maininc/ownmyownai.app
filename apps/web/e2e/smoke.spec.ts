@@ -20,6 +20,13 @@ test.describe("Smoke web", () => {
     await expect(page.locator("body")).toContainText(/Ollama direct/i);
   });
 
+  test("page onboarding cursor accessible", async ({ page }) => {
+    const response = await page.goto("/onboarding/cursor");
+    expect(response?.status()).toBeLessThan(500);
+    await expect(page.getByRole("heading", { level: 2 })).toContainText(/Connecter Cursor/i);
+    await expect(page.locator("body")).toContainText(/passerelle/i);
+  });
+
   test("page help accessible", async ({ page }) => {
     const response = await page.goto("/help");
     expect(response?.status()).toBeLessThan(500);
