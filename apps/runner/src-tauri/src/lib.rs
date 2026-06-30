@@ -8,6 +8,7 @@ mod context;
 mod creatives;
 mod paths;
 mod conversation_summary;
+mod cursor_configure;
 mod cursor_mcp;
 mod mcp;
 mod dpapi;
@@ -74,7 +75,7 @@ use user_memory::{add_fact, delete_fact, memory_state, UserMemoryFact, UserMemor
 use jobs::{cancel_job, list_jobs, submit_job, JobKind, JobSnapshot};
 use local_chat::{cancel_local_chat, run_local_chat};
 use serde::Deserialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[tauri::command(rename = "check_ollama")]
 async fn check_ollama_cmd() -> Result<OllamaStatus, String> {
@@ -666,15 +667,47 @@ fn build_cursor_settings_json(
     api_token: &str,
     model: &str,
 ) -> Result<String, String> {
-    serde_json::to_string_pretty(&serde_json::json!({
-        "openai.apiKey": api_token,
-        "openai.baseUrl": base_url,
-        "cursor.general.openAiKey": api_token,
-        "cursor.general.openAiBaseUrl": base_url,
-        "cursor.model": model,
-        "model": model,
-    }))
-    .map_err(|e| e.to_string())
+    let patch = cursor_configure::build_gateway_settings_patch(base_url, api_token, model);
+    cursor_configure::settings_patch_to_pretty_json(&patch)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigureCursorInput {
+    project_dir: Option<String>,
+}
+
+#[tauri::command(rename = "configure_cursor_one_click")]
+fn configure_cursor_one_click_cmd(
+    input: Option<ConfigureCursorInput>,
+) -> Result<cursor_configure::CursorConfigureResult, String> {
+    let mut settings = get_settings()?;
+    if !settings.cursor_gateway_enabled {
+        settings.cursor_gateway_enabled = true;
+        save_settings(&settings)?;
+        openai_gateway::reload();
+    }
+
+    let creds = get_credentials()?.ok_or("Ce PC n'est pas encore lié.")?;
+    let api_token = creds
+        .cursor_api_token
+        .filter(|t| !t.is_empty())
+        .ok_or("Token Cursor introuvable. Reliez ce PC.")?;
+
+    let bind_config = openai_gateway::GatewayBindConfig {
+        port: settings.cursor_gateway_port,
+        lan: settings.cursor_gateway_lan,
+        enabled: true,
+    };
+    let base_url = openai_gateway::client_base_url(&bind_config);
+    let project_dir = input.and_then(|i| i.project_dir);
+
+    cursor_configure::configure_cursor_one_click(
+        &base_url,
+        &api_token,
+        &settings.default_model,
+        project_dir.as_deref(),
+    )
 }
 
 #[tauri::command(rename = "list_mcp_servers")]
@@ -860,6 +893,7 @@ pub fn run() {
             check_for_updates_cmd,
             install_host_update_cmd,
             get_cursor_integration_cmd,
+            configure_cursor_one_click_cmd,
             preview_cursor_mcp_config_cmd,
             write_cursor_mcp_config_cmd,
             list_mcp_servers_cmd,
@@ -880,6 +914,9 @@ pub fn run() {
                 let _ = window.set_theme(Some(tauri::Theme::Light));
             }
             set_app_handle(app.handle().clone());
+            if std::env::args().any(|arg| arg.contains("configure-cursor")) {
+                let _ = app.emit("omoa://configure-cursor", ());
+            }
             tray::setup(app)?;
             ollama::start_status_poller();
             openai_gateway::start();

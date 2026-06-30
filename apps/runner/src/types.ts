@@ -125,6 +125,16 @@ export interface CursorMcpWriteResult {
   configJson: string;
 }
 
+export interface CursorConfigureResult {
+  settingsPath: string;
+  backupPath: string | null;
+  merged: boolean;
+  cursorRunning: boolean;
+  gatewayEnabled: boolean;
+  mcpPath: string | null;
+  message: string;
+}
+
 export interface HostSettings {
   dataDir?: string;
   modelsDir: string;

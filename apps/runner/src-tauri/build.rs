@@ -56,6 +56,10 @@ fn main() {
                 "get_local_image_status",
                 "list_comfyui_checkpoints",
                 "generate_local_image",
+                "get_cursor_integration",
+                "configure_cursor_one_click",
+                "preview_cursor_mcp_config",
+                "write_cursor_mcp_config",
             ]),
         ),
     )

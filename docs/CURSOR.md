@@ -6,6 +6,56 @@ Connecter **Cursor** au Host **OwnMyOwnAI** pour l'inférence locale (0 crédit 
 
 ---
 
+## Configuration en un clic (recommandé)
+
+Le Host Windows peut écrire directement dans le fichier de paramètres Cursor — **sans copier-coller manuel**.
+
+### Depuis le Host
+
+1. **Liez le PC** à votre compte OwnMyOwnAI (pairing).
+2. Ouvrez le Host → onglet **Cursor**.
+3. Cliquez **« Configurer Cursor automatiquement »**.
+4. *(Optionnel)* Cochez **Aussi ajouter le serveur MCP OMOA** et choisissez le dossier racine de votre projet.
+5. **Redémarrez Cursor** s'il était déjà ouvert (sinon ouvrez-le).
+6. Dans Cursor → **Paramètres → Models**, vérifiez le modèle affiché dans le Host (ex. `qwen2.5:7b`).
+
+Le Host :
+
+- active la **passerelle OpenAI locale** si elle était désactivée ;
+- fusionne URL, token et modèle dans `%APPDATA%\Cursor\User\settings.json` (Windows) ou `~/Library/Application Support/Cursor/User/settings.json` (macOS) ;
+- crée une sauvegarde `settings.json.bak` à la **première** modification ;
+- peut écrire `.cursor/mcp.json` dans le dossier projet choisi.
+
+### Depuis le web (onboarding)
+
+Sur `/onboarding/cursor`, le bouton **« Configurer via le Host »** ouvre `ownmyownai://configure-cursor` si le protocole est enregistré (Host installé). Le navigateur **ne peut pas** modifier les fichiers Cursor — l'action s'exécute toujours dans le Host.
+
+### Limitations
+
+| Point | Détail |
+|-------|--------|
+| Cursor doit être installé | Le dossier `Cursor/User` doit exister (lancez Cursor au moins une fois). |
+| Redémarrage conseillé | Si Cursor est ouvert pendant l'écriture, **fermez-le puis relancez-le** pour charger les nouveaux paramètres. |
+| Composer / Tab | L'override OpenAI s'applique au **chat et au mode Plan** — pas à Tab ni Composer (limitation Cursor). |
+| Vérification Models | Ouvrez **Cursor Settings → Models** et confirmez que le modèle Host est sélectionné. |
+
+### Clés écrites dans `settings.json`
+
+```json
+{
+  "openai.apiKey": "omoa_<uuid>",
+  "openai.baseUrl": "http://127.0.0.1:8765/v1",
+  "cursor.general.openAiKey": "omoa_<uuid>",
+  "cursor.general.openAiBaseUrl": "http://127.0.0.1:8765/v1",
+  "cursor.model": "qwen2.5:7b",
+  "model": "qwen2.5:7b"
+}
+```
+
+Le copier-coller manuel reste disponible dans **Configuration manuelle** du panneau Host.
+
+---
+
 ## Vue d'ensemble — trois chemins
 
 | # | Chemin | URL / transport | RAG & règles OMOA | Quand l'utiliser |
@@ -82,11 +132,15 @@ Cursor utilise l'API OpenAI-compatible exposée par le Host (`openai_gateway.rs`
 
 2. **Démarrez le Host** — la passerelle écoute sur `127.0.0.1:8765` au lancement.
 
-3. Dans le Host, ouvrez l'onglet **Cursor** (`CursorIntegration`).
+3. Dans le Host, onglet **Cursor** → **Configurer Cursor automatiquement** (ou configuration manuelle ci-dessous).
 
-4. Cochez **Passerelle OpenAI locale active** (`cursorGatewayEnabled` dans `settings.json`).
+4. Redémarrez Cursor si nécessaire, puis vérifiez **Paramètres → Models**.
 
-5. Copiez depuis le panneau :
+#### Configuration manuelle (fallback)
+
+1. Cochez **Passerelle OpenAI locale active** (`cursorGatewayEnabled`).
+
+2. Copiez depuis le panneau :
    - **URL de base** — ex. `http://127.0.0.1:8765/v1`
    - **Token API (Bearer)** — ex. `omoa_a1b2c3…` (généré au pairing, stocké dans le keyring Host)
 
@@ -208,6 +262,8 @@ Voir aussi [packages/omoa-mcp-server/README.md](../packages/omoa-mcp-server/READ
 | Symptôme | Cause probable | Action |
 |----------|----------------|--------|
 | Panneau Cursor vide | PC non lié | Terminer le pairing Host |
+| `Cursor n'est pas installé` | Dossier User absent | Installer Cursor et l'ouvrir une fois |
+| Paramètres non pris en compte | Cursor ouvert pendant l'écriture | Fermer Cursor puis relancer |
 | `Token Cursor introuvable` | Credentials incomplets | Relier le PC (génère `cursorApiToken`) |
 | `curl /health` échoue | Host arrêté ou port occupé | Relancer le Host ; vérifier `cursorGatewayPort` (défaut 8765) |
 | **Verify** OK mais réponses vides | Modèle absent côté Ollama | Installer le modèle par défaut Host |

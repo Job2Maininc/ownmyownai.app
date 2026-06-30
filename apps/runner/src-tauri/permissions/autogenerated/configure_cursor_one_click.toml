@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-configure-cursor-one-click"
+description = "Enables the configure_cursor_one_click command without any pre-configured scope."
+commands.allow = ["configure_cursor_one_click"]
+
+[[permission]]
+identifier = "deny-configure-cursor-one-click"
+description = "Denies the configure_cursor_one_click command without any pre-configured scope."
+commands.deny = ["configure_cursor_one_click"]

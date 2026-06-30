@@ -72,15 +72,17 @@ Modèle   : llama3.2:3b`,
       "Disponible — GET /v1/models, POST /v1/chat/completions (SSE), auth Bearer et rate limiting actifs. Activez la passerelle dans l'onglet Cursor du Host.",
     steps: [
       "Installez et liez le Host Windows (pairing).",
-      "Activez « Gateway Cursor » dans les paramètres Host (port par défaut 8765).",
-      "Dans Cursor → Settings → Models, pointez vers l'URL locale du gateway.",
-      "Utilisez le token Bearer généré par le Host comme clé API.",
+      "Dans le Host → onglet Cursor, cliquez « Configurer Cursor automatiquement ».",
+      "Redémarrez Cursor si l'app était ouverte — puis vérifiez Models.",
+      "Optionnel : cochez MCP et choisissez le dossier projet pour .cursor/mcp.json.",
     ],
     snippet: {
-      label: "Configuration Cursor",
-      code: `Base URL : http://127.0.0.1:8765/v1
-API Key  : <token Host cursorApiToken>
-Modèle   : <modèle configuré dans le Host>`,
+      label: "Configuration automatique (Host)",
+      code: `Host → Cursor → « Configurer Cursor automatiquement »
+Écrit %APPDATA%\\Cursor\\User\\settings.json (+ sauvegarde .bak)
+URL      : http://127.0.0.1:8765/v1
+Token    : généré à l'appairage (keyring Host)
+Modèle   : celui configuré dans le Host`,
     },
   },
   {
@@ -125,6 +127,11 @@ const badgeClass: Record<IntegrationPath["badgeTone"], string> = {
 };
 
 const cursorFaq = [
+  {
+    question: "Comment configurer Cursor en un clic ?",
+    answer:
+      "Ouvrez le Host Windows → onglet Cursor → « Configurer Cursor automatiquement ». Le Host écrit settings.json de Cursor (sauvegarde .bak), active la passerelle et applique URL, token et modèle.",
+  },
   {
     question: "Où trouver le token API pour la passerelle ?",
     answer:
@@ -188,8 +195,8 @@ export default function CursorPage() {
           <p className="text-sm leading-relaxed text-[var(--muted)]">
             <strong className="font-medium text-[var(--foreground)]">Ollama direct</strong> pour
             démarrer en 2 minutes ·{" "}
-            <strong className="font-medium text-[var(--foreground)]">Passerelle Host</strong> pour
-            RAG et règles projet ·{" "}
+            <strong className="font-medium text-[var(--foreground)]">Passerelle Host</strong> en un
+            clic depuis l&apos;app Windows ·{" "}
             <strong className="font-medium text-[var(--foreground)]">MCP</strong> pour exposer le
             contexte OMOA à l&apos;agent Cursor.
           </p>

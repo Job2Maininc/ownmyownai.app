@@ -162,6 +162,15 @@ function DashboardContent({ appUrl, onUnpaired, initialTab }: DashboardProps) {
     };
   }, [refresh]);
 
+  useEffect(() => {
+    const unlisten = listen("omoa://configure-cursor", () => {
+      setTab("cursor");
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   async function handleRefresh() {
     setRefreshing(true);
     await refresh();

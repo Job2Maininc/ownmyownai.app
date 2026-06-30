@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-write-cursor-mcp-config"
+description = "Enables the write_cursor_mcp_config command without any pre-configured scope."
+commands.allow = ["write_cursor_mcp_config"]
+
+[[permission]]
+identifier = "deny-write-cursor-mcp-config"
+description = "Denies the write_cursor_mcp_config command without any pre-configured scope."
+commands.deny = ["write_cursor_mcp_config"]

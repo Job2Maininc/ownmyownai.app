@@ -274,7 +274,7 @@ export default function App() {
         )}
 
         {step === "online" && (
-          <Dashboard appUrl={appUrl} onUnpaired={handleUnpaired} initialTab="cursor" />
+          <Dashboard appUrl={appUrl} onUnpaired={handleUnpaired} />
         )}
 
         {error && step !== "online" && step !== "models" && step !== "storage" && (

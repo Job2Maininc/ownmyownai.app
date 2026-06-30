@@ -417,6 +417,12 @@
           "markdownDescription": "Enables the complete_pairing command without any pre-configured scope."
         },
         {
+          "description": "Enables the configure_cursor_one_click command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-configure-cursor-one-click",
+          "markdownDescription": "Enables the configure_cursor_one_click command without any pre-configured scope."
+        },
+        {
           "description": "Enables the create_knowledge_base command without any pre-configured scope.",
           "type": "string",
           "const": "allow-create-knowledge-base",
@@ -481,6 +487,12 @@
           "type": "string",
           "const": "allow-get-credentials",
           "markdownDescription": "Enables the get_credentials command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_cursor_integration command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-cursor-integration",
+          "markdownDescription": "Enables the get_cursor_integration command without any pre-configured scope."
         },
         {
           "description": "Enables the get_default_models_dir command without any pre-configured scope.",
@@ -645,6 +657,12 @@
           "markdownDescription": "Enables the open_url command without any pre-configured scope."
         },
         {
+          "description": "Enables the preview_cursor_mcp_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-preview-cursor-mcp-config",
+          "markdownDescription": "Enables the preview_cursor_mcp_config command without any pre-configured scope."
+        },
+        {
           "description": "Enables the pull_model command without any pre-configured scope.",
           "type": "string",
           "const": "allow-pull-model",
@@ -723,6 +741,12 @@
           "markdownDescription": "Enables the update_project command without any pre-configured scope."
         },
         {
+          "description": "Enables the write_cursor_mcp_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-write-cursor-mcp-config",
+          "markdownDescription": "Enables the write_cursor_mcp_config command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cancel_background_job command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cancel-background-job",
@@ -745,6 +769,12 @@
           "type": "string",
           "const": "deny-complete-pairing",
           "markdownDescription": "Denies the complete_pairing command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the configure_cursor_one_click command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-configure-cursor-one-click",
+          "markdownDescription": "Denies the configure_cursor_one_click command without any pre-configured scope."
         },
         {
           "description": "Denies the create_knowledge_base command without any pre-configured scope.",
@@ -811,6 +841,12 @@
           "type": "string",
           "const": "deny-get-credentials",
           "markdownDescription": "Denies the get_credentials command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_cursor_integration command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-cursor-integration",
+          "markdownDescription": "Denies the get_cursor_integration command without any pre-configured scope."
         },
         {
           "description": "Denies the get_default_models_dir command without any pre-configured scope.",
@@ -975,6 +1011,12 @@
           "markdownDescription": "Denies the open_url command without any pre-configured scope."
         },
         {
+          "description": "Denies the preview_cursor_mcp_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-preview-cursor-mcp-config",
+          "markdownDescription": "Denies the preview_cursor_mcp_config command without any pre-configured scope."
+        },
+        {
           "description": "Denies the pull_model command without any pre-configured scope.",
           "type": "string",
           "const": "deny-pull-model",
@@ -1051,6 +1093,12 @@
           "type": "string",
           "const": "deny-update-project",
           "markdownDescription": "Denies the update_project command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the write_cursor_mcp_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-write-cursor-mcp-config",
+          "markdownDescription": "Denies the write_cursor_mcp_config command without any pre-configured scope."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
