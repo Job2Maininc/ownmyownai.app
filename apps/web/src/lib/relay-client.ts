@@ -16,6 +16,7 @@ import {
   type RagCitation,
   type ModelPullProgressPayload,
   type ChatMentionScope,
+  type ChatTaskIntent,
   type ProjectOpenedPayload,
   type ProjectSummary,
   type PatchApplyRequest,
@@ -405,6 +406,8 @@ export class RelayClient {
     projectId?: string,
     mentionScope?: ChatMentionScope,
     thinkingMode?: boolean,
+    enableTools?: boolean,
+    taskIntent?: ChatTaskIntent,
   ) {
     const id = this.send(
       WS_MESSAGE_TYPES.CHAT_START,
@@ -416,6 +419,8 @@ export class RelayClient {
         projectId,
         mentionScope,
         thinkingMode,
+        enableTools,
+        taskIntent,
       },
       requestId,
     );
