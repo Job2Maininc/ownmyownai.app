@@ -44,6 +44,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { formatRelayError, type UserError } from "@/lib/user-errors";
 import { ArtifactsPanel } from "./artifacts-panel";
+import { MediaGalleryPanel } from "./media-gallery-panel";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage as ChatMessageBubble, ChatTypingIndicator } from "./chat-message";
 import { ChatToolbar } from "./chat-toolbar";
@@ -58,7 +59,7 @@ import { ChatConnectingSkeleton } from "./chat-skeleton";
 import { ShareDialog } from "./share-dialog";
 import { toShareMessages } from "@/lib/share";
 
-type SidebarTab = "context" | "artifacts" | "memory" | "mcp" | "terminal";
+type SidebarTab = "context" | "artifacts" | "media" | "memory" | "mcp" | "terminal";
 
 interface UiMessage {
   role: "user" | "assistant";
@@ -176,6 +177,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, []);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("context");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
   const [conversationTree, setConversationTree] = useState<ConversationTree | null>(null);
   const [branchMeta, setBranchMeta] = useState<ConversationBranchMeta[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -218,7 +220,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
   }, [messages]);
 
   const openArtifact = useCallback((artifact: ParsedArtifact) => {
-    setActiveArtifactId(artifact.id);
+    setActiveArtifactId(`session:${artifact.id}`);
     setSidebarTab("artifacts");
     setShowSidebar(true);
   }, []);
@@ -1128,7 +1130,15 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
                 aria-selected={sidebarTab === "artifacts"}
                 onClick={() => setSidebarTab("artifacts")}
               >
-                Artefacts{artifacts.length > 0 ? ` (${artifacts.length})` : ""}
+                Galerie{artifacts.length > 0 ? ` (${artifacts.length})` : ""}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sidebarTab === "media"}
+                onClick={() => setSidebarTab("media")}
+              >
+                Médias
               </button>
               <button
                 type="button"
@@ -1173,13 +1183,22 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
               <McpToolsPanel relay={relayRef.current} connected={connected} />
             ) : sidebarTab === "terminal" ? (
               <TerminalPanel relay={relayRef.current} connected={connected} />
-            ) : (
+            ) : sidebarTab === "artifacts" ? (
               <ArtifactsPanel
                 artifacts={artifacts}
                 activeId={activeArtifactId}
                 onSelect={setActiveArtifactId}
+                relay={relayRef.current}
+                connected={connected}
               />
-            )}
+            ) : sidebarTab === "media" ? (
+              <MediaGalleryPanel
+                relay={relayRef.current}
+                connected={connected}
+                activeId={activeMediaId}
+                onActiveChange={setActiveMediaId}
+              />
+            ) : null}
           </aside>
         )}
       </div>

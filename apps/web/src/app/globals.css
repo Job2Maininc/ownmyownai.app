@@ -929,6 +929,112 @@ body {
   background: var(--surface-hover);
 }
 
+.media-gallery-panel {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-gallery-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.media-gallery-panel__item {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 14px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.media-gallery-panel__item:hover {
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+  background: var(--surface);
+}
+
+.media-gallery-panel__item--active {
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.media-gallery-panel__preview {
+  flex: 1;
+  min-height: 160px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--surface-hover);
+}
+
+.media-gallery-panel__preview-image {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.media-gallery-panel__preview-audio,
+.media-gallery-panel__preview-video {
+  width: 100%;
+  max-height: 320px;
+}
+
+.artifacts-panel__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.artifacts-panel__filters button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.artifacts-panel__filters button.is-active,
+.artifacts-panel__filters button[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+  background: var(--surface-hover);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.artifacts-panel__media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.artifacts-panel__image {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.artifacts-panel__video {
+  width: 100%;
+  max-height: 320px;
+}
+
 .artifact-card {
   display: block;
   width: 100%;

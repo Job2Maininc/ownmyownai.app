@@ -1,15 +1,11 @@
+use crate::chat_pipeline::{self, ChatPipelineInput};
 use crate::context::{
-    apply_inline_edit, build_codebase_context, build_rag_bundle_scoped, create_knowledge_base,
-    delete_document,
-    delete_knowledge_base, extract_mentions_from_chat, find_relevant_image_paths, get_context_summary,
-    ingest_document,
-    list_chunks, list_context_links, list_documents, list_knowledge_bases, load_project_rules,
-    log_audit, preview_inline_edit, resolve_rag_kb_ids, start_context_watcher, strip_mentions,
-    AuditAction, ContextLimits, init_context_db, RagScope,
+    apply_inline_edit, create_knowledge_base, delete_document, delete_knowledge_base,
+    get_context_summary, ingest_document, list_chunks, list_context_links, list_documents,
+    list_knowledge_bases, load_project_rules, log_audit, preview_inline_edit,
+    start_context_watcher, AuditAction, ContextLimits, init_context_db,
 };
-use crate::projects::{
-    get_active_project_id, get_project, list_projects, open_project, resolve_project_context_ids,
-};
+use crate::projects::{get_active_project_id, get_project, list_projects, open_project};
 use crate::history::{
     delete_thread, fork_thread, get_thread, init_history_db, list_thread_branches, list_threads,
     save_thread,
@@ -23,8 +19,7 @@ use crate::agent::{review_git_diff, run_agent_loop, AgentConfig, PrReviewInput, 
 use crate::model_routing::{resolve_chat_model, ChatTaskIntent};
 use crate::ollama::{
     default_model, disk_free_gb_for_models_dir, ensure_embedding_model, ensure_ollama_running,
-    attach_images_to_last_user_message, is_vision_model, model_exists, pull_model,
-    resolve_thinking_model, stream_chat, stream_chat_thinking,
+    model_exists, pull_model, resolve_thinking_model, stream_chat, stream_chat_thinking,
     PullProgressCallback, SetupProgress,
 };
 use crate::providers::{
@@ -33,9 +28,9 @@ use crate::providers::{
 use crate::mcp::{call_tool as call_mcp_tool, list_all_tools, list_servers};
 use crate::playbooks::{self, PlaybookRunParams};
 use crate::activity::log_client_activity;
-use crate::creatives::persist_artifacts_from_messages;
+use crate::creatives::{delete_creative, list_creatives, persist_artifacts_from_messages, read_creative};
 use crate::settings::set_user_memory_enabled;
-use crate::user_memory::{add_fact, build_memory_context, delete_fact, memory_state};
+use crate::user_memory::{add_fact, delete_fact, memory_state};
 use crate::process::{
     clamp_timeout_secs, run_allowlisted_command, AllowlistedCommand, OutputStream,
 };
@@ -352,6 +347,10 @@ async fn send_relay_host_status(write: &SharedRelayWrite) -> Result<(), String> 
             "status": relay_host_status(),
             "queueDepth": crate::chat_queue::queue_depth(),
             "indexingProgress": indexing,
+            "mediaGeneration": {
+                "activeCount": crate::media::active_count(),
+                "jobs": crate::media::list_active_jobs(),
+            },
         }),
         requestId: None,
     };
@@ -596,6 +595,27 @@ async fn run_relay_loop(
                                     let _ = handle_memory_set_enabled(&envelope, &write_task).await;
                                 });
                             }
+                            "creatives.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_creatives_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "creatives.read" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_creatives_read(&envelope, &write_task).await;
+                                });
+                            }
+                            "creatives.delete" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_creatives_delete(&envelope, &write_task).await;
+                                });
+                            }
                             "playbook.list" => {
                                 let write_task = write.clone();
                                 let envelope = envelope.clone();
@@ -623,6 +643,23 @@ async fn run_relay_loop(
                                 let envelope = envelope.clone();
                                 tokio::spawn(async move {
                                     let _ = handle_job_list(&envelope, &write_task).await;
+                                });
+                            }
+                            "media.generate" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_media_generate(&envelope, &write_task).await;
+                                });
+                            }
+                            "media.cancel" => {
+                                handle_media_cancel(&envelope);
+                            }
+                            "media.list" => {
+                                let write_task = write.clone();
+                                let envelope = envelope.clone();
+                                tokio::spawn(async move {
+                                    let _ = handle_media_list(&envelope, &write_task).await;
                                 });
                             }
                             "mcp.list" => {
@@ -921,13 +958,7 @@ async fn handle_chat_start_inner(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let last_user = messages
-        .iter()
-        .rev()
-        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
-        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
-        .unwrap_or("")
-        .to_string();
+    let last_user = chat_pipeline::last_user_content(&messages);
 
     let resolved = resolve_chat_model(explicit_model, task_intent, &last_user);
     let model = if thinking_mode && !is_cloud_model(&resolved.model) {
@@ -954,14 +985,6 @@ async fn handle_chat_start_inner(
     if messages.len() > 20 {
         messages = messages.split_off(messages.len().saturating_sub(20));
     }
-
-    let last_user = messages
-        .iter()
-        .rev()
-        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
-        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
-        .unwrap_or("")
-        .to_string();
 
     let loading_msg = if is_cloud {
         format!("Modèle cloud → {model}\nConnexion au fournisseur…\n\n")
@@ -1000,7 +1023,7 @@ async fn handle_chat_start_inner(
         .await;
     }
 
-    let mut context_ids: Vec<String> = payload
+    let explicit_context_ids: Vec<String> = payload
         .get("contextIds")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -1016,13 +1039,10 @@ async fn handle_chat_start_inner(
         .map(String::from)
         .or_else(get_active_project_id);
 
-    if context_ids.is_empty() {
-        if let Some(ref pid) = project_id {
-            if let Ok(ids) = resolve_project_context_ids(pid) {
-                context_ids = ids;
-            }
-        }
-    }
+    let context_ids = chat_pipeline::resolve_context_ids(
+        &explicit_context_ids,
+        project_id.as_deref(),
+    );
 
     let enable_tools = payload
         .get("enableTools")
@@ -1042,91 +1062,21 @@ async fn handle_chat_start_inner(
         .await;
     }
 
-    let mut prepend_system: Vec<serde_json::Value> = Vec::new();
-    prepend_system.push(crate::assistant_output::output_format_system_message()); // chat direct (hors agent loop)
-    if crate::settings::user_memory_enabled() {
-        if let Some(mem) = build_memory_context(&last_user) {
-            prepend_system.push(serde_json::json!({ "role": "system", "content": mem }));
-        }
-    }
-    if let Some(ref pid) = project_id {
-        if let Ok(project) = get_project(pid, project_id.as_deref()) {
-            let instr = project.system_instruction.trim();
-            if !instr.is_empty() {
-                prepend_system.push(serde_json::json!({ "role": "system", "content": instr }));
-            }
-        }
-    }
-    let mentions = extract_mentions_from_chat(payload, &last_user);
-    let rag_kb_ids = resolve_rag_kb_ids(&mentions, &context_ids).unwrap_or_default();
-    let rag_query = if mentions.has_any() {
-        strip_mentions(&last_user)
-    } else {
-        last_user.to_string()
-    };
-
-    if mentions.has_any() {
-        if let Some(idx) = messages.iter().rposition(|m| {
-            m.get("role").and_then(|r| r.as_str()) == Some("user")
-        }) {
-            messages[idx] = serde_json::json!({ "role": "user", "content": rag_query });
-        }
-    }
-
-    let mut rag_injected = false;
-    let mut codebase_injected = false;
-    if !rag_kb_ids.is_empty() {
-        if let Ok(kb_instrs) = crate::context::collect_kb_system_instructions(&rag_kb_ids) {
-            for instr in kb_instrs {
-                prepend_system.push(serde_json::json!({ "role": "system", "content": instr }));
-            }
-        }
-        if let Ok(Some(rules)) = load_project_rules(&rag_kb_ids) {
-            prepend_system.push(serde_json::json!({ "role": "system", "content": rules }));
-        }
-        let scope = RagScope {
-            kb_ids: rag_kb_ids.clone(),
-            file_hints: mentions.file_hints.clone(),
-            folder_hints: mentions.folder_hints.clone(),
-        };
-        if let Ok(Some(bundle)) = build_rag_bundle_scoped(&scope, &rag_query).await {
-            prepend_system.push(serde_json::json!({ "role": "system", "content": bundle.context }));
-            rag_injected = true;
-            if !bundle.citations.is_empty() {
-                let _ = send_chat_citations(write, &envelope.requestId, &bundle.citations).await;
-            }
-        }
-        if let Ok(Some(code_ctx)) = build_codebase_context(&rag_kb_ids, &rag_query).await {
-            prepend_system.push(serde_json::json!({ "role": "system", "content": code_ctx }));
-            codebase_injected = true;
-        }
-        log_audit(
-            AuditAction::AgentAccess,
-            Some("chat"),
-            envelope.requestId.as_deref(),
-            Some(serde_json::json!({
-                "contextIds": rag_kb_ids,
-                "model": model,
-                "projectId": project_id,
-                "ragInjected": rag_injected,
-                "codebaseInjected": codebase_injected,
-                "mentionScope": {
-                    "baseNames": mentions.base_names,
-                    "fileHints": mentions.file_hints,
-                    "folderHints": mentions.folder_hints,
-                },
-            })),
-        );
-    }
-
-    for (i, sys) in prepend_system.into_iter().enumerate() {
-        messages.insert(i, sys);
-    }
-
-    if is_vision_model(&model) && !rag_kb_ids.is_empty() {
-        if let Ok(paths) = find_relevant_image_paths(&rag_kb_ids, &rag_query, 3).await {
-            let _ = attach_images_to_last_user_message(&mut messages, &paths);
-        }
+    let enriched = chat_pipeline::enrich_messages(
+        messages,
+        ChatPipelineInput {
+            model: &model,
+            project_id: project_id.as_deref(),
+            context_ids: &context_ids,
+            mention_payload: Some(payload),
+            audit_source: "chat",
+            audit_request_id: envelope.requestId.as_deref(),
+        },
+    )
+    .await?;
+    messages = enriched.messages;
+    if !enriched.citations.is_empty() {
+        let _ = send_chat_citations(write, &envelope.requestId, &enriched.citations).await;
     }
 
     if is_cloud {
@@ -1976,6 +1926,64 @@ async fn handle_job_list(
     send_ws_response(
         write,
         "job.status",
+        serde_json::json!({ "jobs": jobs }),
+        &envelope.requestId,
+    )
+    .await
+}
+
+async fn handle_media_generate(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    match crate::media::parse_media_generate_payload(&envelope.payload) {
+        Ok(request) => {
+            let kind = request.kind.type_name().to_string();
+            let job_id = crate::media::submit_media_job(request, envelope.requestId.clone());
+            send_ws_response(
+                write,
+                "media.progress",
+                serde_json::json!({
+                    "jobId": job_id,
+                    "kind": kind,
+                    "status": "queued",
+                    "message": "Génération en file d'attente",
+                    "progress": 0,
+                }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "media.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+fn handle_media_cancel(envelope: &WsEnvelope) {
+    if let Some(job_id) = envelope.payload.get("jobId").and_then(|v| v.as_str()) {
+        crate::media::cancel_media_job(job_id);
+        return;
+    }
+    if let Some(job_id) = envelope.requestId.as_deref() {
+        crate::media::cancel_media_job(job_id);
+    }
+}
+
+async fn handle_media_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let jobs = crate::media::list_media_jobs();
+    send_ws_response(
+        write,
+        "media.status",
         serde_json::json!({ "jobs": jobs }),
         &envelope.requestId,
     )
@@ -2842,6 +2850,112 @@ async fn handle_memory_set_enabled(
             send_ws_response(
                 write,
                 "memory.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_creatives_list(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    match list_creatives() {
+        Ok(creatives) => {
+            send_ws_response(
+                write,
+                "creatives.list",
+                serde_json::json!({ "creatives": creatives }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "creatives.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_creatives_read(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let id = envelope
+        .payload
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if id.is_empty() {
+        return send_ws_response(
+            write,
+            "creatives.error",
+            serde_json::json!({ "message": "id requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    match read_creative(id) {
+        Ok(result) => {
+            send_ws_response(
+                write,
+                "creatives.read",
+                serde_json::to_value(result).unwrap_or_default(),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "creatives.error",
+                serde_json::json!({ "message": e }),
+                &envelope.requestId,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_creatives_delete(
+    envelope: &WsEnvelope,
+    write: &SharedRelayWrite,
+) -> Result<(), String> {
+    let id = envelope
+        .payload
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if id.is_empty() {
+        return send_ws_response(
+            write,
+            "creatives.error",
+            serde_json::json!({ "message": "id requis" }),
+            &envelope.requestId,
+        )
+        .await;
+    }
+    match delete_creative(id) {
+        Ok(()) => {
+            send_ws_response(
+                write,
+                "creatives.deleted",
+                serde_json::json!({ "id": id }),
+                &envelope.requestId,
+            )
+            .await
+        }
+        Err(e) => {
+            send_ws_response(
+                write,
+                "creatives.error",
                 serde_json::json!({ "message": e }),
                 &envelope.requestId,
             )
