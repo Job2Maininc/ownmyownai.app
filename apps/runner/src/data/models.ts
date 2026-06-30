@@ -1,6 +1,9 @@
 export const DEFAULT_MODEL = "qwen2.5:7b";
 
-export type ModelCategory = "chat" | "code" | "vision" | "embedding";
+export type ModelCategory = "chat" | "code" | "vision" | "embedding" | "image";
+
+/** Modèle Flux recommandé pour la génération d'images Ollama (aligné sur le Host Rust). */
+export const DEFAULT_FLUX_MODEL = "x/flux2-klein:4b-bf16";
 
 export type ModelFamily = "llama" | "qwen" | "mistral";
 
@@ -352,6 +355,47 @@ export const RECOMMENDED_MODELS: RecommendedModel[] = [
     description: "Optimisé pour RAG et outils.",
     bestFor: ["RAG", "Documents", "Recherche"],
   },
+  {
+    id: DEFAULT_FLUX_MODEL,
+    name: "FLUX.2 Klein · 4B",
+    sizeGb: 12,
+    ramGb: 16,
+    tags: ["Image", "Recommandé"],
+    category: "image",
+    description:
+      "Génération d'images locale via Ollama. Rapide, texte lisible dans les visuels (Apache 2.0).",
+    bestFor: ["Illustrations", "UI mockups", "Concept art"],
+  },
+  {
+    id: "x/flux2-klein",
+    name: "FLUX.2 Klein (latest)",
+    sizeGb: 5.7,
+    ramGb: 12,
+    tags: ["Image"],
+    category: "image",
+    description: "Variante par défaut FLUX.2 Klein — génération d'images expérimentale Ollama.",
+    bestFor: ["Tests rapides", "Brouillons visuels"],
+  },
+  {
+    id: "x/flux2-klein:9b",
+    name: "FLUX.2 Klein · 9B",
+    sizeGb: 12,
+    ramGb: 24,
+    tags: ["Image", "Qualité"],
+    category: "image",
+    description: "Haute fidélité (licence non commerciale FLUX v2.1).",
+    bestFor: ["Rendus détaillés", "Usage personnel"],
+  },
+  {
+    id: "x/z-image-turbo",
+    name: "Z-Image Turbo",
+    sizeGb: 13,
+    ramGb: 16,
+    tags: ["Image", "Photo"],
+    category: "image",
+    description: "Modèle Alibaba optimisé photoréalisme et texte bilingue EN/CN.",
+    bestFor: ["Photos réalistes", "Typographie"],
+  },
 ];
 
 export function getModelFamily(model: RecommendedModel): ModelFamily | null {
@@ -380,6 +424,12 @@ export function getModelFamily(model: RecommendedModel): ModelFamily | null {
 
 export function findModel(id: string): RecommendedModel | undefined {
   return RECOMMENDED_MODELS.find((m) => m.id === id);
+}
+
+export function isImageGenerationModel(id: string): boolean {
+  const lower = id.toLowerCase();
+  const base = lower.split(":")[0] ?? lower;
+  return base.includes("flux") || base.includes("z-image");
 }
 
 export function modelsByCategory(category: ModelCategory): RecommendedModel[] {

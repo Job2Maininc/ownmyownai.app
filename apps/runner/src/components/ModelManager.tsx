@@ -13,8 +13,8 @@ import {
 } from "../data/models";
 import { fetchOllamaRegistry, searchRegistry, type RegistryModel } from "../data/ollama-registry";
 import FallbackModelSelect from "./FallbackModelSelect";
+import ModelTaskRoutingPanel from "./ModelTaskRoutingPanel";
 import QuantizationAdviceBanner from "./QuantizationAdviceBanner";
-import { EmptyStatePanel } from "./EmptyState";
 import { useQuantizationAdvice } from "../hooks/useQuantizationAdvice";
 import type { HostSettings, SetupProgress } from "../types";
 
