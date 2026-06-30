@@ -643,9 +643,10 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Chat vision : images pertinentes attachées au message quand un modèle multimodal est actif
 - [x] Table `context_links` + colonnes `documents` (source lié / upload)
 - [x] Ingestion depuis chemin (`ingest_from_path`, `reindex_document`)
+- [x] Ingestion DOCX (extraction OOXML via omniparse + repli ZIP, `context/docx.rs`)
 - [x] Sync au lancement + watcher `notify` avec debounce
 - [x] Sync planifiée (cron configurable, rapport `sync-schedule.log`, log par lien)
-- [x] UI Host : lier fichier / dossier / disque, sync manuel
+- [x] UI Host : lier fichier / dossier / disque, sync manuel et planifiée (cron + rapport)
 - [x] Web : statut liens, suppression document, progression upload
 - [x] Déduplication cross-liens : même contenu sous deux chemins → un seul index (hash SHA-256)
 - [x] Politique par extension : allowlist configurable par lien (Host + protocole WS)

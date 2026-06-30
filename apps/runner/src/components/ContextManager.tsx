@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { InlineDocIcon, SourceIcon, type SourceIconId } from "./Icons";
+import ScheduledSyncPanel from "./ScheduledSyncPanel";
+import EmptyState, { EmptyStatePanel } from "./EmptyState";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -510,6 +512,14 @@ export default function ContextManager() {
         </button>
       </div>
 
+      {bases.length === 0 && (
+        <EmptyStatePanel
+          icon="folder"
+          title="Créez votre première base"
+          description="Nommez une base, puis liez des fichiers, dossiers ou dépôts Git pour alimenter le RAG local."
+        />
+      )}
+
       {bases.length > 0 && (
         <ul className="context-list">
           {bases.map((kb) => (
@@ -646,6 +656,8 @@ export default function ContextManager() {
         </div>
       )}
 
+      <ScheduledSyncPanel />
+
       <button
         type="button"
         className="btn-ghost context-advanced-toggle"
@@ -683,7 +695,14 @@ export default function ContextManager() {
           <p className="muted">Vous pouvez aussi ajouter des fichiers depuis le chat web.</p>
           <ul>
             {documents.length === 0 && (
-              <li className="muted">Aucun document indexé pour l&apos;instant.</li>
+              <li>
+                <EmptyState
+                  icon="file"
+                  variant="compact"
+                  title="Aucun document indexé"
+                  description="Liez une source ou uploadez des fichiers depuis le chat web."
+                />
+              </li>
             )}
             {documents.map((d) => (
               <li key={d.id} className="doc-list-item">

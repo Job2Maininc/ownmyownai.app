@@ -1,6 +1,7 @@
 mod codebase_index;
 mod audit;
 mod db_crypto;
+mod docx;
 mod ingest;
 mod inline_edit;
 mod mentions;
@@ -38,7 +39,9 @@ pub use store::{
     update_context_link_extensions, update_context_link_sync, with_context_db, ContextLimits,
     ContextLink, DocumentInfo, ChunkPreview, KnowledgeBase,
 };
-pub use scheduled_sync::start_scheduled_sync;
+pub use scheduled_sync::{
+    read_last_sync_report, run_scheduled_sync_now, start_scheduled_sync, ScheduledSyncReport,
+};
 pub use sync::{
     link_context_file, link_context_folder, link_context_repo, scan_link, sync_all_links,
     sync_link, sync_link_with_cancel, unlink_context_link, ScannedFile,

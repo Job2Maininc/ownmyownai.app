@@ -3,7 +3,7 @@ use super::sync::sync_all_links;
 use crate::settings::resolved_scheduled_sync;
 use crate::sync_schedule::{cron_matches, next_cron_run, parse_cron_expression, CronSchedule};
 use chrono::{Datelike, Local, Timelike, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -48,9 +48,9 @@ fn report_file_path() -> PathBuf {
     crate::settings::resolved_sync_schedule_log_path()
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LinkSyncReport {
+pub struct LinkSyncReport {
     link_id: String,
     path: String,
     status: String,
@@ -58,9 +58,9 @@ struct LinkSyncReport {
     error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ScheduledSyncReport {
+pub struct ScheduledSyncReport {
     started_at: String,
     finished_at: String,
     cron: String,
@@ -135,6 +135,13 @@ pub async fn run_scheduled_sync_now() -> ScheduledSyncReport {
     append_local_report(&report);
 
     report
+}
+
+pub fn read_last_sync_report() -> Option<ScheduledSyncReport> {
+    let path = report_file_path();
+    let content = fs::read_to_string(path).ok()?;
+    let line = content.lines().rev().find(|l| !l.trim().is_empty())?;
+    serde_json::from_str(line).ok()
 }
 
 pub fn start_scheduled_sync() {
