@@ -4,7 +4,8 @@
 
 - [x] Projet Supabase créé, migrations appliquées (incl. `host_models_context` via MCP, 2026-06-08)
 - [X] Secrets : `RELAY_JWT_SECRET`, `RELAY_URL`, `APP_URL`
-- [ ] Secrets release : `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (voir `docs/AUTO_UPDATE.md`)
+- [x] Doc/CI release : procédure `TAURI_SIGNING_PRIVATE_KEY` pour auto-update (`docs/AUTO_UPDATE.md`, `setup-tauri-signing.ps1`, workflow `release-windows.yml`)
+- [ ] Secrets GitHub déposés : `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (`gh secret list` — voir `docs/AUTO_UPDATE.md`)
 - [x] Edge Functions déployées (5 fonctions, `runner-heartbeat` v4 avec sync modèles)
 - [x] Relay Cloudflare deploye (smoke GET /health -> {"ok":true}, 2026-06-08)
 - [x] Web deploye sur Vercel avec `NEXT_PUBLIC_*` (Production HTTP 200, commit 3410634)
@@ -648,7 +649,7 @@ Pour chaque cas : exécuter les étapes, comparer au **résultat attendu**, puis
 - [x] Triggers sync insert/update/delete + backfill au démarrage
 - [x] RAG hybride : hits FTS prioritaires, complétés par similarité embeddings
 - [x] Requête « contrat 2024 » trouve le chunk sans similarité sémantique (tests unitaires)
-- [x] UI Host : seuils éditables `ragTopK`, `ragChunkTokens`, `chatTokenThreshold` (`RagThresholdSettings`)
+- [x] UI Host : seuils éditables `ragTopK`, `ragChunkTokens`, `chatTokenThreshold` (`HostSettingsPanel`)
 
 ## Index codebase Git (omoa-codebase-index)
 

@@ -1,3 +1,12 @@
+# Build et publication du Host Windows (NSIS + auto-update signé).
+#
+# Secrets de dépôt requis (Settings → Secrets and variables → Actions) :
+#   SUPABASE_SERVICE_ROLE_KEY          — upload Supabase Storage
+#   TAURI_SIGNING_PRIVATE_KEY          — clé minisign base64 (une ligne)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — mot de passe de la clé
+#
+# Procédure : docs/AUTO_UPDATE.md et apps/runner/scripts/setup-tauri-signing.ps1
+
 name: Release Windows Host
 
 on:
@@ -55,17 +64,54 @@ jobs:
         id: signing
         shell: pwsh
         run: |
+          function Test-MinisignKey([string]$Text) {
+            return [bool]($Text -match "untrusted comment:")
+          }
+
+          function Get-DecodedSigningKey([string]$SecretValue) {
+            if (Test-MinisignKey $SecretValue) {
+              return $SecretValue
+            }
+            try {
+              $bytes = [Convert]::FromBase64String($SecretValue.Trim())
+              return [Text.Encoding]::UTF8.GetString($bytes)
+            } catch {
+              return $null
+            }
+          }
+
           $key = $env:TAURI_SIGNING_PRIVATE_KEY
-          $canSign = [bool]($key -and $key -match 'untrusted comment:')
-          if (-not $canSign) {
-            Write-Host "Signing indisponible — build sans artefacts updater signés."
+          $password = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          $reason = ""
+          $canSign = $false
+
+          if (-not $key) {
+            $reason = "secret TAURI_SIGNING_PRIVATE_KEY absent"
+          } elseif (-not $password) {
+            $reason = "secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD absent"
+          } else {
+            $decoded = Get-DecodedSigningKey $key
+            if (-not (Test-MinisignKey $decoded)) {
+              $reason = "TAURI_SIGNING_PRIVATE_KEY invalide (attendu : base64 d'une clé minisign — voir docs/AUTO_UPDATE.md)"
+            } else {
+              $canSign = $true
+            }
+          }
+
+          if ($canSign) {
+            Write-Host "Signature updater : activée"
+          } else {
+            Write-Host "::warning::Signature updater désactivée — $reason"
+            Write-Host "::warning::Exécuter pwsh apps/runner/scripts/setup-tauri-signing.ps1 puis gh secret set (voir docs/AUTO_UPDATE.md)"
             $confPath = "apps/runner/src-tauri/tauri.conf.json"
             $conf = Get-Content $confPath -Raw | ConvertFrom-Json
             $conf.bundle.createUpdaterArtifacts = $false
             if ($conf.plugins.updater) { $conf.plugins.updater.active = $false }
             $conf | ConvertTo-Json -Depth 20 | Set-Content $confPath -Encoding UTF8
           }
+
           echo "can_sign=$canSign" >> $env:GITHUB_OUTPUT
+          echo "reason=$reason" >> $env:GITHUB_OUTPUT
 
       - name: Generate app icon (valid .ico for Windows)
         shell: pwsh
@@ -192,3 +238,25 @@ jobs:
             apps/runner/src-tauri/target/release/bundle/nsis/*-setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Résumé release
+        if: always()
+        shell: pwsh
+        run: |
+          $signed = "${{ steps.signing.outputs.can_sign }}" -eq "True"
+          $mode = if ($signed) { "auto-update signé" } else { "installateur seul (sans auto-update)" }
+          $reason = "${{ steps.signing.outputs.reason }}"
+          $summary = @(
+            "## OwnMyOwnAI Host v${{ steps.version.outputs.value }}",
+            "",
+            "- Mode publication : **$mode**",
+            "- Tag : `${{ steps.tag.outputs.name }}`"
+          )
+          if (-not $signed -and $reason) {
+            $summary += "- Raison : $reason"
+            $summary += "- Action : `pwsh apps/runner/scripts/setup-tauri-signing.ps1` puis `gh secret set` (voir `docs/AUTO_UPDATE.md`)"
+          }
+          if ($signed) {
+            $summary += "- Manifeste : https://jcknolulyrsvcwvttaed.supabase.co/storage/v1/object/public/host-releases/latest/latest.json"
+          }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($summary -join "`n")

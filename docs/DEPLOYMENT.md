@@ -77,7 +77,24 @@ Utilisez le **même** `RELAY_JWT_SECRET` que dans Supabase.
 
 Sur `/download`, le bouton principal appelle **`/api/download-installer`** (installateur NSIS avec mises à jour automatiques). Le ZIP portable reste disponible en lien secondaire.
 
-Voir [AUTO_UPDATE.md](./AUTO_UPDATE.md) pour les secrets `TAURI_SIGNING_PRIVATE_KEY` et le manifeste `latest.json`.
+### Secrets GitHub (workflow Release Windows Host)
+
+| Secret | Statut | Description |
+|--------|--------|-------------|
+| `SUPABASE_SERVICE_ROLE_KEY` | requis | Upload Supabase `host-releases/latest/` |
+| `TAURI_SIGNING_PRIVATE_KEY` | requis pour auto-update | Clé minisign base64 (une ligne) |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | requis pour auto-update | Mot de passe de la clé |
+
+Configuration : [AUTO_UPDATE.md](./AUTO_UPDATE.md) et script `apps/runner/scripts/setup-tauri-signing.ps1`.
+
+```powershell
+pwsh apps/runner/scripts/setup-tauri-signing.ps1
+gh secret set TAURI_SIGNING_PRIVATE_KEY --body "<base64>"
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body "<mot de passe>"
+gh secret list
+```
+
+Sans les secrets de signature, la CI publie l'installateur mais **pas** le bundle updater signé (`latest.json` sans `platforms`).
 
 La CI publie `OwnMyOwnAI-Host-portable-x64.zip` sur **GitHub Releases** (tag `v*`).
 
