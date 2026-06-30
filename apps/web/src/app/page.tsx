@@ -29,6 +29,27 @@ const steps: { step: string; icon: IconName; title: string; description: string 
   },
 ];
 
+const valueProps: { icon: IconName; title: string; description: string }[] = [
+  {
+    icon: "git-branch",
+    title: "Cursor",
+    description:
+      "Gardez votre IDE habituel. Le Host relie vos projets et outils locaux au chat web.",
+  },
+  {
+    icon: "sparkles",
+    title: "0 crédit",
+    description:
+      "Les modèles tournent sur votre PC via Ollama — aucune consommation de crédits cloud.",
+  },
+  {
+    icon: "folder",
+    title: "RAG local",
+    description:
+      "Indexez fichiers, dossiers et dépôts Git chez vous. Citations et contexte, sans upload.",
+  },
+];
+
 const benefits: { icon: IconName; title: string; description: string }[] = [
   {
     icon: "home",
@@ -41,9 +62,9 @@ const benefits: { icon: IconName; title: string; description: string }[] = [
     description: "Rien n'est envoyé aux grands clouds sans votre accord.",
   },
   {
-    icon: "sparkles",
-    title: "Clé en main",
-    description: "Installateur, modèles, compte — tout est prêt pour démarrer.",
+    icon: "monitor",
+    title: "Host Windows",
+    description: "Installateur, modèles, liaison compte — prêt en quelques minutes.",
   },
 ];
 
@@ -67,21 +88,21 @@ export default async function HomePage() {
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-12 md:flex-row md:items-center md:justify-between md:gap-16">
           <div className="max-w-xl animate-fade-up text-center md:text-left">
             <div className="mb-6 flex flex-wrap justify-center gap-2 md:justify-start">
-              <span className="brand-badge">Gratuit</span>
-              <span className="brand-badge">Windows</span>
-              <span className="brand-badge">Prêt en 5 min</span>
+              <span className="brand-badge">Cursor + Host</span>
+              <span className="brand-badge">0 crédit</span>
+              <span className="brand-badge">RAG local</span>
             </div>
             <h1
               className="mb-5 font-bold leading-[var(--leading-tight)] tracking-[var(--tracking-display)] text-[var(--foreground)]"
               style={{ fontSize: "var(--text-display)" }}
             >
-              Votre IA,
+              Cursor + Host
               <br />
-              <span className="text-gradient-brand">chez vous.</span>
+              <span className="text-gradient-brand">= 0 crédit + RAG local</span>
             </h1>
             <p className="mb-8 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
-              Une intelligence artificielle simple et privée sur votre PC. Installez, liez,
-              discutez — sans complexité.
+              Codez avec Cursor, discutez depuis le navigateur. L&apos;IA et vos documents
+              tournent sur votre PC — sans consommer vos crédits cloud.
             </p>
             <div className="flex flex-col items-center gap-3 sm:flex-row md:justify-start">
               <Link href="/download">
@@ -118,8 +139,56 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Étapes */}
+      {/* Proposition de valeur */}
       <section className="brand-section-alt px-6 py-20 md:py-24">
+        <div className="mx-auto max-w-5xl">
+          <div className="section-header mb-12 text-center">
+            <p className="section-eyebrow">La formule</p>
+            <h2 className="section-title">Cursor + Host = 0 crédit + RAG local</h2>
+            <p className="section-subtitle">
+              Trois briques complémentaires pour une IA de code privée, sans facture cloud.
+            </p>
+          </div>
+          <div
+            className="mb-12 flex flex-wrap items-center justify-center gap-2 text-center font-mono text-sm font-semibold tracking-tight sm:gap-3 sm:text-base md:text-lg"
+            aria-label="Cursor plus Host égale zéro crédit plus RAG local"
+          >
+            <span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 shadow-xs">
+              Cursor
+            </span>
+            <span className="text-[var(--muted)]" aria-hidden>
+              +
+            </span>
+            <span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 shadow-xs">
+              Host
+            </span>
+            <span className="text-[var(--link)]" aria-hidden>
+              =
+            </span>
+            <span className="rounded-lg border border-[color-mix(in_srgb,var(--link)_25%,var(--border))] bg-[color-mix(in_srgb,var(--link)_8%,var(--surface))] px-4 py-2.5 text-[var(--link)] shadow-xs">
+              0 crédit
+            </span>
+            <span className="text-[var(--muted)]" aria-hidden>
+              +
+            </span>
+            <span className="rounded-lg border border-[color-mix(in_srgb,var(--link)_25%,var(--border))] bg-[color-mix(in_srgb,var(--link)_8%,var(--surface))] px-4 py-2.5 text-[var(--link)] shadow-xs">
+              RAG local
+            </span>
+          </div>
+          <div className="stagger-children grid gap-5 md:grid-cols-3">
+            {valueProps.map((prop) => (
+              <Card key={prop.title} interactive>
+                <FeatureIcon name={prop.icon} />
+                <h3 className="mb-2 text-lg font-semibold tracking-tight">{prop.title}</h3>
+                <p className="text-sm leading-relaxed text-[var(--muted)]">{prop.description}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Étapes */}
+      <section className="px-6 py-20 md:py-24">
         <div className="mx-auto max-w-5xl">
           <div className="section-header mb-12 text-center">
             <p className="section-eyebrow">Démarrage rapide</p>
@@ -144,7 +213,7 @@ export default async function HomePage() {
       </section>
 
       {/* Avantages */}
-      <section className="px-6 py-20 md:py-24">
+      <section className="brand-section-alt px-6 py-20 md:py-24">
         <div className="mx-auto max-w-5xl">
           <div className="section-header mb-12 text-center">
             <h2 className="section-title">Pourquoi OwnMyOwnAI ?</h2>
@@ -162,7 +231,7 @@ export default async function HomePage() {
       </section>
 
       {/* Social proof placeholder */}
-      <section className="brand-section-alt px-6 py-16 md:py-20">
+      <section className="px-6 py-16 md:py-20">
         <div className="mx-auto max-w-5xl text-center">
           <p className="section-eyebrow mb-8">Adopté par des équipes exigeantes</p>
           <div className="social-proof-grid">
@@ -173,7 +242,7 @@ export default async function HomePage() {
             ))}
           </div>
           <p className="mt-6 text-sm text-[var(--muted)]">
-            Votre IA locale, sans compromis sur la confidentialité.
+            Cursor pour coder, Host pour l&apos;IA — 0 crédit, RAG local, confidentialité totale.
           </p>
         </div>
       </section>
@@ -184,7 +253,7 @@ export default async function HomePage() {
           <div className="cta-panel rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-10 text-center shadow-glow md:p-12">
             <h2 className="mb-3 text-2xl font-bold tracking-tight md:text-3xl">Prêt à essayer ?</h2>
             <p className="mb-8 text-[var(--muted)]">
-              Rejoignez ceux qui gardent leur IA chez eux — en toute simplicité.
+              Installez le Host, liez Cursor à vos projets et discutez avec un RAG 100 % local.
             </p>
             <Link href="/download">
               <Button size="lg">Télécharger le Host</Button>
