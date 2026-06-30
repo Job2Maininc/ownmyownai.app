@@ -1417,6 +1417,161 @@ pub async fn describe_image(model: &str, image_data: &[u8], prompt: &str) -> Res
     Ok(text.to_string())
 }
 
+/// Modèle Flux recommandé pour la génération d'images locale (Ollama expérimental).
+pub const DEFAULT_FLUX_MODEL: &str = "x/flux2-klein:4b-bf16";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OllamaImageOptions {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub steps: Option<u32>,
+}
+
+impl Default for OllamaImageOptions {
+    fn default() -> Self {
+        Self {
+            width: Some(1024),
+            height: Some(1024),
+            steps: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OllamaGeneratedImage {
+    pub bytes: Vec<u8>,
+    pub mime_type: String,
+}
+
+/// Détecte les modèles Ollama de génération d'image (Flux et variantes `x/flux*`).
+pub fn is_image_generation_model(model: &str) -> bool {
+    let lower = model.to_lowercase();
+    let base = lower.split(':').next().unwrap_or(&lower);
+    base.contains("flux") || base.contains("z-image")
+}
+
+/// Premier modèle Flux installé (sélection Host, défaut, ou catalogue local).
+pub fn resolved_flux_model() -> Option<String> {
+    if let Ok(settings) = get_settings() {
+        for candidate in &settings.selected_models {
+            if is_image_generation_model(candidate) && model_exists(candidate) {
+                return Some(candidate.clone());
+            }
+        }
+    }
+    for candidate in [DEFAULT_FLUX_MODEL, "flux", "x/flux2-klein"] {
+        if model_exists(candidate) {
+            return Some(candidate.to_string());
+        }
+    }
+    list_installed_models()
+        .into_iter()
+        .find(|m| is_image_generation_model(m))
+}
+
+fn ollama_image_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(900))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+fn parse_ollama_image_response(json: &serde_json::Value) -> Result<OllamaGeneratedImage, String> {
+    let b64 = json
+        .get("image")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            "Réponse Ollama invalide : champ image manquant (modèle Flux requis).".to_string()
+        })?;
+
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| format!("Impossible de décoder l'image base64 Ollama : {e}"))?;
+
+    if bytes.is_empty() {
+        return Err("Ollama a renvoyé une image vide.".into());
+    }
+
+    let mime_type = json
+        .get("mime_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("image/png")
+        .to_string();
+
+    Ok(OllamaGeneratedImage { bytes, mime_type })
+}
+
+/// Génère une image via `POST /api/generate` lorsque le modèle est Flux (ou compatible).
+pub async fn generate_image(
+    model: &str,
+    prompt: &str,
+    options: &OllamaImageOptions,
+) -> Result<OllamaGeneratedImage, String> {
+    if !is_image_generation_model(model) {
+        return Err(format!(
+            "Le modèle « {model} » n'est pas un modèle de génération d'image Flux."
+        ));
+    }
+    if !model_exists(model) {
+        return Err(format!(
+            "Le modèle Flux « {model} » n'est pas installé. Téléchargez-le depuis le gestionnaire de modèles."
+        ));
+    }
+
+    let trimmed = prompt.trim();
+    if trimmed.is_empty() {
+        return Err("Le prompt de génération d'image ne peut pas être vide.".into());
+    }
+
+    let client = ollama_image_client()?;
+    let mut body = serde_json::json!({
+        "model": model,
+        "prompt": trimmed,
+        "stream": false,
+        "keep_alive": "10m",
+    });
+
+    if let Some(width) = options.width {
+        body["width"] = serde_json::json!(width);
+    }
+    if let Some(height) = options.height {
+        body["height"] = serde_json::json!(height);
+    }
+    if let Some(steps) = options.steps {
+        body["steps"] = serde_json::json!(steps);
+    }
+
+    let response = client
+        .post(format!("{OLLAMA_URL}/api/generate"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                "Impossible de joindre Ollama sur ce PC. Vérifiez qu'il est démarré.".to_string()
+            } else if e.is_timeout() {
+                "La génération d'image Flux met trop de temps à répondre.".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "Ollama génération d'image a renvoyé une erreur ({status}) : {detail}"
+        ));
+    }
+
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    parse_ollama_image_response(&json)
+}
+
 pub fn attach_images_to_last_user_message(
     messages: &mut Vec<serde_json::Value>,
     image_paths: &[String],
@@ -1463,4 +1618,42 @@ pub fn attach_images_to_last_user_message(
         "content": parts
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod image_generation_tests {
+    use super::*;
+
+    #[test]
+    fn detects_flux_models() {
+        assert!(is_image_generation_model("flux"));
+        assert!(is_image_generation_model("x/flux2-klein:4b-bf16"));
+        assert!(is_image_generation_model("x/z-image-turbo"));
+        assert!(!is_image_generation_model("llama3.2:3b"));
+        assert!(!is_image_generation_model("moondream:1.8b"));
+    }
+
+    #[test]
+    fn parses_ollama_image_field() {
+        let payload = b"PNG-flux-bytes";
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(payload);
+        let json = serde_json::json!({
+            "model": "x/flux2-klein:4b-bf16",
+            "image": b64,
+            "mime_type": "image/png",
+            "done": true
+        });
+
+        let image = parse_ollama_image_response(&json).expect("parse");
+        assert_eq!(image.bytes, payload);
+        assert_eq!(image.mime_type, "image/png");
+    }
+
+    #[test]
+    fn rejects_missing_image_field() {
+        let err = parse_ollama_image_response(&serde_json::json!({ "done": true }))
+            .expect_err("missing image");
+        assert!(err.contains("image"));
+    }
 }
