@@ -23,6 +23,8 @@ interface ChatToolbarProps {
   filteredModels: string[];
   thinkingMode: boolean;
   onThinkingModeChange: (value: boolean) => void;
+  agentMode: boolean;
+  onAgentModeChange: (value: boolean) => void;
   streaming: boolean;
   showSidebar: boolean;
   onToggleSidebar: () => void;
@@ -50,6 +52,8 @@ export function ChatToolbar({
   filteredModels,
   thinkingMode,
   onThinkingModeChange,
+  agentMode,
+  onAgentModeChange,
   streaming,
   showSidebar,
   onToggleSidebar,
@@ -126,6 +130,15 @@ export function ChatToolbar({
                 <option value="normal">Normal</option>
                 <option value="reflection">Réflexion</option>
               </select>
+            </label>
+            <label className="chat-toolbar__mode chat-toolbar__mode--toggle">
+              <input
+                type="checkbox"
+                checked={agentMode}
+                onChange={(e) => onAgentModeChange(e.target.checked)}
+                disabled={streaming}
+              />
+              Mode agent
             </label>
             <PlaybookPicker
               relay={relay}

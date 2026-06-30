@@ -852,6 +852,11 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
     setShowSidebar(true);
   }, []);
 
+  const openMcpPanel = useCallback(() => {
+    setSidebarTab("mcp");
+    setShowSidebar(true);
+  }, []);
+
   const paletteCommands = useMemo(
     () => [
       {
@@ -868,6 +873,14 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
         keywords: "bases documents rag projet artefacts mémoire",
         group: "Chat",
         onSelect: () => setShowSidebar((value) => !value),
+      },
+      {
+        id: "chat-toggle-mcp",
+        label: "Ouvrir les outils MCP",
+        keywords: "serveurs tools model context protocol",
+        group: "Chat",
+        disabled: !connected,
+        onSelect: openMcpPanel,
       },
       {
         id: "chat-toggle-terminal",
@@ -914,6 +927,7 @@ export function ChatView({ hostId, defaultModel, installedModels = [] }: ChatVie
       handleNewConversation,
       handleStop,
       openTerminalPanel,
+      openMcpPanel,
       connected,
       messages.length,
       router,
