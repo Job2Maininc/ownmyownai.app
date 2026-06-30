@@ -125,4 +125,4 @@ OpenAI et Anthropic sont **optionnels** — routage depuis le Host uniquement :
 | `docs/V1_CHECKLIST.md` | Critères d'acceptation V1 |
 | `docs/ARCHITECTURE.md` | Couches relay / Host / web |
 | `docs/CURSOR.md` | Guide intégration Cursor (chemin Ollama direct + gateway/MCP) |
-| `docs/MEDIA_GENERATION.md` | Guide génération média (à créer, P2) |
+| `docs/MEDIA_GENERATION.md` | Guide génération média (prérequis GPU, modèles, limites) |
