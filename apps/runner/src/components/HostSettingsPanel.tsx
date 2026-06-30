@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import CloudProvidersPanel from "./CloudProvidersPanel";
 import CursorIntegration from "./CursorIntegration";
 import FallbackModelSelect from "./FallbackModelSelect";
 import ModelTaskRoutingPanel from "./ModelTaskRoutingPanel";
@@ -291,8 +290,6 @@ export default function HostSettingsPanel({
           Notifications bureau activées
         </label>
       </SettingsSection>
-
-      <CloudProvidersPanel onChanged={onSettingsSaved} />
 
       <CursorIntegration />
 

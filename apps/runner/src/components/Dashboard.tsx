@@ -10,6 +10,7 @@ import {
   type PaletteCommand,
 } from "./command-palette/command-palette-provider";
 import AuditTrail from "./AuditTrail";
+import CloudProvidersPanel from "./CloudProvidersPanel";
 import ContextManager from "./ContextManager";
 import HostBreadcrumbs from "./dashboard/HostBreadcrumbs";
 import HostSidebar from "./dashboard/HostSidebar";
@@ -314,11 +315,14 @@ function DashboardContent({ appUrl, onUnpaired }: DashboardProps) {
             )}
 
             {tab === "models" && (
-              <ModelManager
-                installedModels={status?.models ?? []}
-                defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
-                onDefaultChanged={refresh}
-              />
+              <>
+                <CloudProvidersPanel onChanged={refresh} />
+                <ModelManager
+                  installedModels={status?.models ?? []}
+                  defaultModel={status?.defaultModel ?? DEFAULT_MODEL}
+                  onDefaultChanged={refresh}
+                />
+              </>
             )}
 
             {tab === "image" && <LocalImagePanel />}
